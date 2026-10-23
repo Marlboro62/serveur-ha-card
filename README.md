@@ -20,6 +20,8 @@
 
 *Aperçus réalisés avec des valeurs fictives.*
 
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 3 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+
 ## Installation
 
 ### Avec HACS (recommandé)

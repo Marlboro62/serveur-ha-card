@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cartes Serveur HA · démo</title>
+<meta name="description" content="Démonstration des trois cartes Lovelace Cartes Serveur HA (serveur, Home Assistant, NAS Synology) avec des données simulées.">
+<style>
+  :root {
+    --bg: #0f1724; --panel: #172133; --line: #2a3850; --text: #e7edf5; --muted: #8fa0b8;
+    --accent: #96d21f; --accent2: #1d93e3; --btn: #1e2a3f; --btn-on: #2b3d5c;
+    /* Variables lues par les cartes en mode « Thème Home Assistant » */
+    --card-background-color: #1c1c1c; --primary-text-color: #e1e1e1;
+    --secondary-text-color: #9b9b9b; --divider-color: rgba(225, 225, 225, .12);
+    --ha-card-border-radius: 12px;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: #eef2f7; --panel: #ffffff; --line: #d6dde8; --text: #1b2433; --muted: #5b6b82;
+    --accent: #4c8a0b; --accent2: #1673b8; --btn: #f2f5f9; --btn-on: #dde7f5;
+    --card-background-color: #ffffff; --primary-text-color: #212121;
+    --secondary-text-color: #727272; --divider-color: rgba(0, 0, 0, .12);
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent2); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 16px 48px; }
+  .top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+  .top svg { width: 44px; height: 44px; fill: none; flex: none; }
+  .top .house { stroke: var(--accent); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+  .top .bolt { fill: var(--accent2); }
+  h1 { font-size: 1.5rem; margin: 0; line-height: 1.2; }
+  .lead { margin: 2px 0 0; color: var(--muted); }
+  .badge { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: .75rem;
+    font-weight: 600; background: var(--btn-on); color: var(--text); vertical-align: middle; }
+  .links { margin-left: auto; display: flex; gap: 14px; font-size: .9rem; }
+
+  .grid { display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .links { margin-left: 0; } .stage { order: -1; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+  .panel h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  .panel h2 + .ctl { margin-top: 0; }
+  .panel h2:not(:first-child) { margin-top: 18px; }
+  .ctl { margin-bottom: 14px; }
+  .ctl:last-child { margin-bottom: 0; }
+  .ctl-l { font-size: .85rem; margin-bottom: 6px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg button { font: inherit; font-size: .82rem; padding: 5px 11px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--btn); color: var(--text); }
+  .seg button[aria-pressed="true"] { background: var(--btn-on); border-color: var(--accent2); font-weight: 600; }
+  .seg button:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+  .seg .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+  .sw.blue { background: #3f7ff0; } .sw.white { background: #e9eef4; box-shadow: inset 0 0 0 1px #9aa6b6; }
+  .sw.red { background: #ee4a4a; } .sw.green { background: #5fcf8a; } .sw.orange { background: #f0a33a; }
+
+  .stage { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .frame { margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 12px; transition: max-width .25s ease; }
+  .frame[data-width="mobile"] { max-width: 440px; }
+  .frame[data-width="large"] { max-width: 760px; }
+  .hint { font-size: .82rem; color: var(--muted); text-align: center; margin: 0; }
+
+  pre { margin: 0; padding: 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line);
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-x: auto; white-space: pre; }
+  .yaml-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .yaml-h h2 { margin: 0; }
+  .copy { font: inherit; font-size: .8rem; padding: 4px 10px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--btn); color: var(--text); }
+  [hidden] { display: none !important; }
+  .note { font-size: .82rem; color: var(--muted); margin: 18px 0 0; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 10px 16px; border-radius: 10px;
+    background: var(--panel); border: 1px solid var(--accent2); font-size: .88rem; box-shadow: 0 6px 24px rgba(0,0,0,.3);
+    opacity: 0; pointer-events: none; transition: opacity .2s; max-width: calc(100% - 32px); }
+  .toast.on { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .frame, .toast { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="5" width="22" height="22" rx="4" fill="none" stroke="var(--accent)" stroke-width="2.4"/><path class="bolt" d="M17.5 9 11 18h4.5l-1.5 8 7-10h-4.6z"/></svg>
+    <div>
+      <h1>Cartes Serveur HA <span class="badge" id="ver">démo</span></h1>
+      <p class="lead">Serveur, Home Assistant et NAS Synology · données simulées, sans Home Assistant</p>
+    </div>
+    <nav class="links">
+      <a href="https://github.com/Marlboro62/serveur-ha-card">Dépôt GitHub</a>
+      <a href="https://github.com/Marlboro62/serveur-ha-card#installation">Installation</a>
+    </nav>
+  </header>
+
+  <div class="grid">
+    <aside class="panel" aria-label="Réglages de la démo">
+      <h2>Carte</h2>
+      <div class="ctl"><div class="seg" data-key="card">
+        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="all">Les 3</button></div></div>
+
+      <h2>Affichage</h2>
+      <div class="ctl"><div class="ctl-l">Page</div><div class="seg" data-key="page">
+        <button data-v="dark">Sombre</button><button data-v="light">Clair</button></div></div>
+      <div class="ctl"><div class="ctl-l">Couleurs des cartes (<code>theme</code>)</div><div class="seg" data-key="theme">
+        <button data-v="v2">MyElectricalData</button><button data-v="auto">MyElectricalData auto</button><button data-v="ha">Thème Home Assistant</button></div></div>
+      <div class="ctl"><div class="ctl-l">Largeur</div><div class="seg" data-key="width">
+        <button data-v="mobile">Téléphone</button><button data-v="large">Tablette / PC</button></div></div>
+
+      <h2>Situation simulée</h2>
+      <div class="ctl" data-for="serveur all"><div class="ctl-l">Serveur</div><div class="seg" data-key="host">
+        <button data-v="pi">Raspberry Pi complet</button><button data-v="vm">VM sans System Monitor</button></div></div>
+      <div class="ctl" data-for="serveur all"><div class="ctl-l">État du serveur</div><div class="seg" data-key="srv">
+        <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="hot"><i class="sw orange"></i>Chargé</button><button data-v="bad"><i class="sw red"></i>En difficulté</button></div></div>
+      <div class="ctl" data-for="serveur all"><div class="ctl-l">Ventilateur</div><div class="seg" data-key="fan">
+        <button data-v="on">Allumé</button><button data-v="off">Éteint</button></div></div>
+      <div class="ctl" data-for="maj all"><div class="ctl-l">Mises à jour</div><div class="seg" data-key="upd">
+        <button data-v="0"><i class="sw green"></i>Tout à jour</button><button data-v="1"><i class="sw orange"></i>Une application</button><button data-v="3"><i class="sw orange"></i>Core + 2 applications</button></div></div>
+      <div class="ctl" data-for="maj all"><div class="ctl-l">Certificat SSL</div><div class="seg" data-key="ssl">
+        <button data-v="64">64 jours</button><button data-v="24">24 jours</button><button data-v="9">9 jours</button></div></div>
+      <div class="ctl" data-for="nas all"><div class="ctl-l">État du NAS</div><div class="seg" data-key="nas">
+        <button data-v="ok"><i class="sw green"></i>Sain</button><button data-v="bad"><i class="sw red"></i>Disque en panne</button><button data-v="ups"><i class="sw orange"></i>Coupure de courant</button></div></div>
+    </aside>
+
+    <main class="stage">
+      <div class="frame" id="frame"></div>
+      <p class="hint">Les cartes réagissent comme dans Home Assistant : cliquez sur « Santé » du NAS, faites un appui long sur un ventilateur ou une prise, cliquez deux fois sur « Redémarrer ». Rien n'est envoyé : la démo l'indique seulement.</p>
+      <section class="panel">
+        <div class="yaml-h"><h2>Configuration</h2><button class="copy" id="copy">Copier</button></div>
+        <pre id="yaml"></pre>
+      </section>
+    </main>
+  </div>
+
+  <p class="note">Les chiffres sont simulés et ne correspondent à aucune installation réelle. Dans Home Assistant, les cartes trouvent
+    vos capteurs automatiquement (System Monitor, Sauvegarde, Google Drive, Synology DSM, NUT…) : voir le
+    <a href="https://github.com/Marlboro62/serveur-ha-card#readme">README</a>.</p>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- Les cartes, telles qu'elles sont publiées dans le dépôt -->
+<script src="../serveur-ha-card.js"></script>
+<script>
+(() => {
+  "use strict";
+
+  /* Home Assistant fournit <ha-card> et <ha-icon>. Ici, <ha-icon> affiche les icônes Material Design Icons. */
+  if (!customElements.get("ha-card")) {
+    customElements.define("ha-card", class extends HTMLElement {
+      constructor() { super(); this.attachShadow({ mode: "open" }).innerHTML = "<style>:host{display:block}</style><slot></slot>"; }
+    });
+  }
+  if (!customElements.get("ha-icon")) {
+    customElements.define("ha-icon", class extends HTMLElement {
+      static get observedAttributes() { return ["icon"]; }
+      connectedCallback() { this._draw(); }
+      attributeChangedCallback() { this._draw(); }
+      _draw() {
+        const name = (this.getAttribute("icon") || "").replace(/^mdi:/, "");
+        if (!name) return;
+        const url = `https://cdn.jsdelivr.net/npm/@mdi/svg@7.4.47/svg/${name}.svg`;
+        this.style.cssText += `;display:inline-block;width:var(--mdc-icon-size,24px);height:var(--mdc-icon-size,24px);flex:none;` +
+          `background:currentColor;-webkit-mask:url(${url}) center/contain no-repeat;mask:url(${url}) center/contain no-repeat;`;
+      }
+    });
+  }
+
+  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card" };
+  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok" };
+  let state = { ...defaults };
+  try { state = { ...defaults, ...JSON.parse(localStorage.getItem("serveur-ha-demo") || "{}") }; } catch (e) { /* ignoré */ }
+
+  const H = 3600e3, D = 86400e3;
+  const iso = (ms) => new Date(Date.now() + ms).toISOString();
+  const ico = (bg, t) => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="${bg}"/><text x="20" y="27" font-size="17" text-anchor="middle" fill="#fff" font-family="Arial" font-weight="700">${t}</text></svg>`);
+
+  function build() {
+    const st = {}, ent = {}, devices = {
+      nas: { id: "nas", name: "DiskStation", manufacturer: "Synology", model: "DS214+" },
+      ups: { id: "ups", name: "Onduleur", manufacturer: "Green Cell", model: "600VA" },
+    };
+    const add = (id, s, attrs = {}, platform, key, dev) => {
+      st[id] = { entity_id: id, state: String(s), attributes: attrs, last_changed: "demo" };
+      ent[id] = { entity_id: id, platform, translation_key: key, device_id: dev };
+    };
+    const sm = "systemmonitor";
+    // --- serveur
+    const load = { ok: [6, 41, 2235, 40.3, 40.9], hot: [74, 81, 690, 82.5, 64.2], bad: [97, 94, 220, 93.1, 79.6] }[state.srv];
+    if (state.host === "pi") {
+      add("sensor.local_ip", "192.168.1.22", {}, "local_ip", "local_ip");
+      add("binary_sensor.wan_status", "on", { wan_ipaddress: "86.247.12.34" }, "asusrouter");
+      add("sensor.system_monitor_utilisation_du_processeur", load[0], { unit_of_measurement: "%" }, sm, "processor_use");
+      add("sensor.system_monitor_temperature_du_processeur", load[4], { unit_of_measurement: "°C", device_class: "temperature" }, sm, "processor_temperature");
+      add("sensor.system_monitor_utilisation_de_la_memoire", load[1], { unit_of_measurement: "%" }, sm, "memory_use_percent");
+      add("sensor.system_monitor_memoire_libre", load[2], { unit_of_measurement: "MiB", device_class: "data_size" }, sm, "memory_free");
+      add("sensor.system_monitor_utilisation_du_disque", load[3], { unit_of_measurement: "%" }, sm, "disk_use_percent");
+      add("sensor.system_monitor_debit_du_reseau_entrant_via_end0", state.srv === "ok" ? 0.42 : 4.8, { unit_of_measurement: "MB/s", device_class: "data_rate" }, sm, "throughput_network_in");
+      add("sensor.system_monitor_debit_du_reseau_sortant_via_end0", state.srv === "ok" ? 0.05 : 1.3, { unit_of_measurement: "MB/s", device_class: "data_rate" }, sm, "throughput_network_out");
+      add("sensor.system_monitor_dernier_demarrage", iso(-12.2 * D), { device_class: "timestamp" }, sm, "last_boot");
+      add("sensor.temps_online", iso(-3 * H), { device_class: "timestamp" }, "uptime");
+      add("fan.rpi_cooling_fan", state.fan, { percentage: state.fan === "on" ? (state.srv === "ok" ? 45 : 100) : 0 }, "rpi_cooling_fan");
+      add("binary_sensor.rpi_power_status", state.srv === "bad" ? "on" : "off", { device_class: "problem" }, "rpi_power");
+      add("sensor.monpi_total_size_of_backups", 3.1, { unit_of_measurement: "GiB" }, "google_drive", "backups_size");
+      add("sensor.monpi_used_storage", 29.4, { unit_of_measurement: "GiB" }, "google_drive", "storage_used");
+    } else {
+      add("sensor.home_assistant_host_disk_total", 30.8, { unit_of_measurement: "GB" }, "hassio", "disk_total");
+      add("sensor.home_assistant_host_disk_used", +(30.8 * load[3] / 100).toFixed(1), { unit_of_measurement: "GB" }, "hassio", "disk_used");
+      add("sensor.temps_online", iso(-3 * H), { device_class: "timestamp" }, "uptime");
+    }
+    add("event.backup_sauvegarde_automatique", iso(-17 * H), { event_type: state.srv === "bad" ? "failed" : "completed" }, "backup", "automatic_backup_event");
+    add("sensor.backup_derniere_sauvegarde_automatique_reussie", iso(state.srv === "bad" ? -3.2 * D : -17 * H), { device_class: "timestamp" }, "backup", "last_successful_automatic_backup");
+    add("sensor.backup_prochaine_sauvegarde_automatique_programmee", iso(7 * H), { device_class: "timestamp" }, "backup", "next_scheduled_automatic_backup");
+
+    // --- Home Assistant
+    const n = Number(state.upd);
+    const upd = (id, name, inst, last, pic) => add(id, inst === last ? "off" : "on", { friendly_name: name, title: name, installed_version: inst, latest_version: last, entity_picture: pic }, "hassio");
+    upd("update.home_assistant_core_update", "Home Assistant Core", "2026.10.3", n >= 3 ? "2026.10.4" : "2026.10.3");
+    upd("update.home_assistant_supervisor_update", "Home Assistant Supervisor", "2026.10.1", "2026.10.1");
+    upd("update.home_assistant_operating_system_update", "Home Assistant Operating System", "18.3", "18.3");
+    upd("update.advanced_ssh_web_terminal_mise_a_jour", "Advanced SSH & Web Terminal", "24.1.7", "24.1.7", ico("#2c3e50", ">_"));
+    upd("update.esphome_mise_a_jour", "ESPHome", "2026.10.1", n >= 3 ? "2026.10.2" : "2026.10.1", ico("#000000", "E"));
+    upd("update.file_editor_mise_a_jour", "File editor", "5.8.0", "5.8.0", ico("#3b82f6", "{ }"));
+    upd("update.grafana_mise_a_jour", "Grafana", "13.0.3", n >= 1 ? "13.1.0" : "13.0.3", ico("#f46800", "G"));
+    upd("update.mosquitto_broker_mise_a_jour", "Mosquitto broker", "7.1.2", "7.1.2", ico("#3c5280", "M"));
+    upd("update.samba_share_mise_a_jour", "Samba share", "12.5.1", "12.5.1", ico("#0b7a3e", "S"));
+    upd("update.zigbee2mqtt_mise_a_jour", "Zigbee2MQTT", "2.6.2", "2.6.2", ico("#ffc135", "Z"));
+    add("sensor.home_assistant_v2_db_size", 742.18, { unit_of_measurement: "MiB" }, "filesize");
+    add("sensor.monsite_duckdns_org_expiration_du_certificat", iso(Number(state.ssl) * D), { device_class: "timestamp" }, "cert_expiry");
+
+    // --- NAS Synology
+    const bad = state.nas === "bad", cut = state.nas === "ups", DSM = "synology_dsm";
+    add("device_tracker.diskstation", "home", { ip: "192.168.1.20" }, "asusrouter");
+    add("sensor.diskstation_cpu_utilization_total", bad ? 64 : 7, { unit_of_measurement: "%" }, DSM, "cpu_total_load", "nas");
+    add("sensor.diskstation_memory_usage_real", 38, { unit_of_measurement: "%" }, DSM, "memory_real_usage", "nas");
+    add("sensor.diskstation_temperature", bad ? 49 : 41, { unit_of_measurement: "°C" }, DSM, "temperature", "nas");
+    add("sensor.diskstation_last_boot", iso(-43.2 * D), { device_class: "timestamp" }, DSM, "uptime", "nas");
+    add("sensor.diskstation_download_throughput", 1240, { unit_of_measurement: "kB/s" }, DSM, "network_down", "nas");
+    add("sensor.diskstation_upload_throughput", 86, { unit_of_measurement: "kB/s" }, DSM, "network_up", "nas");
+    add("binary_sensor.diskstation_security_status", "off", {}, DSM, "status", "nas");
+    add("sensor.diskstation_volume_1_status", bad ? "Degraded" : "Normal", {}, DSM, "volume_status", "v1");
+    add("sensor.diskstation_volume_1_volume_used", 63.4, { unit_of_measurement: "%" }, DSM, "volume_percentage_used", "v1");
+    add("sensor.diskstation_volume_1_average_disk_temp", bad ? 46 : 36, { unit_of_measurement: "°C" }, DSM, "volume_disk_temp_avg", "v1");
+    for (const d of [1, 2]) {
+      const k = bad && d === 2;
+      add(`sensor.diskstation_drive_${d}_status`, k ? "Crashed" : "Normal", {}, DSM, "disk_status", `d${d}`);
+      add(`sensor.diskstation_drive_${d}_status_smart`, k ? "Failing" : "Normal", {}, DSM, "disk_smart_status", `d${d}`);
+      add(`sensor.diskstation_drive_${d}_temperature`, k ? 57 : 35 + d, { unit_of_measurement: "°C" }, DSM, "disk_temp", `d${d}`);
+      add(`binary_sensor.diskstation_drive_${d}_exceeded_max_bad_sectors`, k ? "on" : "off", {}, DSM, "disk_exceed_bad_sector_thr", `d${d}`);
+      add(`binary_sensor.diskstation_drive_${d}_below_min_remaining_life`, "off", {}, DSM, "disk_below_remain_life_thr", `d${d}`);
+    }
+    add("button.diskstation_reboot", "unknown", {}, DSM, "reboot", "nas");
+    add("select.diskstation_fan_speed_mode", bad ? "full_speed" : "cool", {}, DSM, null, "nas");
+    add("switch.ds214", "on", { friendly_name: "DS214+", icon: "mdi:nas" }, "meross_lan");
+    add("switch.minipc", "off", { friendly_name: "Mini PC N95", icon: "mdi:desktop-tower" }, "meross_lan");
+    add("sensor.ups_status", cut ? "On Battery" : "Online", {}, "nut", "ups_status_display", "ups");
+    add("sensor.ups_status_data", cut ? "OB DISCHRG" : "OL", {}, "nut", "ups_status", "ups");
+    add("sensor.ups_input_voltage", cut ? 0 : 231, { unit_of_measurement: "V" }, "nut", "input_voltage", "ups");
+    add("sensor.ups_output_voltage", 229, { unit_of_measurement: "V" }, "nut", "output_voltage", "ups");
+    add("sensor.ups_load", 21, { unit_of_measurement: "%" }, "nut", "ups_load", "ups");
+    add("sensor.ups_battery_charge", cut ? 64 : 100, { unit_of_measurement: "%" }, "nut", "battery_charge", "ups");
+    return { st, ent, devices };
+  }
+
+  function configs() {
+    const t = state.theme;
+    const c = {
+      serveur: state.host === "pi"
+        ? { type: "custom:serveur-ha-card", title: "Raspberry Pi 4 4Go", icon: "mdi:raspberry-pi", icon_color: "#E30B5D", ram_total: 3800, theme: t }
+        : { type: "custom:serveur-ha-card", title: "Home Assistant (VM)", icon: "mdi:server", theme: t },
+      maj: { type: "custom:serveur-ha-maj-card", theme: t },
+      nas: { type: "custom:serveur-ha-nas-card", title: "Synology DS214+", volume_name: "HDD 4 To", ups_name: "Green Cell 600VA", actions: ["switch.ds214", "switch.minipc"], theme: t },
+    };
+    return state.card === "all" ? Object.values(c) : [c[state.card]];
+  }
+
+  function yaml(list) {
+    const val = (v, pad) => Array.isArray(v) ? "\n" + v.map((x) => `${pad}  - ${x}`).join("\n") : ` ${typeof v === "string" && /^[#:]/.test(v) ? JSON.stringify(v) : v}`;
+    const one = (c, nested) => Object.entries(c).map(([k, v], i) => `${nested ? (i === 0 ? "  - " : "    ") : ""}${k}:${val(v, nested ? "    " : "")}`).join("\n");
+    return list.length === 1 ? one(list[0], false) : "type: vertical-stack\ncards:\n" + list.map((c) => one(c, true)).join("\n");
+  }
+
+  const frame = document.getElementById("frame");
+  const toast = document.getElementById("toast");
+  let toastTimer;
+  function hass() {
+    const { st, ent, devices } = build();
+    return {
+      states: st, entities: ent, devices, themes: { darkMode: state.page === "dark" }, language: "fr",
+      callService: (domain, service, data) => {
+        toast.textContent = `Démo : ${domain}.${service} sur ${data?.entity_id || ""} (rien n'est envoyé ici).`;
+        toast.classList.add("on");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove("on"), 2800);
+      },
+      // Historique 24 h de l'alimentation : deux sous-tensions et une coupure en situation difficile
+      callApi: async () => {
+        const now = Date.now();
+        const ev = [{ state: "off", last_changed: new Date(now - 30 * H).toISOString() }];
+        if (state.srv !== "ok") ev.push({ state: "on", last_changed: new Date(now - 19.5 * H).toISOString() }, { state: "off", last_changed: new Date(now - 19.1 * H).toISOString() });
+        if (state.srv === "bad") ev.push({ state: "unavailable", last_changed: new Date(now - 8 * H).toISOString() }, { state: "off", last_changed: new Date(now - 7.6 * H).toISOString() }, { state: "on", last_changed: new Date(now - 0.3 * H).toISOString() });
+        return [ev];
+      },
+    };
+  }
+
+  function render() {
+    document.documentElement.dataset.theme = state.page;
+    frame.dataset.width = state.width;
+    document.querySelectorAll(".seg").forEach((seg) => seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === state[seg.dataset.key]))));
+    document.querySelectorAll("[data-for]").forEach((el) => { el.hidden = !el.dataset.for.split(" ").includes(state.card); });
+    const list = configs();
+    document.getElementById("yaml").textContent = yaml(list);
+    if (!list.every((c) => customElements.get(c.type.replace("custom:", "")))) return;
+    // L'historique d'alimentation est gardé 5 min par la carte : on la recrée quand la situation change
+    const key = list.map((c) => c.type + c.title).join() + state.srv;
+    if (frame.dataset.key !== key) {
+      frame.replaceChildren(...list.map((c) => document.createElement(c.type.replace("custom:", ""))));
+      frame.dataset.key = key;
+    }
+    const h = hass();
+    [...frame.children].forEach((el, i) => { el.setConfig(list[i]); el.hass = h; });
+  }
+
+  document.querySelectorAll(".seg").forEach((seg) => seg.addEventListener("click", (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    state[seg.dataset.key] = b.dataset.v;
+    try { localStorage.setItem("serveur-ha-demo", JSON.stringify(state)); } catch (e) { /* ignoré */ }
+    render();
+  }));
+
+  document.getElementById("copy").addEventListener("click", async (ev) => {
+    try { await navigator.clipboard.writeText(document.getElementById("yaml").textContent); ev.target.textContent = "Copié ✓"; }
+    catch (e) { ev.target.textContent = "Sélectionnez le texte"; }
+    setTimeout(() => { ev.target.textContent = "Copier"; }, 1600);
+  });
+
+  fetch("../serveur-ha-card.js").then((r) => r.text()).then((t) => {
+    const m = /CARD_VERSION = "([^"]+)"/.exec(t);
+    if (m) document.getElementById("ver").textContent = `v${m[1]} · démo`;
+  }).catch(() => {});
+
+  render();
+  Promise.all(Object.values(TAGS).map((t) => customElements.whenDefined(t))).then(render);
+})();
+</script>
+</body>
+</html>
