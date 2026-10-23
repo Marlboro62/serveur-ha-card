@@ -1,0 +1,40 @@
+# Cartes Serveur HA : exemples. Chaque carte s'utilise seule.
+# Les capteurs sont détectés automatiquement ; « entities: » permet d'en forcer un.
+
+# --- Raspberry Pi
+type: custom:serveur-ha-card
+title: Raspberry Pi 4 4Go
+subtitle: Serveur Home Assistant
+icon: mdi:raspberry-pi
+icon_color: "#E30B5D"
+ram_total: 3800            # MiB, pour la barre « RAM libre »
+# fan: fan.rpi_cooling_fan # détecté s'il contient rpi / cooling / ventil
+# entities:
+#   ip: sensor.local_ip
+#   ha_start: sensor.temps_online
+#   power: binary_sensor.rpi_power_status
+
+---
+# --- Home Assistant (mises à jour)
+type: custom:serveur-ha-maj-card
+include_hacs: false
+# ssl: sensor.monsite_duckdns_org_expiration_du_certificat
+# apps:                    # liste manuelle au lieu des add-ons détectés
+#   - update.grafana_mise_a_jour
+#   - entity: update.duck_dns_mise_a_jour
+#     name: DuckDNS
+#     icon: mdi:duck
+
+---
+# --- NAS Synology
+type: custom:serveur-ha-nas-card
+title: Synology DS214+
+volume_name: HDD 4 To
+ups_name: Green Cell 600VA
+actions:
+  - switch.ds214
+  - entity: switch.minipc
+    name: Mini PC N95
+    icon: mdi:desktop-tower
+# tracker: device_tracker.diskstation
+# navigation_path: /config/devices/device/xxxxxxxx
