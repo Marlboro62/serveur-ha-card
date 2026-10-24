@@ -34,7 +34,7 @@
 
 ### Manuellement
 
-1. Téléchargez `serveur-ha-card.js` depuis les [releases](https://github.com/Marlboro62/serveur-ha-card/releases) et copiez-le dans `/config/www/`.
+1. Téléchargez [`serveur-ha-card.js`](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/serveur-ha-card.js) (clic droit → Enregistrer sous) et copiez-le dans `/config/www/`.
 2. **Paramètres → Tableaux de bord → ⋮ → Ressources → Ajouter une ressource** : URL `/local/serveur-ha-card.js`, type **Module JavaScript**.
 3. Rechargez la page (Ctrl+F5).
 
