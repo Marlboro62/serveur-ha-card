@@ -8,6 +8,8 @@
 | `custom:serveur-ha-maj-card` | **Home Assistant** : version, mises à jour Core / Supervisor / OS, base de données, certificat SSL et applications |
 | `custom:serveur-ha-nas-card` | **NAS Synology** : santé des volumes et disques, CPU, RAM, températures, ventilateur, actions, réseau et onduleur |
 
+*Basées sur les idées et propositions de [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) sur le forum HACF : merci à lui !*
+
 **Aucune dépendance** : pas de button-card, pas de browser_mod, pas d'image ni de page HTML à déposer dans `/local`. Les capteurs sont **détectés automatiquement**, en français comme en anglais, et chaque élément sans capteur est simplement masqué.
 
 | Serveur | Home Assistant | NAS Synology |
@@ -177,4 +179,4 @@ Si les cartes vous sont utiles : [Buy Me a Coffee](https://buymeacoffee.com/marl
 
 ## Licence
 
-MIT
+MIT. Idées et propositions : [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) (forum HACF).
