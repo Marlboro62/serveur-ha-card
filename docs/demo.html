@@ -117,7 +117,7 @@
       <div class="ctl" data-for="maj all"><div class="ctl-l">Certificat SSL</div><div class="seg" data-key="ssl">
         <button data-v="64">64 jours</button><button data-v="24">24 jours</button><button data-v="9">9 jours</button></div></div>
       <div class="ctl" data-for="nas all"><div class="ctl-l">État du NAS</div><div class="seg" data-key="nas">
-        <button data-v="ok"><i class="sw green"></i>Sain</button><button data-v="bad"><i class="sw red"></i>Disque en panne</button><button data-v="ups"><i class="sw orange"></i>Coupure de courant</button></div></div>
+        <button data-v="ok"><i class="sw green"></i>Sain</button><button data-v="bad"><i class="sw red"></i>Disque en panne</button><button data-v="ups"><i class="sw orange"></i>Coupure de courant</button><button data-v="off"><i class="sw"></i>Éteint</button></div></div>
     </aside>
 
     <main class="stage">
@@ -227,7 +227,7 @@
 
     // --- NAS Synology
     const bad = state.nas === "bad", cut = state.nas === "ups", DSM = "synology_dsm";
-    add("device_tracker.diskstation", "home", { ip: "192.168.1.20" }, "asusrouter");
+    add("device_tracker.diskstation", state.nas === "off" ? "not_home" : "home", { ip: "192.168.1.20" }, "asusrouter");
     add("sensor.diskstation_cpu_utilization_total", bad ? 64 : 7, { unit_of_measurement: "%" }, DSM, "cpu_total_load", "nas");
     add("sensor.diskstation_memory_usage_real", 38, { unit_of_measurement: "%" }, DSM, "memory_real_usage", "nas");
     add("sensor.diskstation_temperature", bad ? 49 : 41, { unit_of_measurement: "°C" }, DSM, "temperature", "nas");
@@ -247,6 +247,9 @@
       add(`binary_sensor.diskstation_drive_${d}_below_min_remaining_life`, "off", {}, DSM, "disk_below_remain_life_thr", `d${d}`);
     }
     add("button.diskstation_reboot", "unknown", {}, DSM, "reboot", "nas");
+    add("button.diskstation_shutdown", "unknown", {}, DSM, "shutdown", "nas");
+    add("button.wake_on_lan_00_11_32_aa_bb_cc", "unknown", { friendly_name: "Allumer DiskStation" }, "wake_on_lan");
+    add("sensor.diskstation_usb_disk_1_partition_1_partition_used", 41.7, { unit_of_measurement: "%" }, DSM, "partition_percentage_used", "usb1");
     add("select.diskstation_fan_speed_mode", bad ? "full_speed" : "cool", {}, DSM, null, "nas");
     add("switch.ds214", "on", { friendly_name: "DS214+", icon: "mdi:nas" }, "meross_lan");
     add("switch.minipc", "off", { friendly_name: "Mini PC N95", icon: "mdi:desktop-tower" }, "meross_lan");

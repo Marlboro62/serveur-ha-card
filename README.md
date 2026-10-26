@@ -142,9 +142,9 @@ actions:
 
 - **En-tête** : NAS disponible ou non, IP, état du volume, voyants **NAS**, **HDD**, **Sécurité** et **UPS**.
 - **Informations** : adresses IP, santé (volume, sécurité), uptime. Un clic sur **Santé** ouvre l'**état de chaque disque** (état, SMART, secteurs défectueux, durée de vie, température).
-- **Ressources** : CPU, RAM et chaque volume.
+- **Ressources** : CPU, RAM, chaque volume et les **disques USB** branchés sur le NAS.
 - **Températures et ventilation** : NAS et chaque disque (orange à 45 °C, rouge à 55 °C), mode du ventilateur (**appui long** : mode suivant).
-- **Actions** : **Redémarrer** (confirmation en deux clics) et vos interrupteurs (**appui long** : marche / arrêt).
+- **Actions** : **Éteindre / Allumer** le NAS (arrêt propre par DSM quand il est allumé, Wake on LAN ou prise quand il est éteint), **Redémarrer** (confirmation en deux clics pour les deux) et vos interrupteurs (**appui long** : marche / arrêt).
 - **Débits réseau** et **onduleur** NUT : état, tension d'entrée et de sortie, charge, batterie.
 
 Les entités sont trouvées via l'intégration **Synology DSM**, pour **tous les volumes et tous les disques**. Les états (Normal, Dégradé, En panne…) sont traduits en français.
@@ -158,6 +158,9 @@ Les entités sont trouvées via l'intégration **Synology DSM**, pour **tous les
 | `volume_name` | Nom du volume 1 | `Volume 1` |
 | `fan` | Mode du ventilateur (`select`) | détecté |
 | `reboot` | Bouton de redémarrage (`null` pour le masquer) | détecté |
+| `shutdown` | Bouton d'arrêt du NAS, affiché quand le NAS est allumé (`null` pour le masquer) | bouton « Arrêter » de Synology DSM |
+| `power_on` | Allumage du NAS, affiché quand il est éteint : bouton **Wake on LAN**, prise (`switch`) ou script | bouton Wake on LAN dont le nom contient celui du NAS |
+| `usb` | Disques USB dans Ressources : capteurs d'espace utilisé en % (`entity`, `name`, `icon`) | capteurs DSM en % dont le nom contient « usb » |
 | `actions` | Interrupteurs et boutons (`entity`, `name`, `icon`) | — |
 | `ups_device`, `ups_name`, `ups` | Onduleur NUT (appareil, nom, capteurs) | le premier trouvé |
 | `net_max` | Pleine échelle des barres réseau (Mbit/s) | `1000` |

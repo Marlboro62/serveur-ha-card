@@ -13,7 +13,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.1.0-beta";
+const CARD_VERSION = "0.2.0";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -69,8 +69,8 @@ const SRV_FIELDS = [
   { id: "net_out", p: ["systemmonitor", "glances"], k: ["throughput_network_out", "tx"], re: /throughput_network_out|network_throughput_out|debit_reseau_sortant|debit.*sortant|_tx$/, dc: "data_rate" },
   { id: "ip", p: ["local_ip", "systemmonitor"], k: ["local_ip", "ipv4_address"], re: /local_ip|ipv4_address|adresse_ipv4/ },
   { id: "ip_ext", strict: true, p: ["dnsip"], k: [], re: /myip|ip_publique|public_ip|external_ip|ipv4$/ },
-  { id: "last_boot", p: ["systemmonitor"], k: ["last_boot"], re: /last_boot|dernier_demarrage/, dc: "timestamp" },
-  { id: "ha_start", strict: true, p: ["uptime"], k: [], re: /./, dc: "timestamp" }, // seule l'intégration compte : le nom est libre (ex. sensor.temps_online)
+  { id: "last_boot", p: ["systemmonitor"], k: ["last_boot"], re: /last_boot|dernier_demarrage/, dc: ["timestamp", "uptime"] },
+  { id: "ha_start", strict: true, p: ["uptime"], k: [], re: /./, dc: ["timestamp", "uptime"] }, // seule l'intégration compte : le nom est libre (ex. sensor.temps_online) ; classe « uptime » depuis HA 2026
   { id: "power", strict: true, p: ["rpi_power"], k: [], re: /rpi_power|power_status|alimentation/ },
   { id: "backup_state", p: ["backup"], k: ["backup_manager_state"], re: /backup_manager_state|etat_du_gestionnaire/ },
   { id: "backup_event", p: ["backup"], k: ["automatic_backup_event"], re: /^event\.backup_(automatic_backup|sauvegarde_automatique)/ },
@@ -191,7 +191,7 @@ class ServeurHaCard extends HTMLElement {
       if (!st || used.has(e.entity_id)) return false;
       if (f.unit && st.attributes?.unit_of_measurement !== f.unit) return false;
       if (f.nounit && st.attributes?.unit_of_measurement) return false;
-      if (f.dc && st.attributes?.device_class !== f.dc) return false;
+      if (f.dc && ![].concat(f.dc).includes(st.attributes?.device_class)) return false;
       if (f.not && f.not.test(e.entity_id)) return false;
       return true;
     };
@@ -843,11 +843,14 @@ class ServeurHaNasCard extends HTMLElement {
         if (panel) { this._open = !this._open; this._sig = null; this._render(); return; }
         const press = ev.target.closest?.("[data-press]");
         if (press) {
-          // Bouton (redémarrage…) : premier clic arme, second clic dans les 5 s confirme
+          // Bouton (redémarrage, arrêt, allumage…) : premier clic arme, second clic dans les 5 s confirme
           const id = press.dataset.press;
           if (this._armed === id) {
             this._armed = null;
-            this._hass?.callService("button", "press", { entity_id: id });
+            const domain = id.split(".")[0];
+            if (domain === "button") this._hass?.callService("button", "press", { entity_id: id });
+            else if (domain === "script") this._hass?.callService("script", "turn_on", { entity_id: id });
+            else this._hass?.callService("homeassistant", "toggle", { entity_id: id });
           } else {
             this._armed = id;
             clearTimeout(this._armTimer);
@@ -957,6 +960,17 @@ class ServeurHaNasCard extends HTMLElement {
     // reboot: null dans la configuration masque le bouton ; absent, il est détecté
     map.reboot = Object.prototype.hasOwnProperty.call(c, "reboot") ? c.reboot : (pool.find((id) => id.startsWith("button.") && (key(id) === "reboot" || /_reboot$|_redemarrer$/.test(id))) || null);
     map.tracker = c.tracker || ids.find((id) => id.startsWith("device_tracker.") && id.includes(this._prefix)) || null;
+    // Marche / arrêt : bouton « Arrêter » de DSM (shutdown: null le masque) ; allumage par Wake on LAN,
+    // prise ou script (power_on), sinon bouton Wake on LAN dont le nom contient celui du NAS
+    const has = (k) => Object.prototype.hasOwnProperty.call(c, k);
+    map.shutdown = has("shutdown") ? c.shutdown : (pool.find((id) => id.startsWith("button.") && (key(id) === "shutdown" || /_shutdown$|_arreter$|_eteindre$/.test(id))) || null);
+    const norm = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const nasName = norm(hass.devices?.[reg[map.cpu]?.device_id]?.name || this._prefix);
+    map.power_on = has("power_on") ? c.power_on : (nasName && ids.find((id) => id.startsWith("button.") && reg[id]?.platform === "wake_on_lan"
+      && norm(hass.states[id]?.attributes?.friendly_name).includes(nasName))) || null;
+    // Disques USB : liste donnée (capteurs en %), sinon capteurs DSM en % dont le nom contient « usb »
+    map.usb = Array.isArray(c.usb) ? c.usb.map((u) => (typeof u === "string" ? { entity: u } : u))
+      : pool.filter((id) => id.startsWith("sensor.") && /usb/.test(id) && hass.states[id]?.attributes?.unit_of_measurement === "%").map((entity) => ({ entity }));
     // IP externe : attribut d'un routeur / d'une box (wan_ipaddress…)
     if (c.ip_ext) map.ip_ext = c.ip_ext;
     else {
@@ -985,7 +999,7 @@ class ServeurHaNasCard extends HTMLElement {
     if (!this._config || !this._hass || !this.shadowRoot) return;
     const c = this._config;
     const m = this._resolve();
-    const all = [m.cpu, m.ram, m.last_boot, m.net_down, m.net_up, m.security, m.temperature, m.fan, m.reboot, m.tracker,
+    const all = [m.cpu, m.ram, m.last_boot, m.net_down, m.net_up, m.security, m.temperature, m.fan, m.reboot, m.tracker, m.shutdown, m.power_on, ...m.usb.map((u) => u.entity),
       ...m.volumes.flatMap((v) => [v.status, v.used]), ...m.drives.flatMap((d) => Object.values(d)), ...Object.values(m.ups), ...m.actions.map((a) => a.entity),
       typeof m.ip_ext === "object" ? m.ip_ext?.entity : m.ip_ext];
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._open}|${this._armed}|` + all.map((id) => (typeof id === "string" ? this._st(id)?.state ?? "-" : "")).join("|");
@@ -1045,6 +1059,7 @@ class ServeurHaNasCard extends HTMLElement {
       gauge(m.cpu, "mdi:cpu-64-bit", "CPU", this._num(m.cpu), 0, " %", level(this._num(m.cpu), 70, 90)),
       gauge(m.ram, "mdi:memory", "RAM", this._num(m.ram), 0, " %", level(this._num(m.ram), 80, 92)),
       ...m.volumes.map((v, i) => gauge(v.used, "mdi:harddisk", i === 0 && c.volume_name ? esc(c.volume_name) : `Volume ${v.n}`, this._num(v.used), 1, " %", level(this._num(v.used), 75, 90))),
+      ...m.usb.map((u, i) => gauge(u.entity, u.icon || "mdi:usb-flash-drive", esc(u.name || (m.usb.length > 1 ? `USB ${i + 1}` : "USB")), this._num(u.entity), 1, " %", level(this._num(u.entity), 75, 90))),
     ].filter(Boolean);
 
     // --- températures et ventilation
@@ -1064,13 +1079,20 @@ class ServeurHaNasCard extends HTMLElement {
 
     // --- actions : redémarrage (2 clics) et interrupteurs (appui long)
     const acts = [];
-    if (m.reboot && this._st(m.reboot)) {
+    // Marche / arrêt : allumé → Éteindre (arrêt propre par DSM), éteint → Allumer ; deux clics pour confirmer
+    const pwr = online ? (this._st(m.shutdown) ? m.shutdown : null) : (this._st(m.power_on) ? m.power_on : null);
+    if (pwr) {
+      const armed = this._armed === pwr;
+      acts.push(`<div class="tile srv-b nas-act nas-power ${online ? "good" : "bad"} ${armed ? "armed" : ""}" data-press="${esc(pwr)}"><ha-icon icon="mdi:power"></ha-icon><div class="tile-l">${armed ? "Confirmer ?" : online ? "Éteindre" : "Allumer"}</div><div class="tile-n">${online ? "Allumé" : "Éteint"}</div></div>`);
+    }
+    if (online && m.reboot && this._st(m.reboot)) {
       const armed = this._armed === m.reboot;
       acts.push(`<div class="tile srv-b nas-act nas-reboot ${armed ? "armed" : ""}" data-press="${esc(m.reboot)}"><ha-icon icon="mdi:restart"></ha-icon><div class="tile-l">${armed ? "Confirmer ?" : "Redémarrer"}</div><div class="tile-n">${esc(title)}</div></div>`);
     }
     for (const a of m.actions) {
       const s = this._st(a.entity);
-      if (!s) continue;
+      // déjà présent dans la tuile marche / arrêt ou Redémarrer : pas de doublon
+      if (!s || [m.shutdown, m.power_on, m.reboot].includes(a.entity)) continue;
       const domain = a.entity.split(".")[0];
       if (domain === "button") {
         const armed = this._armed === a.entity;
@@ -1432,7 +1454,10 @@ const NAS_SCHEMA = [
   { name: "tracker", selector: { entity: { domain: "device_tracker" } } },
   { name: "volume_name", selector: { text: {} } },
   { name: "fan", selector: { entity: { domain: "select" } } },
+  { name: "shutdown", selector: { entity: { domain: "button" } } },
+  { name: "power_on", selector: { entity: { domain: ["button", "switch", "script", "input_boolean"] } } },
   { name: "actions", selector: { entity: { domain: ["switch", "button", "input_boolean"], multiple: true } } },
+  { name: "usb", selector: { entity: { domain: "sensor", multiple: true } } },
   { name: "ups_device", selector: { device: { integration: "nut" } } },
   { name: "ups_name", selector: { text: {} } },
   { name: "navigation_path", selector: { text: {} } },
@@ -1453,7 +1478,10 @@ const NAS_LABELS = {
   tracker: "Traceur réseau du NAS, pour l'adresse IP (facultatif)",
   volume_name: "Nom du volume 1 (ex. HDD 4 To)",
   fan: "Mode du ventilateur (select, facultatif)",
+  shutdown: "Bouton d'arrêt du NAS (vide = bouton « Arrêter » de Synology DSM)",
+  power_on: "Allumage du NAS : Wake on LAN, prise ou script (vide = Wake on LAN détecté)",
   actions: "Interrupteurs et boutons à afficher (prises, mini-PC…)",
+  usb: "Disques USB : capteurs d'espace utilisé en % (vide = détectés dans Synology DSM)",
   ups_device: "Onduleur (appareil NUT, facultatif)",
   ups_name: "Nom de l'onduleur (facultatif)",
   navigation_path: "Page ouverte en cliquant sur le titre (facultatif)",
