@@ -248,6 +248,7 @@
     }
     add("button.diskstation_reboot", "unknown", {}, DSM, "reboot", "nas");
     add("button.diskstation_shutdown", "unknown", {}, DSM, "shutdown", "nas");
+    add("update.diskstation_dsm_update", state.nas === "bad" ? "on" : "off", { installed_version: "DSM 7.2.2-72806", latest_version: state.nas === "bad" ? "DSM 7.3-81180" : "DSM 7.2.2-72806", title: "Synology DSM" }, DSM, "update", "nas");
     add("button.wake_on_lan_00_11_32_aa_bb_cc", "unknown", { friendly_name: "Allumer DiskStation" }, "wake_on_lan");
     add("sensor.diskstation_usb_disk_1_partition_1_partition_used", 41.7, { unit_of_measurement: "%" }, DSM, "partition_percentage_used", "usb1");
     add("select.diskstation_fan_speed_mode", bad ? "full_speed" : "cool", {}, DSM, null, "nas");

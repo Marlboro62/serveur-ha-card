@@ -141,7 +141,7 @@ actions:
 ```
 
 - **En-tête** : NAS disponible ou non, IP, état du volume, voyants **NAS**, **HDD**, **Sécurité** et **UPS**.
-- **Informations** : adresses IP, santé (volume, sécurité), uptime. Un clic sur **Santé** ouvre l'**état de chaque disque** (état, SMART, secteurs défectueux, durée de vie, température).
+- **Informations** : adresses IP, santé (volume, sécurité), uptime et **DSM** (version installée, À jour ou version disponible). Un clic sur **Santé** ouvre l'**état de chaque disque** (état, SMART, secteurs défectueux, durée de vie, température).
 - **Ressources** : CPU, RAM, chaque volume et les **disques USB** branchés sur le NAS.
 - **Températures et ventilation** : NAS et chaque disque (orange à 45 °C, rouge à 55 °C), mode du ventilateur (**appui long** : mode suivant).
 - **Actions** : **Éteindre / Allumer** le NAS (arrêt propre par DSM quand il est allumé, Wake on LAN ou prise quand il est éteint), **Redémarrer** (confirmation en deux clics pour les deux) et vos interrupteurs (**appui long** : marche / arrêt).
@@ -155,6 +155,8 @@ Les entités sont trouvées via l'intégration **Synology DSM**, pour **tous les
 | `prefix` | Préfixe des entités, si le registre ne suffit pas | `diskstation` |
 | `title`, `icon`, `icon_color` | En-tête | nom de l'appareil, `mdi:nas` |
 | `tracker` | `device_tracker` du NAS (adresse IP) | détecté |
+| `ip` | Adresse IP du NAS (ex. `192.168.1.20`) ou entité qui la porte | traceur, sinon adresse de l'intégration Synology DSM |
+| `dsm_update` | Entité de mise à jour DSM (`null` pour masquer la tuile) | détectée |
 | `volume_name` | Nom du volume 1 | `Volume 1` |
 | `fan` | Mode du ventilateur (`select`) | détecté |
 | `reboot` | Bouton de redémarrage (`null` pour le masquer) | détecté |

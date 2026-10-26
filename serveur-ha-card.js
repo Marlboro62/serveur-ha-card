@@ -13,7 +13,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.2.0";
+const CARD_VERSION = "0.3.0";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -968,6 +968,8 @@ class ServeurHaNasCard extends HTMLElement {
     const nasName = norm(hass.devices?.[reg[map.cpu]?.device_id]?.name || this._prefix);
     map.power_on = has("power_on") ? c.power_on : (nasName && ids.find((id) => id.startsWith("button.") && reg[id]?.platform === "wake_on_lan"
       && norm(hass.states[id]?.attributes?.friendly_name).includes(nasName))) || null;
+    // Mise à jour DSM : entité update de Synology DSM (dsm_update: null la masque)
+    map.dsm_update = has("dsm_update") ? c.dsm_update : (pool.find((id) => id.startsWith("update.")) || null);
     // Disques USB : liste donnée (capteurs en %), sinon capteurs DSM en % dont le nom contient « usb »
     map.usb = Array.isArray(c.usb) ? c.usb.map((u) => (typeof u === "string" ? { entity: u } : u))
       : pool.filter((id) => id.startsWith("sensor.") && /usb/.test(id) && hass.states[id]?.attributes?.unit_of_measurement === "%").map((entity) => ({ entity }));
@@ -999,7 +1001,8 @@ class ServeurHaNasCard extends HTMLElement {
     if (!this._config || !this._hass || !this.shadowRoot) return;
     const c = this._config;
     const m = this._resolve();
-    const all = [m.cpu, m.ram, m.last_boot, m.net_down, m.net_up, m.security, m.temperature, m.fan, m.reboot, m.tracker, m.shutdown, m.power_on, ...m.usb.map((u) => u.entity),
+    const all = [m.cpu, m.ram, m.last_boot, m.net_down, m.net_up, m.security, m.temperature, m.fan, m.reboot, m.tracker, m.shutdown, m.power_on, m.dsm_update,
+      /^[a-z_]+\.[a-z0-9_]+$/.test(c.ip || "") ? c.ip : null, ...m.usb.map((u) => u.entity),
       ...m.volumes.flatMap((v) => [v.status, v.used]), ...m.drives.flatMap((d) => Object.values(d)), ...Object.values(m.ups), ...m.actions.map((a) => a.entity),
       typeof m.ip_ext === "object" ? m.ip_ext?.entity : m.ip_ext];
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._open}|${this._armed}|` + all.map((id) => (typeof id === "string" ? this._st(id)?.state ?? "-" : "")).join("|");
@@ -1009,7 +1012,11 @@ class ServeurHaNasCard extends HTMLElement {
     // --- en-tête
     const trk = this._st(m.tracker);
     const online = trk ? trk.state === "home" : this._txt(m.cpu) !== null;
-    const ip = trk?.attributes?.ip || trk?.attributes?.ip_address || null;
+    // IP : option ip (adresse ou entité), sinon traceur réseau, sinon adresse de configuration de l'appareil DSM
+    const devOf = Object.values(this._hass.devices || {}).find((d) => d.id === this._hass.entities?.[m.cpu]?.device_id);
+    const cfgHost = (() => { try { return devOf?.configuration_url ? new URL(devOf.configuration_url).hostname : null; } catch (e) { return null; } })();
+    const ipOpt = c.ip ? (/^[a-z_]+\.[a-z0-9_]+$/.test(c.ip) ? this._txt(c.ip) : c.ip) : null;
+    const ip = ipOpt || trk?.attributes?.ip || trk?.attributes?.ip_address || cfgHost || null;
     const ipExt = typeof m.ip_ext === "object" ? this._st(m.ip_ext.entity)?.attributes?.[m.ip_ext.attr] : this._txt(m.ip_ext);
     const vol1 = m.volumes[0];
     const vol1State = this._txt(vol1?.status);
@@ -1031,12 +1038,19 @@ class ServeurHaNasCard extends HTMLElement {
 
     // --- informations
     const boot = this._txt(m.last_boot);
+    // DSM : version installée et mise à jour disponible
+    const upd = this._st(m.dsm_update);
+    const short = (v) => (/\d+(?:\.\d+)+/.exec(v || "") || [v || null])[0]; // « DSM 7.2.2-72806 Update 3 » → « 7.2.2 »
+    const inst = upd?.attributes?.installed_version, last = upd?.attributes?.latest_version;
+    const dsmTile = upd && upd.state !== "unavailable" ? `<div class="tile srv-t nas-dsm ${upd.state === "on" ? "up" : ""}" data-entity="${esc(m.dsm_update)}" title="${esc([inst, upd.state === "on" ? `→ ${last}` : ""].filter(Boolean).join(" "))}"><div class="tile-l"><ha-icon icon="${upd.state === "on" ? "mdi:package-up" : "mdi:package-check"}"></ha-icon>DSM</div>
+        ${kv([["Version", short(inst)], upd.state === "on" ? ["Dispo", short(last) || "Oui", "bad"] : ["État", "À jour", "ok"]])}</div>` : "";
     const info = [
       ip || ipExt ? `<div class="tile srv-t" data-entity="${esc(m.tracker || "")}"><div class="tile-l"><ha-icon icon="mdi:ip-network-outline"></ha-icon>Réseau</div>${kv([["Interne", ip || "—"], ["Externe", ipExt || null]])}</div>` : "",
       m.volumes.length || m.security ? `<div class="tile srv-t nas-health ${hddOk === false || secOk === false ? "bad" : ""}" data-panel="1" title="Afficher l'état des disques">
         <div class="tile-l"><ha-icon icon="${hddOk === false ? "mdi:shield-alert-outline" : "mdi:shield-check-outline"}"></ha-icon>Santé<ha-icon class="nas-chev" icon="mdi:chevron-${this._open ? "up" : "down"}"></ha-icon></div>
         ${kv([["Volume", fr(vol1State), okWord(vol1State) ? "ok" : "bad"], ["Sécurité", secSt === undefined ? null : secOk ? "Sécurisé" : "Alerte", secOk ? "ok" : "bad"]])}</div>` : "",
       boot ? `<div class="tile srv-t" data-entity="${esc(m.last_boot)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
+      dsmTile,
     ].filter(Boolean);
 
     // Panneau « État des disques » (remplace la fenêtre browser_mod du modèle)
@@ -1165,6 +1179,7 @@ const NAS_STYLE = `<style>
 .srv-kv b.ok { color: var(--med-down); } .srv-kv b.bad { color: var(--t-red); }
 .nas-health { cursor: pointer; }
 .nas-health.bad { border-color: var(--t-red); }
+.nas-dsm.up { border-color: #f0a33a; } .nas-dsm.up .tile-l ha-icon, .nas-dsm.up b.bad { color: #f0a33a; }
 .nas-health .tile-l ha-icon:first-child { color: var(--med-down); }
 .nas-health.bad .tile-l ha-icon:first-child { color: var(--t-red); }
 .nas-chev { margin-left: auto; --mdc-icon-size: 18px; color: var(--med-muted) !important; }
@@ -1452,6 +1467,7 @@ const NAS_SCHEMA = [
   { name: "icon", selector: { icon: {} } },
   { name: "icon_color", selector: { text: {} } },
   { name: "tracker", selector: { entity: { domain: "device_tracker" } } },
+  { name: "ip", selector: { text: {} } },
   { name: "volume_name", selector: { text: {} } },
   { name: "fan", selector: { entity: { domain: "select" } } },
   { name: "shutdown", selector: { entity: { domain: "button" } } },
@@ -1476,6 +1492,7 @@ const NAS_LABELS = {
   icon: "Icône",
   icon_color: "Couleur de l'icône",
   tracker: "Traceur réseau du NAS, pour l'adresse IP (facultatif)",
+  ip: "Adresse IP du NAS, ou entité qui la porte (vide = traceur, sinon adresse de l'intégration Synology DSM)",
   volume_name: "Nom du volume 1 (ex. HDD 4 To)",
   fan: "Mode du ventilateur (select, facultatif)",
   shutdown: "Bouton d'arrêt du NAS (vide = bouton « Arrêter » de Synology DSM)",
