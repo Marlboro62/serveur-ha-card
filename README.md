@@ -1,12 +1,13 @@
 # Cartes Serveur HA
 
-**Trois cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
+**Quatre cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
 
 | Type | Carte |
 | --- | --- |
 | `custom:serveur-ha-card` | **Serveur** (Raspberry Pi, mini-PC, VM) : CPU, température, RAM, disque, réseau, uptime, ventilateur, alimentation sur 24 h, sauvegardes et Google Drive |
 | `custom:serveur-ha-maj-card` | **Home Assistant** : version, mises à jour Core / Supervisor / OS, base de données, certificat SSL et applications |
 | `custom:serveur-ha-nas-card` | **NAS Synology** : santé des volumes et disques, CPU, RAM, températures, ventilateur, actions, réseau et onduleur |
+| `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
 
 *Basées sur les idées et propositions de [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) sur le forum HACF : merci à lui !*
 
@@ -22,7 +23,7 @@
 
 *Aperçus réalisés avec des valeurs fictives.*
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 3 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 4 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 ## Installation
 
@@ -171,6 +172,39 @@ Les entités sont trouvées via l'intégration **Synology DSM**, pour **tous les
 | `show_info`, `show_resources`, `show_thermal`, `show_actions`, `show_network`, `show_ups` | Afficher chaque section | `true` |
 
 D'autres exemples sont dans [`exemples/`](exemples/).
+
+## Carte Proxmox VE — `custom:serveur-ha-proxmox-card`
+
+```yaml
+type: custom:serveur-ha-proxmox-card
+```
+
+Tout est détecté à partir de l'intégration **Proxmox VE** de Home Assistant (**Paramètres › Appareils et services › Ajouter une intégration**), en français comme en anglais.
+
+- **En-tête** : nombre de nœuds et d'invités en marche, voyants **Nœuds** (rouge si un nœud est hors ligne) et **Mise à jour**.
+- **Un onglet par nœud**, avec le nombre d'invités en marche et une flèche orange quand une mise à jour Proxmox est disponible.
+- **Nœud** : en ligne ou hors ligne, uptime, version de Proxmox et mise à jour, jauges **CPU** et **RAM** (Go utilisés sur le total).
+- **Stockage** : chaque stockage du nœud (local, local-lvm, sauvegardes…), orange à 80 %, rouge à 90 %.
+- **Invités** : une ligne par VM ou conteneur LXC, avec son état, son uptime, le CPU et la RAM ; ceux en marche d'abord, ceux arrêtés en grisé. Un clic ouvre la fiche Home Assistant.
+- **Boutons** : **Démarrer** un invité arrêté, **Redémarrer** ou **Arrêter** un invité en marche, **Tout démarrer**, **Redémarrer** ou **Arrêter** le nœud. Chaque bouton demande **un second clic dans les 5 secondes** pour confirmer.
+- **Protection** : la VM qui fait tourner Home Assistant (nom contenant « haos » ou « home assistant ») n'a **ni arrêt ni redémarrage**, et son nœud non plus, pour ne pas couper Home Assistant d'un clic. L'option `protect` choisit d'autres invités.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title`, `icon`, `icon_color` | En-tête | `Proxmox`, `mdi:server-network` |
+| `nodes` | Nœuds affichés (liste de noms) | tous |
+| `protect` | Invités sans arrêt ni redémarrage (liste de noms) | la VM Home Assistant |
+| `sort` | Ordre des invités : `status` (en marche d'abord), `name`, `cpu`, `ram` | `status` |
+| `hide_stopped` | Masquer les invités arrêtés | `false` |
+| `show_node`, `show_storage`, `show_guests`, `show_actions` | Afficher chaque section, et les boutons | `true` |
+| `theme` | `v2`, `auto` ou `ha` | `v2` |
+
+```yaml
+type: custom:serveur-ha-proxmox-card
+nodes: [pve1, pve2]
+protect: [home-assistant, routeur]
+sort: cpu
+```
 
 ## Support
 

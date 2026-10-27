@@ -95,7 +95,7 @@
     <aside class="panel" aria-label="Réglages de la démo">
       <h2>Carte</h2>
       <div class="ctl"><div class="seg" data-key="card">
-        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="all">Les 3</button></div></div>
+        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="all">Les 4</button></div></div>
 
       <h2>Affichage</h2>
       <div class="ctl"><div class="ctl-l">Page</div><div class="seg" data-key="page">
@@ -118,6 +118,8 @@
         <button data-v="64">64 jours</button><button data-v="24">24 jours</button><button data-v="9">9 jours</button></div></div>
       <div class="ctl" data-for="nas all"><div class="ctl-l">État du NAS</div><div class="seg" data-key="nas">
         <button data-v="ok"><i class="sw green"></i>Sain</button><button data-v="bad"><i class="sw red"></i>Disque en panne</button><button data-v="ups"><i class="sw orange"></i>Coupure de courant</button><button data-v="off"><i class="sw"></i>Éteint</button></div></div>
+      <div class="ctl" data-for="pve all"><div class="ctl-l">Proxmox</div><div class="seg" data-key="pve">
+        <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="hot"><i class="sw orange"></i>Chargé, mise à jour</button><button data-v="down"><i class="sw red"></i>Nœud hors ligne</button></div></div>
     </aside>
 
     <main class="stage">
@@ -163,8 +165,8 @@
     });
   }
 
-  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card" };
-  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok" };
+  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card" };
+  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok" };
   let state = { ...defaults };
   try { state = { ...defaults, ...JSON.parse(localStorage.getItem("serveur-ha-demo") || "{}") }; } catch (e) { /* ignoré */ }
 
@@ -260,6 +262,56 @@
     add("sensor.ups_output_voltage", 229, { unit_of_measurement: "V" }, "nut", "output_voltage", "ups");
     add("sensor.ups_load", 21, { unit_of_measurement: "%" }, "nut", "ups_load", "ups");
     add("sensor.ups_battery_charge", cut ? 64 : 100, { unit_of_measurement: "%" }, "nut", "battery_charge", "ups");
+
+    // --- Proxmox VE (noms fictifs, entités au format de l'intégration Proxmox VE en français)
+    const PVE = "proxmoxve", hot = state.pve === "hot", dn = state.pve === "down";
+    const ids = {};
+    const pid = (base) => { ids[base] = (ids[base] || 0) + 1; return ids[base] > 1 ? `${base}_${ids[base]}` : base; };
+    const node = (key, name, on, cpu, mem, ram, bootD, upd) => {
+      devices[key] = { id: key, name, model: "Node" };
+      const b = name.toLowerCase();
+      add(`sensor.${pid(b + "_statut")}`, on ? "online" : "offline", {}, PVE, null, key);
+      add(`binary_sensor.${pid(b + "_statut")}`, on ? "on" : "off", { device_class: "running" }, PVE, null, key);
+      add(`sensor.${pid(b + "_utilisation_du_processeur")}`, on ? cpu : "unavailable", { unit_of_measurement: "%" }, PVE, null, key);
+      add(`sensor.${pid(b + "_pourcentage_d_utilisation_de_la_memoire")}`, on ? mem : "unavailable", { unit_of_measurement: "%" }, PVE, null, key);
+      add(`sensor.${pid(b + "_utilisation_maximale_de_la_memoire")}`, ram, { unit_of_measurement: "GiB", device_class: "data_size" }, PVE, null, key);
+      add(`sensor.${pid(b + "_temps_de_fonctionnement")}`, iso(-bootD * D), { device_class: "timestamp" }, PVE, null, key);
+      for (const k of ["arreter", "redemarrer", "tout_demarrer", "tout_arreter", "suspendre_tout"]) add(`button.${pid(b + "_" + k)}`, "unknown", {}, PVE, null, key);
+      add(`update.${b}_software_update`, upd ? "on" : "off", { installed_version: "9.0.10", latest_version: upd ? "9.0.11" : "9.0.10", title: "Proxmox VE" }, PVE, null, key);
+    };
+    const guest = (key, parent, name, vm, on, cpu, mem, ram, bootD) => {
+      devices[key] = { id: key, name, model: vm ? "QEMU" : "LXC", via_device_id: parent };
+      const b = name.replace(/-/g, "_");
+      add(`sensor.${pid(b + "_statut")}`, on ? "running" : "stopped", {}, PVE, null, key);
+      add(`binary_sensor.${pid(b + "_statut")}`, on ? "on" : "off", { device_class: "running" }, PVE, null, key);
+      add(`sensor.${pid(b + "_utilisation_du_processeur")}`, on ? cpu : 0, { unit_of_measurement: "%" }, PVE, null, key);
+      add(`sensor.${pid(b + "_pourcentage_d_utilisation_de_la_memoire")}`, on ? mem : 0, { unit_of_measurement: "%" }, PVE, null, key);
+      add(`sensor.${pid(b + "_utilisation_maximale_de_la_memoire")}`, ram, { unit_of_measurement: "GiB", device_class: "data_size" }, PVE, null, key);
+      add(`sensor.${pid(b + "_temps_de_fonctionnement")}`, iso(-bootD * D), { device_class: "timestamp" }, PVE, null, key);
+      for (const k of ["demarrer", "arreter", "redemarrer", "creer_un_instantane"].concat(vm ? ["arreter", "pause", "suspend", "reinitialiser"] : [])) add(`button.${pid(b + "_" + k)}`, "unknown", {}, PVE, null, key);
+    };
+    const storage = (key, parent, name, pct, total) => {
+      devices[key] = { id: key, name: `Storage (${name})`, via_device_id: parent };
+      const b = `storage_${name.replace(/-/g, "_")}`;
+      add(`sensor.${pid(b + "_pourcentage_d_utilisation_du_stockage")}`, pct, { unit_of_measurement: "%" }, PVE, null, key);
+      add(`sensor.${pid(b + "_stockage_utilise")}`, +(total * pct / 100).toFixed(2), { unit_of_measurement: "GiB", device_class: "data_size" }, PVE, null, key);
+      add(`sensor.${pid(b + "_stockage_total")}`, total, { unit_of_measurement: "GiB", device_class: "data_size" }, PVE, null, key);
+      add(`sensor.${pid(b + "_stockage_disponible")}`, +(total * (100 - pct) / 100).toFixed(2), { unit_of_measurement: "GiB", device_class: "data_size" }, PVE, null, key);
+    };
+    node("pve1", "pve1", true, hot ? 78 : 12, hot ? 88 : 54, 31.2, 18.4, hot);
+    node("pve2", "pve2", !dn, 6, 38, 15.5, 4.1, false);
+    guest("g1", "pve1", "home-assistant", true, true, hot ? 31 : 8.4, 71, 6, 2.2);
+    guest("g2", "pve1", "nas", true, true, 1.6, 42, 4, 18.3);
+    guest("g3", "pve1", "dns", false, true, 0.4, 18, 0.5, 18.4);
+    guest("g4", "pve1", "web", false, true, hot ? 64 : 2.1, hot ? 93 : 36, 2, 9.7);
+    guest("g5", "pve1", "media", false, hot, hot ? 22 : 0, hot ? 61 : 0, 4, 0.2);
+    guest("g6", "pve2", "dns", false, !dn, 0.3, 21, 0.5, 4.1);
+    guest("g7", "pve2", "sauvegarde", false, !dn, 0.9, 27, 1, 4.1);
+    guest("g8", "pve2", "essais", true, false, 0, 0, 2, 0);
+    storage("s1", "pve1", "local", 41.2, 93.9);
+    storage("s2", "pve1", "local-lvm", hot ? 91.5 : 72.5, 319.6);
+    storage("s3", "pve2", "local", 26.5, 63.9);
+    storage("s4", "pve2", "local-lvm", 6.9, 129.8);
     return { st, ent, devices };
   }
 
@@ -271,6 +323,7 @@
         : { type: "custom:serveur-ha-card", title: "Home Assistant (VM)", icon: "mdi:server", theme: t },
       maj: { type: "custom:serveur-ha-maj-card", theme: t },
       nas: { type: "custom:serveur-ha-nas-card", title: "Synology DS214+", volume_name: "HDD 4 To", ups_name: "Green Cell 600VA", actions: ["switch.ds214", "switch.minipc"], theme: t },
+      pve: { type: "custom:serveur-ha-proxmox-card", theme: t },
     };
     return state.card === "all" ? Object.values(c) : [c[state.card]];
   }

@@ -8,12 +8,14 @@
  *                                base de données, certificat SSL et applications
  *   custom:serveur-ha-nas-card   NAS Synology : santé des volumes et disques, ressources,
  *                                températures, ventilateur, actions, réseau et onduleur
+ *   custom:serveur-ha-proxmox-card  Proxmox VE : nœuds, stockages, VM et conteneurs, avec
+ *                                démarrage, arrêt et redémarrage confirmés en deux clics
  *
  * Capteurs détectés automatiquement, ou choisis dans la configuration (voir le README).
  */
 
 (() => {
-const CARD_VERSION = "0.3.0";
+const CARD_VERSION = "0.4.0-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1206,6 +1208,367 @@ const NAS_STYLE = `<style>
 .nas-load .g-bar i { background: #f0a33a; }
 </style>`;
 
+/* ------------------------------------------------------------ carte Proxmox VE */
+
+const PVE_DEFAULTS = {
+  title: "Proxmox",
+  icon: "mdi:server-network",
+  icon_color: "",
+  sort: "status", // status (en marche d'abord), name, cpu, ram
+  hide_stopped: false,
+  show_node: true, show_storage: true, show_guests: true, show_actions: true,
+  theme: "v2",
+};
+
+/** Rôle d'une entité Proxmox VE : clé de traduction d'abord, sinon fin du nom (français ou anglais). */
+const PVE_ROLES = [
+  ["status", "sensor", /^(status|node_status|vm_status|container_status)$/, /_(statut|status|etat)(?:_\d+)?$/],
+  ["running", "binary_sensor", /^(status|running|vm_running|container_running|node_running)$/, /_(statut|status|etat|running|en_cours)(?:_\d+)?$/],
+  ["cpu", "sensor", /cpu/, /_(utilisation_du_processeur|cpu_usage|cpu_utilization|cpu|processeur)(?:_\d+)?$/],
+  ["mem", "sensor", /^(memory_usage_percentage|memory_percentage|memory_usage_percent)$/, /_(pourcentage_d_utilisation_de_la_memoire|memory_usage_percentage|memory_percentage|memory_usage_percent)(?:_\d+)?$/],
+  ["mem_max", "sensor", /^(max_memory|memory_max|memory_total)$/, /_(utilisation_maximale_de_la_memoire|memoire_maximale|max_memory|memory_max|memory_total)(?:_\d+)?$/],
+  ["uptime", "sensor", /uptime/, /_(temps_de_fonctionnement|uptime|demarrage)(?:_\d+)?$/],
+  ["st_pct", "sensor", /storage.*(percent|usage)|disk_usage/, /_(pourcentage_d_utilisation_du_stockage|storage_usage_percentage|storage_percentage|disk_usage_percentage)(?:_\d+)?$/],
+  ["st_used", "sensor", /^(storage_used|disk_used)$/, /_(stockage_utilise|storage_used|disk_used)(?:_\d+)?$/],
+  ["st_total", "sensor", /^(storage_total|disk_total|disk_max)$/, /_(stockage_total|storage_total|disk_total)(?:_\d+)?$/],
+  ["start_all", "button", /start_all/, /_(tout_demarrer|start_all)(?:_\d+)?$/],
+  ["stop_all", "button", /stop_all|shutdown_all/, /_(tout_arreter|stop_all|shutdown_all)(?:_\d+)?$/],
+  ["start", "button", /^start$/, /_(demarrer|start)(?:_\d+)?$/],
+  ["reboot", "button", /^(reboot|restart)$/, /_(redemarrer|reboot|restart)(?:_\d+)?$/],
+  ["shutdown", "button", /^shutdown$/, /_(arreter|shutdown|stop)(?:_\d+)?$/],
+  ["stop", "button", /^stop$/, /_(stop)(?:_\d+)?$/],
+  ["vm", "button", /^(pause|suspend|resume|reset)$/, /_(pause|suspend|suspendre|reinitialiser|reset)(?:_\d+)?$/],
+  ["update", "update", /./, /./],
+];
+const pveRole = (id, ent) => {
+  const domain = id.split(".")[0];
+  const tk = ent?.translation_key || "";
+  for (const [role, d, reTk, reId] of PVE_ROLES) {
+    if (d !== domain) continue;
+    if (tk && reTk.test(tk)) return role;
+  }
+  for (const [role, d, , reId] of PVE_ROLES) {
+    if (d === domain && reId.test(id)) return role;
+  }
+  return null;
+};
+const PVE_STATE = {
+  online: ["En ligne", "ok"], offline: ["Hors ligne", "bad"], running: ["En marche", "ok"], stopped: ["Arrêté", "off"],
+  paused: ["En pause", "warn"], suspended: ["Suspendu", "warn"], prelaunch: ["Démarrage", "warn"], unknown: ["Inconnu", "off"], unavailable: ["Indisponible", "bad"],
+};
+const pveState = (s) => PVE_STATE[String(s ?? "unknown").toLowerCase()] || [String(s), "off"];
+const gib = (v) => (v === null ? null : `${fmt(v, v < 10 ? 1 : 0)} Go`);
+/** Invité protégé par défaut : la VM qui fait tourner Home Assistant (nom contenant haos ou home assistant). */
+const PVE_PROTECT = /haos|home[\s_-]?assistant|hassos/i;
+
+class ServeurHaProxmoxCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("serveur-ha-proxmox-card-editor");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { ...PVE_DEFAULTS, ...(config || {}) };
+    this._map = null;
+    this._sig = null;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    if (!this._clicks) {
+      this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const tab = ev.target.closest?.("[data-tab]");
+        if (tab) {
+          this._tab = tab.dataset.tab;
+          try { localStorage.setItem(this._tabKey(), JSON.stringify(this._tab)); } catch (e) { /* stockage indisponible */ }
+          this._sig = null; this._render(); return;
+        }
+        const press = ev.target.closest?.("[data-press]");
+        if (press) {
+          // Bouton (démarrer, arrêter, redémarrer) : premier clic arme, second clic dans les 5 s confirme
+          ev.stopPropagation();
+          const id = press.dataset.press;
+          if (this._armed === id) {
+            this._armed = null;
+            this._hass?.callService("button", "press", { entity_id: id });
+          } else {
+            this._armed = id;
+            clearTimeout(this._armTimer);
+            this._armTimer = setTimeout(() => { this._armed = null; this._sig = null; this._render(); }, 5000);
+          }
+          this._sig = null; this._render(); return;
+        }
+        const el = ev.target.closest?.("[data-entity]");
+        if (el?.dataset.entity) {
+          const e = new Event("hass-more-info", { bubbles: true, composed: true });
+          e.detail = { entityId: el.dataset.entity };
+          this.dispatchEvent(e);
+        }
+      }));
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    if (this._hass?.entities !== hass.entities || this._hass?.devices !== hass.devices) this._map = null;
+    this._hass = hass;
+    this._render();
+  }
+
+  connectedCallback() {
+    clearInterval(this._tick);
+    this._tick = setInterval(() => { this._sig = null; this._render(); }, 60000);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._tick);
+  }
+
+  getCardSize() {
+    return 10;
+  }
+
+  _st(id) {
+    return id ? this._hass?.states?.[id] : undefined;
+  }
+
+  _num(id) {
+    const s = this._st(id);
+    if (!s || s.state === "unavailable" || s.state === "unknown") return null;
+    const v = Number(s.state);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  _tabKey() {
+    return `serveur-ha-proxmox:${this._config.title || ""}`;
+  }
+
+  /** Nœuds, invités (VM et conteneurs) et stockages, regroupés par appareil Proxmox VE. */
+  _resolve() {
+    if (this._map) return this._map;
+    const hass = this._hass, c = this._config;
+    const devs = hass.devices || {};
+    const byDev = {};
+    for (const [id, e] of Object.entries(hass.entities || {})) {
+      if (e.platform !== "proxmoxve" || !hass.states[id] || !e.device_id || e.hidden) continue;
+      const role = pveRole(id, e);
+      if (!role) continue;
+      const d = (byDev[e.device_id] ||= { id: e.device_id, roles: {} });
+      // deux boutons « Arrêter » sur les VM : arrêt propre (shutdown) et arrêt forcé (stop)
+      if (role === "shutdown" && d.roles.shutdown && !/shutdown/.test(e.translation_key || "")) { d.roles.stop ||= id; continue; }
+      d.roles[role] ||= id;
+    }
+    const nameOf = (dev) => dev?.name_by_user || dev?.name || "";
+    const nodes = [], guests = [], storages = [];
+    for (const d of Object.values(byDev)) {
+      const dev = devs[d.id] || {};
+      d.name = nameOf(dev);
+      d.parent = dev.via_device_id || null;
+      const st = String(this._st(d.roles.status)?.state || "").toLowerCase();
+      const model = `${dev.model || ""} ${dev.entry_type || ""}`.toLowerCase();
+      if (d.roles.st_pct || d.roles.st_total || /^storage\b|stockage/i.test(d.name)) {
+        d.short = (/\(([^)]+)\)/.exec(d.name) || [, d.name])[1];
+        storages.push(d);
+      } else if (d.roles.start_all || d.roles.stop_all || d.roles.update || /node|n[oœ]ud/.test(model) || ["online", "offline"].includes(st)) {
+        nodes.push(d);
+      } else {
+        d.vm = !!d.roles.vm || /qemu|vm/.test(model);
+        if (/lxc|container|conteneur/.test(model)) d.vm = false;
+        guests.push(d);
+      }
+    }
+    const want = (Array.isArray(c.nodes) ? c.nodes : c.nodes ? [c.nodes] : []).map((x) => String(x).toLowerCase());
+    const list = nodes.filter((n) => !want.length || want.includes(n.name.toLowerCase())).sort((a, b) => a.name.localeCompare(b.name, "fr"));
+    const protect = (Array.isArray(c.protect) ? c.protect : c.protect ? [c.protect] : []).map((x) => String(x).toLowerCase());
+    for (const g of guests) {
+      g.protected = protect.length ? protect.includes(g.name.toLowerCase()) : PVE_PROTECT.test(g.name);
+    }
+    for (const n of list) {
+      n.guests = guests.filter((g) => g.parent === n.id);
+      n.storages = storages.filter((s) => s.parent === n.id);
+    }
+    // invités et stockages sans nœud connu (appareil non rattaché) : avec le seul nœud, ou dans « Autres »
+    const orphans = guests.filter((g) => !nodes.some((n) => n.id === g.parent));
+    const orphanSt = storages.filter((s) => !nodes.some((n) => n.id === s.parent));
+    if (list.length === 1) { list[0].guests.push(...orphans); list[0].storages.push(...orphanSt); }
+    else if (orphans.length || orphanSt.length) list.push({ id: "_autres", name: "Autres", roles: {}, guests: orphans, storages: orphanSt, other: true });
+    this._map = { nodes: list, guests, storages };
+    return this._map;
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const m = this._resolve();
+    if (this._tab === undefined) { try { this._tab = JSON.parse(localStorage.getItem(this._tabKey()) || "null"); } catch (e) { this._tab = null; } }
+    const node = m.nodes.find((n) => n.id === this._tab) || m.nodes[0];
+    const ids = [...m.nodes, ...m.guests, ...m.storages].flatMap((d) => Object.values(d.roles));
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${node?.id}|${this._armed}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const running = (g) => {
+      const s = String(this._st(g.roles.status)?.state || "").toLowerCase();
+      return s ? s === "running" : this._st(g.roles.running)?.state === "on";
+    };
+    const nodeUp = (n) => {
+      const s = String(this._st(n.roles.status)?.state || "").toLowerCase();
+      return n.other ? true : s ? s === "online" : this._st(n.roles.running)?.state === "on";
+    };
+    const allGuests = m.nodes.flatMap((n) => n.guests);
+    const up = allGuests.filter(running).length;
+    const updates = m.nodes.filter((n) => this._st(n.roles.update)?.state === "on");
+    const down = m.nodes.filter((n) => !nodeUp(n));
+    const led = (ok, label, id, cls = "") => `<span class="srv-led ${ok ? "ok" : "bad"} ${cls}" data-entity="${esc(id || "")}"><i></i>${label}</span>`;
+    const leds = m.nodes.length ? [
+      led(!down.length, `Nœuds ${m.nodes.filter((n) => !n.other).length - down.length}/${m.nodes.filter((n) => !n.other).length}`, (down[0] || m.nodes[0]).roles.status),
+      updates.length ? `<span class="srv-led upd" data-entity="${esc(updates[0].roles.update)}"><i></i>Mise à jour</span>` : "",
+    ].join("") : "";
+
+    const sec = (icon, t, body, extra = "") => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${icon}"></ha-icon>${t}${extra}</div>${body}</div>` : "");
+    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
+        <div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> %</small></b></div>
+        <div class="g-bar ${level(v, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, v))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
+    const btn = (id, icon, label, cls = "") => {
+      if (!id || !this._st(id)) return "";
+      const armed = this._armed === id;
+      return `<button class="pve-btn ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(label)}${armed ? " : cliquez encore pour confirmer" : ""}"><ha-icon icon="${armed ? "mdi:check" : icon}"></ha-icon>${armed ? "<span>Confirmer</span>" : ""}</button>`;
+    };
+
+    let body = "";
+    if (!node) {
+      body = `<div class="empty">Aucun nœud Proxmox VE trouvé<span>Ajoutez l'intégration Proxmox VE (Paramètres › Appareils et services), puis rechargez la page.</span></div>`;
+    } else {
+      const tabs = m.nodes.length > 1 ? `<div class="pve-tabs" role="tablist">${m.nodes.map((n) => `<button class="pve-tab ${n.id === node.id ? "on" : ""}" role="tab" aria-selected="${n.id === node.id}" data-tab="${esc(n.id)}">
+          <i class="pve-dot ${nodeUp(n) ? "ok" : "bad"}"></i>${esc(n.name)}<small>${n.guests.filter(running).length}/${n.guests.length}</small>${this._st(n.roles.update)?.state === "on" ? `<ha-icon class="pve-up" icon="mdi:arrow-up-circle"></ha-icon>` : ""}</button>`).join("")}</div>` : "";
+
+      // --- nœud
+      let nodeHtml = "";
+      if (!node.other && c.show_node !== false) {
+        const [stTxt, stCls] = pveState(this._st(node.roles.status)?.state || (nodeUp(node) ? "online" : "offline"));
+        const boot = nodeUp(node) ? this._st(node.roles.uptime)?.state : null;
+        const upd = this._st(node.roles.update);
+        const inst = upd?.attributes?.installed_version, last = upd?.attributes?.latest_version;
+        const memMax = this._num(node.roles.mem_max), memPct = this._num(node.roles.mem);
+        const tiles = [
+          `<div class="tile srv-t" data-entity="${esc(node.roles.status || node.roles.running || "")}"><div class="tile-l"><ha-icon icon="mdi:server"></ha-icon>${esc(node.name)}</div><div class="pve-st ${stCls}"><i></i>${stTxt}</div></div>`,
+          boot && since(boot) ? `<div class="tile srv-t" data-entity="${esc(node.roles.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
+          upd ? `<div class="tile srv-t nas-dsm ${upd.state === "on" ? "up" : ""}" data-entity="${esc(node.roles.update)}" title="${esc([inst, upd.state === "on" ? `→ ${last}` : ""].filter(Boolean).join(" "))}"><div class="tile-l"><ha-icon icon="${upd.state === "on" ? "mdi:package-up" : "mdi:package-check"}"></ha-icon>Proxmox</div>
+            <div class="srv-kv"><span>${upd.state === "on" ? "Dispo" : "Version"}</span><b class="${upd.state === "on" ? "bad" : ""}">${esc((upd.state === "on" ? last : inst) || "—")}</b></div>
+            <div class="srv-kv"><span>État</span><b class="${upd.state === "on" ? "bad" : "ok"}">${upd.state === "on" ? "À installer" : "À jour"}</b></div></div>` : "",
+        ].filter(Boolean);
+        const res = [
+          gauge(node.roles.cpu, "mdi:cpu-64-bit", "CPU", this._num(node.roles.cpu), "", 70, 90),
+          gauge(node.roles.mem, "mdi:memory", "RAM", memPct, memMax !== null && memPct !== null ? `${gib((memPct / 100) * memMax)} / ${gib(memMax)}` : "", 80, 92),
+        ].filter(Boolean);
+        nodeHtml = sec("mdi:server", "Nœud", `<div class="tiles srv-tiles">${tiles.join("")}</div>${res.length ? `<div class="srv-grid pve-res">${res.join("")}</div>` : ""}`);
+      }
+
+      // --- stockages
+      const stor = c.show_storage !== false ? node.storages.map((s) => {
+        const pct = this._num(s.roles.st_pct), used = this._num(s.roles.st_used), total = this._num(s.roles.st_total);
+        const v = pct ?? (used !== null && total ? (used / total) * 100 : null);
+        return gauge(s.roles.st_pct || s.roles.st_used, "mdi:harddisk", esc(s.short || s.name), v, used !== null && total !== null ? `${gib(used)} / ${gib(total)}` : "", 80, 90);
+      }).filter(Boolean) : [];
+
+      // --- invités
+      const rank = { status: (g) => (running(g) ? 0 : 1), cpu: (g) => -(this._num(g.roles.cpu) ?? -1), ram: (g) => -(this._num(g.roles.mem) ?? -1) }[c.sort];
+      let gs = node.guests.slice().sort((a, b) => (rank ? rank(a) - rank(b) : 0) || a.name.localeCompare(b.name, "fr"));
+      if (c.hide_stopped) gs = gs.filter(running);
+      // nœud hors ligne : aucun bouton (rien ne peut être démarré ni arrêté)
+      const canAct = c.show_actions !== false && (node.other || nodeUp(node));
+      const rows = c.show_guests !== false ? gs.map((g) => {
+        const on = running(g);
+        const [stTxt, stCls] = pveState(this._st(g.roles.status)?.state || (on ? "running" : "stopped"));
+        const cpu = this._num(g.roles.cpu), mem = this._num(g.roles.mem), memMax = this._num(g.roles.mem_max);
+        const boot = on ? this._st(g.roles.uptime)?.state : null;
+        const meta = [stTxt, on && boot && since(boot) ? since(boot) : null].filter(Boolean).join(" · ");
+        const acts = !canAct ? "" : on
+          ? (g.protected ? `<span class="pve-lock" title="Protégé : pas d'arrêt ni de redémarrage depuis la carte"><ha-icon icon="mdi:shield-lock-outline"></ha-icon></span>`
+            : btn(g.roles.reboot, "mdi:restart", `Redémarrer ${g.name}`) + btn(g.roles.shutdown || g.roles.stop, "mdi:stop", `Arrêter ${g.name}`, "stop"))
+          : btn(g.roles.start, "mdi:play", `Démarrer ${g.name}`, "go");
+        return `<div class="pve-g ${on ? "" : "off"}" data-entity="${esc(g.roles.status || g.roles.running || g.roles.cpu || "")}">
+          <ha-icon class="pve-gi" icon="${g.vm ? "mdi:monitor" : "mdi:cube-outline"}" title="${g.vm ? "Machine virtuelle" : "Conteneur LXC"}"></ha-icon>
+          <div class="pve-gn"><b>${esc(g.name)}</b><span><i class="pve-dot ${stCls}"></i>${esc(meta)}</span></div>
+          ${on ? `<div class="pve-gm"><span title="CPU">${cpu === null ? "—" : `${fmt(cpu, cpu < 10 ? 1 : 0)} %`}</span><span title="RAM${memMax !== null ? ` sur ${gib(memMax)}` : ""}">${mem === null ? "—" : `${fmt(Math.min(mem, 999), 0)} %`}</span></div>` : `<div class="pve-gm"></div>`}
+          <div class="pve-ga">${acts}</div></div>`;
+      }) : [];
+      const head = rows.length ? `<div class="pve-gh"><span></span><span></span><div class="pve-gm"><span>CPU</span><span>RAM</span></div><span></span></div>` : "";
+
+      // --- actions du nœud (rien d'arrêtable s'il porte un invité protégé en marche)
+      const guard = node.guests.some((g) => g.protected && running(g));
+      const nodeActs = !node.other && canAct ? [
+        btn(node.roles.start_all, "mdi:play-box-multiple-outline", "Tout démarrer", "go wide"),
+        guard ? "" : btn(node.roles.reboot, "mdi:restart", `Redémarrer ${node.name}`, "wide"),
+        guard ? "" : btn(node.roles.shutdown, "mdi:power", `Arrêter ${node.name}`, "stop wide"),
+      ].filter(Boolean) : [];
+
+      body = tabs + nodeHtml
+        + sec("mdi:harddisk", "Stockage", stor.length ? `<div class="srv-grid pve-res">${stor.join("")}</div>` : "")
+        + sec(node.other ? "mdi:help-circle-outline" : "mdi:cube-outline", `Invités <small class="pve-n">${node.guests.filter(running).length}/${node.guests.length} en marche</small>`, rows.length ? `<div class="pve-list">${head}${rows.join("")}</div>` : "")
+        + sec("mdi:gesture-tap-button", "Actions du nœud", nodeActs.length ? `<div class="pve-na">${nodeActs.join("")}</div>${guard ? `<div class="srv-gs pve-guard"><ha-icon icon="mdi:shield-lock-outline"></ha-icon>Redémarrage et arrêt masqués : ce nœud fait tourner Home Assistant.</div>` : ""}` : "");
+    }
+
+    const alertCls = down.length ? "srv-alert" : "";
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}<ha-card class="${themeClass(c.theme, this._hass)} ${alertCls}">
+      <header>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:server-network")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+          <div><div class="title">${esc(c.title || "Proxmox")}</div><div class="sub">${m.nodes.length ? `${m.nodes.filter((n) => !n.other).length} nœud${m.nodes.filter((n) => !n.other).length > 1 ? "s" : ""} · ${up}/${allGuests.length} invités en marche` : "Proxmox VE"}</div></div></div>
+        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+      </header>
+      ${body}
+    </ha-card>`;
+  }
+}
+
+const PVE_STYLE = `<style>
+.pve-tabs { display: flex; gap: 6px; padding: 2px 12px 0; overflow-x: auto; scrollbar-width: none; }
+.pve-tab { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid var(--med-line); background: var(--med-surface); font-size: .82rem; font-weight: 600; }
+.pve-tab small { color: var(--med-muted); font-weight: 500; }
+.pve-tab.on { border-color: var(--med-blue); box-shadow: inset 0 -2px 0 var(--med-blue); }
+.pve-tab:focus-visible { outline: 2px solid var(--med-blue); }
+.pve-up { --mdc-icon-size: 15px; color: #f0a33a; }
+.pve-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; background: var(--med-muted); }
+.pve-dot.ok { background: var(--med-down); } .pve-dot.bad { background: var(--t-red); } .pve-dot.warn { background: #f0a33a; }
+.pve-st { display: flex; align-items: center; gap: 6px; font-weight: 700; margin-top: 2px; }
+.pve-st i { width: 8px; height: 8px; border-radius: 50%; background: var(--med-muted); }
+.pve-st.ok { color: var(--med-down); } .pve-st.ok i { background: var(--med-down); }
+.pve-st.bad { color: var(--t-red); } .pve-st.bad i { background: var(--t-red); }
+.pve-res { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin-top: 8px; }
+.srv-sec > .pve-res:first-child { margin-top: 0; }
+.pve-n { font-weight: 500; color: var(--med-muted); font-size: .76rem; margin-left: 4px; }
+.pve-list { display: grid; gap: 4px; }
+.pve-g, .pve-gh { display: grid; grid-template-columns: 22px minmax(0, 1fr) 96px 64px; align-items: center; gap: 10px; }
+.pve-g { padding: 8px 10px; border-radius: 12px; border: 1px solid var(--med-line); background: var(--med-surface); cursor: pointer; }
+.pve-gh { padding: 0 10px; font-size: .7rem; color: var(--med-muted); }
+.pve-g.off { opacity: .55; }
+.pve-gi { --mdc-icon-size: 20px; color: var(--med-blue); }
+.pve-gn { min-width: 0; display: grid; }
+.pve-gn b { font-size: .86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pve-gn span { display: flex; align-items: center; gap: 5px; font-size: .72rem; color: var(--med-muted); white-space: nowrap; overflow: hidden; }
+.pve-gm { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; text-align: right; font-size: .8rem; font-weight: 600; }
+.pve-gh .pve-gm { font-weight: 500; }
+.pve-ga { display: flex; gap: 4px; justify-content: flex-end; min-width: 30px; }
+.pve-btn { all: unset; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 30px; height: 30px; padding: 0 6px; box-sizing: border-box;
+  border-radius: 9px; border: 1px solid var(--med-line); color: var(--med-muted); font-size: .74rem; font-weight: 700; }
+.pve-btn ha-icon { --mdc-icon-size: 17px; }
+.pve-btn:hover { border-color: var(--med-blue); color: var(--med-text); }
+.pve-btn:focus-visible { outline: 2px solid var(--med-blue); }
+.pve-btn.go { color: var(--med-down); border-color: color-mix(in srgb, var(--med-down) 45%, transparent); }
+.pve-btn.stop { color: var(--t-red); border-color: color-mix(in srgb, var(--t-red) 40%, transparent); }
+.pve-btn.armed { color: #f0a33a; border-color: #f0a33a; background: color-mix(in srgb, #f0a33a 16%, transparent); }
+.pve-btn.wide { padding: 0 12px; height: 36px; }
+.pve-lock { display: inline-flex; color: var(--med-muted); } .pve-lock ha-icon { --mdc-icon-size: 18px; }
+.pve-na { display: flex; flex-wrap: wrap; gap: 6px; }
+.pve-na .pve-btn::after { content: attr(title); font-weight: 600; }
+.pve-na .pve-btn.armed::after { content: none; }
+.pve-guard { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.pve-guard ha-icon { --mdc-icon-size: 16px; }
+.srv-led.upd i { background: #f0a33a; } .srv-led.upd { border-color: #f0a33a; }
+@container (max-width: 360px) { .pve-g, .pve-gh { grid-template-columns: 20px minmax(0, 1fr) 80px 64px; gap: 6px; } }
+</style>`;
+
 /* ------------------------------------------------------------------ style */
 
 const STYLE = `<style>
@@ -1512,6 +1875,36 @@ const NAS_LABELS = {
   theme: "Couleurs de la carte",
 };
 const ServeurHaNasCardEditor = makeEditor(NAS_SCHEMA, NAS_LABELS, NAS_DEFAULTS);
+const PVE_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  { name: "icon_color", selector: { text: {} } },
+  { name: "nodes", selector: { text: { multiple: true } } },
+  { name: "protect", selector: { text: { multiple: true } } },
+  { name: "sort", selector: { select: { mode: "dropdown", options: [
+    { value: "status", label: "En marche d'abord" }, { value: "name", label: "Par nom" }, { value: "cpu", label: "Par CPU" }, { value: "ram", label: "Par RAM" }] } } },
+  { name: "hide_stopped", selector: { boolean: {} } },
+  { name: "show_node", selector: { boolean: {} } },
+  { name: "show_storage", selector: { boolean: {} } },
+  { name: "show_guests", selector: { boolean: {} } },
+  { name: "show_actions", selector: { boolean: {} } },
+  THEME_SELECT,
+];
+const PVE_LABELS = {
+  title: "Titre",
+  icon: "Icône",
+  icon_color: "Couleur de l'icône",
+  nodes: "Nœuds affichés (vide = tous)",
+  protect: "Invités protégés : pas d'arrêt ni de redémarrage (vide = la VM Home Assistant, détectée par son nom)",
+  sort: "Ordre des invités",
+  hide_stopped: "Masquer les invités arrêtés",
+  show_node: "Section Nœud",
+  show_storage: "Section Stockage",
+  show_guests: "Section Invités",
+  show_actions: "Boutons démarrer, arrêter, redémarrer (deux clics)",
+  theme: "Couleurs de la carte",
+};
+const ServeurHaProxmoxCardEditor = makeEditor(PVE_SCHEMA, PVE_LABELS, PVE_DEFAULTS);
 
 /* ---------------------------------------------------------- enregistrement */
 
@@ -1523,6 +1916,8 @@ if (typeof customElements !== "undefined") {
   define("serveur-ha-maj-card-editor", ServeurHaMajCardEditor);
   define("serveur-ha-nas-card", ServeurHaNasCard);
   define("serveur-ha-nas-card-editor", ServeurHaNasCardEditor);
+  define("serveur-ha-proxmox-card", ServeurHaProxmoxCard);
+  define("serveur-ha-proxmox-card-editor", ServeurHaProxmoxCardEditor);
   window.customCards = window.customCards || [];
   if (!window.customCards.some((c) => c.type === "serveur-ha-card")) {
     window.customCards.push({
@@ -1545,6 +1940,14 @@ if (typeof customElements !== "undefined") {
       type: "serveur-ha-nas-card",
       name: "Carte NAS Synology",
       description: "Santé des volumes et disques, CPU, RAM, températures, ventilateur, actions, réseau et onduleur d'un NAS Synology.",
+      preview: true,
+    });
+  }
+  if (!window.customCards.some((c) => c.type === "serveur-ha-proxmox-card")) {
+    window.customCards.push({
+      type: "serveur-ha-proxmox-card",
+      name: "Carte Proxmox VE",
+      description: "Nœuds, stockages, VM et conteneurs Proxmox VE : état, CPU, RAM, uptime, mises à jour, démarrage et arrêt confirmés.",
       preview: true,
     });
   }
