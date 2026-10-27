@@ -107,9 +107,15 @@ rest:
         unit_of_measurement: "%"
         state_class: measurement
         availability: "{{ value_json is defined and (value_json['mbuf-statistics'] | default({}))['mbuf-total'] | default(0) | float(0) > 0 }}"
+        # clusters utilisés / maximum (kern.ipc.nmbclusters) : c'est ce qui sature vraiment ;
+        # mbuf-current / mbuf-total ne compare que l'utilisé au déjà alloué (souvent 70-80 %, sans risque)
         value_template: >-
           {% set m = value_json['mbuf-statistics'] %}
+          {% if m['cluster-max'] | default(0) | float(0) > 0 %}
+          {{ (m['cluster-current'] | default(0) | float(0) / m['cluster-max'] | float(1) * 100) | round(1) }}
+          {% else %}
           {{ (m['mbuf-current'] | float(0) / m['mbuf-total'] | float(1) * 100) | round(1) }}
+          {% endif %}
 
   # --- Swap
   - resource: https://192.168.1.1/api/diagnostics/system/system_swap

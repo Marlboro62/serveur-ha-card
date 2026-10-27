@@ -17,7 +17,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.7.0-beta.2";
+const CARD_VERSION = "0.7.0-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2559,7 +2559,7 @@ class ServeurHaOpnsenseCard extends HTMLElement {
       gauge(m.roles.mem, "mdi:memory", "RAM", memPct, memUsed !== null && memTot !== null ? `${fmt(toGo(memUsed, memU), 1)} Go / ${fmt(toGo(memTot, memU), 1)} Go` : "", 80, 92),
       gauge(m.roles.disk, "mdi:harddisk", "Disque", this._num(m.roles.disk), "", 80, 90),
       gauge(m.roles.pf, "mdi:table-network", "Table d'états", this._num(m.roles.pf), "", 70, 90),
-      gauge(m.roles.mbuf, "mdi:memory-arrow-down", "Tampons réseau", this._num(m.roles.mbuf), "", 70, 90),
+      gauge(m.roles.mbuf, "mdi:memory-arrow-down", "Tampons réseau", this._num(m.roles.mbuf), m.rest ? "" : "utilisés / alloués", m.rest ? 80 : 101, m.rest ? 95 : 101),
       gauge(m.roles.swap, "mdi:swap-horizontal", "Swap", this._num(m.roles.swap), "", 50, 80),
     ].filter(Boolean) : [];
     const temps = c.show_resources !== false ? m.temps.map((id) => {
@@ -2571,7 +2571,7 @@ class ServeurHaOpnsenseCard extends HTMLElement {
 
     // --- passerelles
     const gwHtml = c.show_gateways !== false ? gws.map((g) => `<div class="opn-gw ${g.state[1]}" data-entity="${esc(g.status || g.delay || "")}">
-        <i class="opn-dot ${g.state[1]}"></i><div class="opn-n"><b>${esc(g.name)}</b><small>${esc(g.state[0])}${g.ip && !/^(unknown|unavailable|~)$/.test(g.ip) ? ` · ${esc(g.ip)}` : ""}</small></div>
+        <i class="opn-dot ${g.state[1]}"></i><div class="opn-n"><b>${esc(g.name)}</b><small>${esc(g.state[1] === "ok" && g.delay === null && g.loss === null && g.jitter === null ? "En ligne · sans surveillance" : g.state[0])}${g.ip && !/^(unknown|unavailable|~)$/.test(g.ip) ? ` · ${esc(g.ip)}` : ""}</small></div>
         <div class="opn-m"><span title="Latence">${g.delay === null ? "—" : `${fmt(g.delay, g.delay < 10 ? 1 : 0)} ms`}</span><span title="Pertes" class="${(g.loss || 0) >= 5 ? "bad" : ""}">${g.loss === null ? "—" : `${fmt(g.loss, 0)} %`}</span><span title="Gigue">${g.jitter === null ? "—" : `± ${fmt(g.jitter, 1)} ms`}</span></div></div>`).join("") : "";
     const gwHead = gws.length ? `<div class="opn-gh"><span></span><span></span><div class="opn-m"><span>Latence</span><span>Pertes</span><span>Gigue</span></div></div>` : "";
 

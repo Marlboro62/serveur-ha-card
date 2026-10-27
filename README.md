@@ -337,7 +337,7 @@ Si l'intégration OPNsense n'est pas installée, la carte lit les capteurs d'un 
 4. Dans le fichier, remplacez partout `https://192.168.1.1` par l'adresse de votre OPNsense, et adaptez le nom de la passerelle (`WAN_DHCP`, voir **Système → Passerelles → Configuration**) et les interfaces (`wan`, `lan`, `opt1`…). Pour une passerelle ou une interface de plus, dupliquez son bloc en changeant le nom.
 5. **Outils de développement → YAML → Vérifier la configuration**, puis redémarrez Home Assistant.
 
-La carte trouve ces capteurs toute seule (`type: custom:serveur-ha-opnsense-card`, sans option). Les débits sont calculés par Home Assistant à partir des compteurs d'octets : comptez 30 secondes à une minute après le démarrage avant qu'ils s'affichent.
+La carte trouve ces capteurs toute seule (`type: custom:serveur-ha-opnsense-card`, sans option). Latence, pertes et gigue d'une passerelle ne s'affichent que si sa **surveillance** est active dans OPNsense (**Système → Passerelles → Configuration**, décocher « Désactiver la surveillance de la passerelle ») ; sinon la carte indique « sans surveillance ». Les débits sont calculés par Home Assistant à partir des compteurs d'octets : comptez 30 secondes à une minute après le démarrage avant qu'ils s'affichent.
 
 **Redémarrer et Arrêter** : les boutons n'apparaissent que si vous décommentez le bloc `rest_command` en bas du package et donnez à l'utilisateur les privilèges `Diagnostics: Reboot System` et `Diagnostics: Halt system`. Sans cela, l'utilisateur d'API ne peut pas couper le pare-feu.
 
