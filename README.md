@@ -28,7 +28,7 @@
 
 # Cartes Serveur HA
 
-**Six cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
+**Cinq cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
 
 | Type | Carte |
 | --- | --- |
@@ -37,7 +37,8 @@
 | `custom:serveur-ha-nas-card` | **NAS Synology** : santé des volumes et disques, CPU, RAM, températures, ventilateur, actions, réseau et onduleur |
 | `custom:serveur-ha-dns-card` | **Filtrage DNS** (AdGuard Home ou Pi-hole) : requêtes, part bloquée, temps de réponse, protection et réglages, pause, mises à jour |
 | `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
-| `custom:serveur-ha-opnsense-card` | **OPNsense** : passerelles (état, latence, pertes), débits des interfaces, CPU, RAM, table d'états, températures, baux DHCP, mise à jour, redémarrage et arrêt confirmés en deux clics |
+
+**Pare-feu OPNsense** : la carte a son propre dépôt, [Carte OPNsense](https://github.com/Marlboro62/opnsense-card) (`custom:opnsense-card`).
 
 *Basées sur les idées et propositions de [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) sur le forum HACF : merci à lui !*
 
@@ -59,13 +60,9 @@
 | --- | --- | --- |
 | ![Filtrage DNS](images/dns.png) | ![Protection coupée](images/dns-coupe.png) | ![Filtrage DNS clair](images/dns-clair.png) |
 
-| OPNsense | OPNsense chargé, mise à jour | WAN hors ligne |
-| --- | --- | --- |
-| ![OPNsense](images/opnsense.png) | ![OPNsense chargé](images/opnsense-charge.png) | ![WAN hors ligne](images/opnsense-wan.png) |
-
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 6 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, OPNsense normal, chargé ou WAN hors ligne), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 5 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 ## Installation
 
@@ -277,79 +274,13 @@ Compatible avec les intégrations **AdGuard Home** et **Pi-hole** de Home Assist
 | `show_stats`, `show_details`, `show_switches`, `show_update` | Afficher chaque partie | `true` |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
 
-## Carte OPNsense — `custom:serveur-ha-opnsense-card`
-
-```yaml
-type: custom:serveur-ha-opnsense-card
-```
-
-Demande l'intégration **OPNsense** de HACS ([travisghansen/hass-opnsense](https://github.com/travisghansen/hass-opnsense)), avec un utilisateur et une clé d'API créés dans OPNsense (**Système → Accès → Utilisateurs**), ou, sans intégration, le [package REST](#opnsense-sans-intégration-package-rest) fourni dans ce dépôt. La carte trouve seule le pare-feu ; avec plusieurs pare-feu, choisissez-le dans l'éditeur (`device`).
-
-- **En-tête** : nom et version, état d'Internet, voyants **Passerelles** (rouge si une passerelle est hors ligne), **Mise à jour** et **Alertes** (notifications en attente dans OPNsense). La carte prend une bordure rouge quand une passerelle tombe.
-- **Informations** : uptime, version installée ou disponible, baux DHCP, charge du processeur.
-- **Ressources** : CPU, RAM (utilisée / totale), disque, table d'états pf, tampons réseau (mbuf), swap, et les températures remontées par OPNsense.
-- **Passerelles** : état en français (en ligne, latence, pertes, hors ligne), latence, pertes et gigue, le WAN en premier.
-- **Interfaces** : débit reçu et envoyé de chaque interface, en kbit/s, Mbit/s ou Gbit/s, et interface déconnectée en rouge.
-- **Actions** : **Redémarrer** et **Arrêter** le pare-feu, avec **un second clic dans les 5 secondes** pour confirmer (services `opnsense.system_reboot` et `opnsense.system_halt`).
-
-> Les débits des interfaces et l'état des passerelles sont des capteurs activés par défaut dans l'intégration. Les compteurs (octets, paquets, erreurs) et les autres disques sont désactivés par défaut : activez-les dans Home Assistant si besoin, la carte les ignore.
-
-| Option | Rôle | Défaut |
-| --- | --- | --- |
-| `title`, `icon`, `icon_color` | En-tête | nom du pare-feu, `mdi:wall-fire` |
-| `device` | Pare-feu affiché | le premier trouvé |
-| `prefix` | Sans intégration : début du nom des capteurs du package REST | `opnsense` |
-| `interfaces` | Interfaces affichées (nom, par exemple `WAN`, `LAN`) | toutes celles qui ont des débits |
-| `show_info`, `show_resources`, `show_gateways`, `show_interfaces`, `show_actions` | Afficher chaque partie | `true` |
-| `theme` | `v2`, `auto` ou `ha` | `v2` |
-
-### OPNsense sans intégration (package REST)
-
-Si l'intégration OPNsense n'est pas installée, la carte lit les capteurs d'un **package Home Assistant** fourni dans ce dépôt : [`packages/opnsense_api.yaml`](packages/opnsense_api.yaml). Il utilise l'intégration REST de base de Home Assistant : c'est **Home Assistant** qui interroge l'API d'OPNsense, et la clé d'API reste dans `secrets.yaml`, jamais dans la carte ni dans le navigateur.
-
-> La carte ne peut pas appeler l'API d'OPNsense elle-même : le navigateur bloque ces appels (CORS, certificat auto-signé), et la clé d'API serait lisible par tous ceux qui ouvrent le tableau de bord.
-
-1. **Dans OPNsense**, **Système → Accès → Utilisateurs** : créez un utilisateur dédié (par exemple `homeassistant`), sans accès à l'interface web, avec ces privilèges :
-
-   | Privilège | Pour |
-   | --- | --- |
-   | `Lobby: Dashboard` | mémoire, disque, table d'états, tampons, swap, températures, uptime, charge |
-   | `Diagnostics: System Activity` | CPU |
-   | `Status: Interfaces` | état et débits des interfaces |
-   | `System: Gateways` | état, latence et pertes des passerelles |
-   | `System: Firmware` (facultatif) | version et mise à jour |
-
-   `System: Gateways` et `System: Firmware` permettent aussi de **modifier** les passerelles et de lancer une mise à jour : sans `System: Firmware`, retirez le bloc « Version d'OPNsense » du package. Créez ensuite la **clé d'API** de cet utilisateur (icône de clé) : OPNsense télécharge un fichier avec la clé et le secret.
-2. **Dans `/config/secrets.yaml`** :
-
-   ```yaml
-   opnsense_api_key: "la clé"
-   opnsense_api_secret: "le secret"
-   ```
-
-3. Copiez [`opnsense_api.yaml`](packages/opnsense_api.yaml) dans `/config/packages/`, et activez les packages dans `configuration.yaml` si ce n'est pas déjà fait :
-
-   ```yaml
-   homeassistant:
-     packages: !include_dir_named packages
-   ```
-
-4. Dans le fichier, remplacez partout `https://192.168.1.1` par l'adresse de votre OPNsense, et adaptez le nom de la passerelle (`WAN_DHCP`, voir **Système → Passerelles → Configuration**) et les interfaces (`wan`, `lan`, `opt1`…). Pour une passerelle ou une interface de plus, dupliquez son bloc en changeant le nom.
-5. **Outils de développement → YAML → Vérifier la configuration**, puis redémarrez Home Assistant.
-
-La carte trouve ces capteurs toute seule (`type: custom:serveur-ha-opnsense-card`, sans option). Latence, pertes et gigue d'une passerelle ne s'affichent que si sa **surveillance** est active dans OPNsense (**Système → Passerelles → Configuration**, décocher « Désactiver la surveillance de la passerelle ») ; sinon la carte indique « sans surveillance ». Les débits sont calculés par Home Assistant à partir des compteurs d'octets : comptez 30 secondes à une minute après le démarrage avant qu'ils s'affichent.
-
-**Redémarrer et Arrêter** : les boutons n'apparaissent que si vous décommentez le bloc `rest_command` en bas du package et donnez à l'utilisateur les privilèges `Diagnostics: Reboot System` et `Diagnostics: Halt system`. Sans cela, l'utilisateur d'API ne peut pas couper le pare-feu.
-
-Les adresses de l'API du package sont celles d'OPNsense 25.7 et plus récent ; pour une version plus ancienne, le haut du fichier indique les noms à changer. Option `prefix` de la carte : si vous renommez les capteurs (`sensor.pare_feu_cpu_usage`…), indiquez le début de leur nom (`pare_feu`).
-
 ## Support
 
 Questions et problèmes : uniquement via les [issues GitHub](https://github.com/Marlboro62/serveur-ha-card/issues).
 
 ## Voir aussi
 
-[Carte Onduleur UPS](https://github.com/Marlboro62/onduleur-ups-card) · [Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new) · [Cartes Linky Énergie](https://github.com/Marlboro62/linky-energie-cards)
+[Carte OPNsense](https://github.com/Marlboro62/opnsense-card) · [Carte Onduleur UPS](https://github.com/Marlboro62/onduleur-ups-card) · [Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new) · [Cartes Linky Énergie](https://github.com/Marlboro62/linky-energie-cards)
 
 ## Licence
 
