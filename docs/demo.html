@@ -290,13 +290,16 @@
       add(`sensor.${pid(b + "_temps_de_fonctionnement")}`, iso(-bootD * D), { device_class: "timestamp" }, PVE, null, key);
       for (const k of ["demarrer", "arreter", "redemarrer", "creer_un_instantane"].concat(vm ? ["arreter", "pause", "suspend", "reinitialiser"] : [])) add(`button.${pid(b + "_" + k)}`, "unknown", {}, PVE, null, key);
     };
+    // stockage : un appareil par nom de stockage pour tous les nœuds (rattaché au premier), une série de capteurs par nœud
     const storage = (key, parent, name, pct, total) => {
-      devices[key] = { id: key, name: `Storage (${name})`, via_device_id: parent };
+      const dev = `st_${name}`;
+      devices[dev] ||= { id: dev, name: `Storage (${name})`, model: "Storage", via_device_id: parent };
       const b = `storage_${name.replace(/-/g, "_")}`;
-      add(`sensor.${pid(b + "_pourcentage_d_utilisation_du_stockage")}`, pct, { unit_of_measurement: "%" }, PVE, null, key);
-      add(`sensor.${pid(b + "_stockage_utilise")}`, +(total * pct / 100).toFixed(2), { unit_of_measurement: "GiB", device_class: "data_size" }, PVE, null, key);
-      add(`sensor.${pid(b + "_stockage_total")}`, total, { unit_of_measurement: "GiB", device_class: "data_size" }, PVE, null, key);
-      add(`sensor.${pid(b + "_stockage_disponible")}`, +(total * (100 - pct) / 100).toFixed(2), { unit_of_measurement: "GiB", device_class: "data_size" }, PVE, null, key);
+      const s = (k, v, a, tk) => { const id = `sensor.${pid(b + "_" + k)}`; add(id, v, a, PVE, tk, dev); ent[id].unique_id = `entree_exemple_${parent}_${name}_${tk}`; ent[id].config_entry_id = "entree_exemple"; };
+      s("pourcentage_d_utilisation_du_stockage", pct, { unit_of_measurement: "%" }, "storage_used_percentage");
+      s("stockage_utilise", +(total * pct / 100).toFixed(2), { unit_of_measurement: "GiB", device_class: "data_size" }, "storage_used");
+      s("stockage_total", total, { unit_of_measurement: "GiB", device_class: "data_size" }, "storage_total");
+      s("stockage_disponible", +(total * (100 - pct) / 100).toFixed(2), { unit_of_measurement: "GiB", device_class: "data_size" }, "storage_available");
     };
     node("pve1", "pve1", true, hot ? 78 : 12, hot ? 88 : 54, 31.2, 18.4, hot);
     node("pve2", "pve2", !dn, 6, 38, 15.5, 4.1, false);
@@ -341,6 +344,9 @@
     const { st, ent, devices } = build();
     return {
       states: st, entities: ent, devices, themes: { darkMode: state.page === "dark" }, language: "fr",
+      // registre des entités (identifiants uniques des capteurs de stockage Proxmox)
+      callWS: async (msg) => msg.type === "config/entity_registry/get_entries"
+        ? Object.fromEntries(msg.entity_ids.map((id) => [id, { entity_id: id, unique_id: ent[id]?.unique_id, config_entry_id: ent[id]?.config_entry_id }])) : null,
       callService: (domain, service, data) => {
         toast.textContent = `Démo : ${domain}.${service} sur ${data?.entity_id || ""} (rien n'est envoyé ici).`;
         toast.classList.add("on");

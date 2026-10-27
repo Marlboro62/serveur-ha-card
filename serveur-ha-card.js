@@ -15,7 +15,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.4.0-beta";
+const CARD_VERSION = "0.4.1-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1353,7 +1353,9 @@ class ServeurHaProxmoxCard extends HTMLElement {
       if (e.platform !== "proxmoxve" || !hass.states[id] || !e.device_id || e.hidden) continue;
       const role = pveRole(id, e);
       if (!role) continue;
-      const d = (byDev[e.device_id] ||= { id: e.device_id, roles: {} });
+      const d = (byDev[e.device_id] ||= { id: e.device_id, roles: {}, series: {} });
+      // stockage : un appareil par nom de stockage pour tous les nœuds ; une série de capteurs par nœud (_2, _3…)
+      if (role.startsWith("st_")) { const sfx = (/_\d+$/.exec(id) || [""])[0]; ((d.series[sfx] ||= {})[role] ||= id); }
       // deux boutons « Arrêter » sur les VM : arrêt propre (shutdown) et arrêt forcé (stop)
       if (role === "shutdown" && d.roles.shutdown && !/shutdown/.test(e.translation_key || "")) { d.roles.stop ||= id; continue; }
       d.roles[role] ||= id;
@@ -1366,13 +1368,20 @@ class ServeurHaProxmoxCard extends HTMLElement {
       d.parent = dev.via_device_id || null;
       const st = String(this._st(d.roles.status)?.state || "").toLowerCase();
       const model = `${dev.model || ""} ${dev.entry_type || ""}`.toLowerCase();
-      if (d.roles.st_pct || d.roles.st_total || /^storage\b|stockage/i.test(d.name)) {
-        d.short = (/\(([^)]+)\)/.exec(d.name) || [, d.name])[1];
-        storages.push(d);
+      if (d.roles.st_pct || d.roles.st_total || /storage/.test(model) || /^storage\b|stockage/i.test(d.name)) {
+        const short = (/\(([^)]+)\)/.exec(d.name) || [, d.name])[1];
+        // nœud de chaque série : lu dans l'identifiant unique (<entrée>_<nœud>_<stockage>_<mesure>), sinon le nœud de l'appareil
+        for (const [sfx, roles] of Object.entries(d.series)) {
+          const node = Object.values(roles).map((id) => this._stNode?.[id]).find(Boolean);
+          // identifiants illisibles (droits) : la série reste sur le nœud de l'appareil, numérotée
+          const done = this._stNode !== undefined;
+          storages.push({ id: d.id + sfx, name: d.name, short: !node && done && sfx ? `${short} (${sfx.slice(1)})` : short, raw: short,
+            roles, parent: d.parent, nodeName: node || null, guess: !node && sfx !== "" && !done });
+        }
       } else if (d.roles.start_all || d.roles.stop_all || d.roles.update || /node|n[oœ]ud/.test(model) || ["online", "offline"].includes(st)) {
         nodes.push(d);
       } else {
-        d.vm = !!d.roles.vm || /qemu|vm/.test(model);
+        d.vm = !!d.roles.vm || /qemu|\bvm\b/.test(model);
         if (/lxc|container|conteneur/.test(model)) d.vm = false;
         guests.push(d);
       }
@@ -1383,17 +1392,47 @@ class ServeurHaProxmoxCard extends HTMLElement {
     for (const g of guests) {
       g.protected = protect.length ? protect.includes(g.name.toLowerCase()) : PVE_PROTECT.test(g.name);
     }
+    const nodeKey = (n) => [devs[n.id]?.name, devs[n.id]?.name_by_user, n.name].filter(Boolean).map((x) => String(x).toLowerCase());
+    for (const s of storages) {
+      if (!s.nodeName) continue;
+      const n = nodes.find((x) => nodeKey(x).includes(s.nodeName.toLowerCase()));
+      if (n) { s.parent = n.id; s.guess = false; }
+    }
+    // séries supplémentaires dont le nœud n'est pas encore connu : en attente de l'identifiant unique
+    const known = storages.filter((s) => !s.guess);
     for (const n of list) {
       n.guests = guests.filter((g) => g.parent === n.id);
-      n.storages = storages.filter((s) => s.parent === n.id);
+      n.storages = known.filter((s) => s.parent === n.id).sort((a, b) => a.short.localeCompare(b.short, "fr"));
     }
+    this._askStorageNodes(storages);
     // invités et stockages sans nœud connu (appareil non rattaché) : avec le seul nœud, ou dans « Autres »
     const orphans = guests.filter((g) => !nodes.some((n) => n.id === g.parent));
-    const orphanSt = storages.filter((s) => !nodes.some((n) => n.id === s.parent));
+    const orphanSt = known.filter((s) => !nodes.some((n) => n.id === s.parent));
     if (list.length === 1) { list[0].guests.push(...orphans); list[0].storages.push(...orphanSt); }
     else if (orphans.length || orphanSt.length) list.push({ id: "_autres", name: "Autres", roles: {}, guests: orphans, storages: orphanSt, other: true });
     this._map = { nodes: list, guests, storages };
     return this._map;
+  }
+
+  /** Identifiants uniques des capteurs de stockage (registre des entités, un seul appel) : ils portent le nom du nœud. */
+  _askStorageNodes(storages) {
+    if (this._stAsked || typeof this._hass?.callWS !== "function") return;
+    const ids = storages.flatMap((s) => Object.values(s.roles));
+    if (!ids.length) return;
+    this._stAsked = true;
+    this._hass.callWS({ type: "config/entity_registry/get_entries", entity_ids: ids }).then((res) => {
+      const out = {};
+      for (const [id, e] of Object.entries(res || {})) {
+        const uid = e?.unique_id, entry = e?.config_entry_id;
+        const st = storages.find((s) => Object.values(s.roles).includes(id));
+        if (!uid || !st) continue;
+        // <entrée>_<nœud>_<stockage>_<mesure> : le nœud est entre l'entrée et « _<stockage>_ »
+        const rest = entry && uid.startsWith(`${entry}_`) ? uid.slice(entry.length + 1) : uid.replace(/^[^_]+_/, "");
+        const i = rest.lastIndexOf(`_${st.raw}_`);
+        if (i > 0) out[id] = rest.slice(0, i);
+      }
+      this._stNode = out;
+    }).catch(() => { this._stNode = {}; }).finally(() => { this._map = null; this._sig = null; this._render(); });
   }
 
   _render() {
@@ -1403,6 +1442,7 @@ class ServeurHaProxmoxCard extends HTMLElement {
     if (this._tab === undefined) { try { this._tab = JSON.parse(localStorage.getItem(this._tabKey()) || "null"); } catch (e) { this._tab = null; } }
     const node = m.nodes.find((n) => n.id === this._tab) || m.nodes[0];
     const ids = [...m.nodes, ...m.guests, ...m.storages].flatMap((d) => Object.values(d.roles));
+    // en attendant l'identifiant unique, seule la première série d'un stockage est rattachée à son nœud
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|${node?.id}|${this._armed}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
     if (sig === this._sig) return;
     this._sig = sig;
