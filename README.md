@@ -227,6 +227,7 @@ Tout est détecté à partir de l'intégration **Proxmox VE** de Home Assistant 
 - **Stockage par nœud** : l'intégration crée un seul appareil par nom de stockage pour tous les nœuds ; la carte retrouve le nœud de chaque série de capteurs dans leur identifiant unique (registre des entités).
 
 > Pour un conteneur, « Arrêter » de l'intégration Proxmox VE est un **arrêt immédiat** (Stop), pas un arrêt propre du système. Pour un invité qui écrit sur disque (base de données, NAS), préférez l'arrêt depuis Proxmox.
+- **Onduleur** : si un onduleur est suivi par l'intégration **Network UPS Tools (NUT)**, la carte affiche son état (secteur ou batterie), les tensions d'entrée et de sortie, la charge et la batterie, avec un voyant **UPS** dans l'en-tête (rouge sur batterie). Pratique quand le serveur Proxmox est protégé par l'onduleur, sans NAS.
 - **Protection** : la VM qui fait tourner Home Assistant (nom contenant « haos » ou « home assistant ») n'a **ni arrêt ni redémarrage**, et son nœud non plus, pour ne pas couper Home Assistant d'un clic. L'option `protect` choisit d'autres invités.
 
 | Option | Rôle | Défaut |
@@ -236,7 +237,8 @@ Tout est détecté à partir de l'intégration **Proxmox VE** de Home Assistant 
 | `protect` | Invités sans arrêt ni redémarrage (liste de noms) | la VM Home Assistant |
 | `sort` | Ordre des invités : `status` (en marche d'abord), `name`, `cpu`, `ram` | `status` |
 | `hide_stopped` | Masquer les invités arrêtés | `false` |
-| `show_node`, `show_storage`, `show_guests`, `show_actions` | Afficher chaque section, et les boutons | `true` |
+| `ups_device`, `ups_name`, `ups` | Onduleur NUT (appareil, nom, capteurs) | le premier trouvé |
+| `show_node`, `show_storage`, `show_guests`, `show_actions`, `show_ups` | Afficher chaque section, et les boutons | `true` |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ```yaml

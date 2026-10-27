@@ -363,7 +363,7 @@
         : { type: "custom:serveur-ha-card", title: "Home Assistant (VM)", icon: "mdi:server", theme: t },
       maj: { type: "custom:serveur-ha-maj-card", theme: t },
       nas: { type: "custom:serveur-ha-nas-card", title: "Synology DS214+", volume_name: "HDD 4 To", ups_name: "Green Cell 600VA", actions: ["switch.ds214", "switch.minipc"], theme: t },
-      pve: { type: "custom:serveur-ha-proxmox-card", theme: t },
+      pve: { type: "custom:serveur-ha-proxmox-card", ups_name: "Green Cell 600VA", theme: t },
       dns: { type: "custom:serveur-ha-dns-card", theme: t },
     };
     return state.card === "all" ? Object.values(c) : [c[state.card]];

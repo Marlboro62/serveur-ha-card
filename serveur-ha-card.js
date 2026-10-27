@@ -17,7 +17,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.5.0";
+const CARD_VERSION = "0.6.0-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -811,6 +811,49 @@ const NAS_FR = {
 };
 const fr = (s) => (s == null ? s : NAS_FR[String(s).trim().toLowerCase()] || s);
 
+/** Capteurs NUT d'un onduleur : appareil choisi (ups_device), sinon le premier trouvé. */
+const nutMap = (hass, c) => {
+  const reg = hass.entities || {}, ids = Object.keys(hass.states || {});
+  const key = (id) => reg[id]?.translation_key;
+  const nut = ids.filter((id) => reg[id]?.platform === "nut" && id.startsWith("sensor."));
+  const upsDev = c.ups_device || reg[nut[0]]?.device_id;
+  const pool = nut.filter((id) => !upsDev || reg[id]?.device_id === upsDev);
+  const src = pool.length ? pool : ids.filter((id) => /^sensor\.ups_/.test(id));
+  const out = {}, used = new Set();
+  for (const [f, d] of Object.entries(NAS_UPS)) {
+    const id = (c.ups || {})[f] || src.find((x) => !used.has(x) && d.k.includes(key(x))) || src.find((x) => !used.has(x) && !key(x) && d.re.test(x));
+    if (id) { out[f] = id; used.add(id); }
+  }
+  return out;
+};
+
+/** Section Onduleur (cartes NAS et Proxmox) : état secteur ou batterie, tensions, charge, batterie. */
+const upsBlock = (card, u, c) => {
+  if (!Object.keys(u).length) return { html: "", ok: null };
+  const st = card._txt(u.status), raw = card._txt(u.status_raw);
+  const ok = !u.status && !u.status_raw ? null : (raw ? /\bOL\b/.test(raw) && !/\b(OB|LB|RB|OVER)\b/.test(raw) : /online|en ligne/i.test(st || ""));
+  const bar = (id, icon, label, max, cls) => {
+    const v = card._num(id);
+    return v === null ? "" : `<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> ${esc(card._unit(id, ""))}</small></b></div>
+      <div class="g-bar"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div></div>`;
+  };
+  const batt = card._num(u.battery);
+  const hass = card._hass;
+  const dev = hass.devices?.[hass.entities?.[u.status || u.status_raw || u.battery]?.device_id];
+  const name = c.ups_name || [dev?.manufacturer, dev?.model].filter(Boolean).join(" ") || dev?.name || "Onduleur";
+  const run = card._num(u.runtime);
+  const html = `<div class="srv-state ${ok === null ? "" : ok ? "ok" : "bad"} nas-ups" data-entity="${esc(u.status || u.status_raw || "")}">
+      <ha-icon icon="mdi:power-plug-battery-outline"></ha-icon><span>${esc(name)}</span><b>${esc([fr(st), raw].filter(Boolean).join(" · ") || "—")}</b></div>
+    <div class="srv-grid nas-ups-g">${[
+      bar(u.input, "mdi:transmission-tower-import", "Entrée", 250, "nas-in"),
+      bar(u.output, "mdi:transmission-tower-export", "Sortie", 250, "srv-in"),
+      bar(u.load, "mdi:gauge", "Charge", 100, "nas-load"),
+      batt === null ? "" : `<div class="srv-g" data-entity="${esc(u.battery)}"><div class="srv-gt"><span><ha-icon icon="mdi:battery"></ha-icon>Batterie</span><b>${fmt(batt, 0)}<small> %</small></b></div>
+        <div class="g-bar ${batt >= 50 ? "b-ok" : batt >= 20 ? "b-warn" : "b-alert"}"><i style="width:${batt}%"></i></div>${run !== null && card._unit(u.runtime, "s") === "s" ? `<div class="srv-gs">Autonomie ${Math.round(run / 60)} min</div>` : ""}</div>`,
+    ].join("")}</div>`;
+  return { html, ok };
+};
+
 const okWord = (s) => /^(normal|ok|online|en ligne|healthy|sain|bon)$/i.test(String(s || "").trim());
 
 class ServeurHaNasCard extends HTMLElement {
@@ -1219,6 +1262,7 @@ const PVE_DEFAULTS = {
   sort: "status", // status (en marche d'abord), name, cpu, ram
   hide_stopped: false,
   show_node: true, show_storage: true, show_guests: true, show_actions: true,
+  show_ups: true, // section Onduleur, quand un onduleur NUT est trouvé
   theme: "v2",
 };
 
@@ -1341,6 +1385,15 @@ class ServeurHaProxmoxCard extends HTMLElement {
     return Number.isFinite(v) ? v : null;
   }
 
+  _txt(id) {
+    const s = this._st(id)?.state;
+    return s === undefined || s === "unavailable" || s === "unknown" || s === "" ? null : s;
+  }
+
+  _unit(id, d = "") {
+    return this._st(id)?.attributes?.unit_of_measurement ?? d;
+  }
+
   _tabKey() {
     return `serveur-ha-proxmox:${this._config.title || ""}`;
   }
@@ -1412,7 +1465,7 @@ class ServeurHaProxmoxCard extends HTMLElement {
     const orphanSt = known.filter((s) => !nodes.some((n) => n.id === s.parent));
     if (list.length === 1) { list[0].guests.push(...orphans); list[0].storages.push(...orphanSt); }
     else if (orphans.length || orphanSt.length) list.push({ id: "_autres", name: "Autres", roles: {}, guests: orphans, storages: orphanSt, other: true });
-    this._map = { nodes: list, guests, storages };
+    this._map = { nodes: list, guests, storages, ups: c.show_ups !== false ? nutMap(hass, c) : {} };
     return this._map;
   }
 
@@ -1443,7 +1496,7 @@ class ServeurHaProxmoxCard extends HTMLElement {
     const m = this._resolve();
     if (this._tab === undefined) { try { this._tab = JSON.parse(localStorage.getItem(this._tabKey()) || "null"); } catch (e) { this._tab = null; } }
     const node = m.nodes.find((n) => n.id === this._tab) || m.nodes[0];
-    const ids = [...m.nodes, ...m.guests, ...m.storages].flatMap((d) => Object.values(d.roles));
+    const ids = [...[...m.nodes, ...m.guests, ...m.storages].flatMap((d) => Object.values(d.roles)), ...Object.values(m.ups || {})];
     // en attendant l'identifiant unique, seule la première série d'un stockage est rattachée à son nœud
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|${node?.id}|${this._armed}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
     if (sig === this._sig) return;
@@ -1462,9 +1515,11 @@ class ServeurHaProxmoxCard extends HTMLElement {
     const updates = m.nodes.filter((n) => this._st(n.roles.update)?.state === "on");
     const down = m.nodes.filter((n) => !nodeUp(n));
     const led = (ok, label, id, cls = "") => `<span class="srv-led ${ok ? "ok" : "bad"} ${cls}" data-entity="${esc(id || "")}"><i></i>${label}</span>`;
+    const ups = upsBlock(this, m.ups || {}, c);
     const leds = m.nodes.length ? [
       led(!down.length, `Nœuds ${m.nodes.filter((n) => !n.other).length - down.length}/${m.nodes.filter((n) => !n.other).length}`, (down[0] || m.nodes[0]).roles.status),
       updates.length ? `<span class="srv-led upd" data-entity="${esc(updates[0].roles.update)}"><i></i>Mise à jour</span>` : "",
+      ups.ok === null ? "" : led(ups.ok, "UPS", m.ups.status || m.ups.status_raw),
     ].join("") : "";
 
     const sec = (icon, t, body, extra = "") => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${icon}"></ha-icon>${t}${extra}</div>${body}</div>` : "");
@@ -1549,10 +1604,11 @@ class ServeurHaProxmoxCard extends HTMLElement {
       body = tabs + nodeHtml
         + sec("mdi:harddisk", "Stockage", stor.length ? `<div class="srv-grid pve-res">${stor.join("")}</div>` : "")
         + sec(node.other ? "mdi:help-circle-outline" : "mdi:cube-outline", `Invités <small class="pve-n">${node.guests.filter(running).length}/${node.guests.length} en marche</small>`, rows.length ? `<div class="pve-list">${head}${rows.join("")}</div>` : "")
+        + sec("mdi:power-plug-battery-outline", "Onduleur", ups.html)
         + sec("mdi:gesture-tap-button", "Actions du nœud", nodeActs.length ? `<div class="pve-na">${nodeActs.join("")}</div>${guard ? `<div class="srv-gs pve-guard"><ha-icon icon="mdi:shield-lock-outline"></ha-icon>Redémarrage et arrêt masqués : ce nœud fait tourner Home Assistant.</div>` : ""}` : "");
     }
 
-    const alertCls = down.length ? "srv-alert" : "";
+    const alertCls = down.length || ups.ok === false ? "srv-alert" : "";
     this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}<ha-card class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:server-network")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
@@ -2253,6 +2309,9 @@ const PVE_SCHEMA = [
   { name: "show_storage", selector: { boolean: {} } },
   { name: "show_guests", selector: { boolean: {} } },
   { name: "show_actions", selector: { boolean: {} } },
+  { name: "show_ups", selector: { boolean: {} } },
+  { name: "ups_device", selector: { device: { integration: "nut" } } },
+  { name: "ups_name", selector: { text: {} } },
   THEME_SELECT,
 ];
 const PVE_LABELS = {
@@ -2267,6 +2326,9 @@ const PVE_LABELS = {
   show_storage: "Section Stockage",
   show_guests: "Section Invités",
   show_actions: "Boutons démarrer, arrêter, redémarrer (deux clics)",
+  show_ups: "Section Onduleur (NUT)",
+  ups_device: "Onduleur (appareil NUT, facultatif)",
+  ups_name: "Nom de l'onduleur (facultatif)",
   theme: "Couleurs de la carte",
 };
 const ServeurHaProxmoxCardEditor = makeEditor(PVE_SCHEMA, PVE_LABELS, PVE_DEFAULTS);
