@@ -15,7 +15,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.4.1-beta";
+const CARD_VERSION = "0.4.2-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1472,7 +1472,8 @@ class ServeurHaProxmoxCard extends HTMLElement {
     const btn = (id, icon, label, cls = "") => {
       if (!id || !this._st(id)) return "";
       const armed = this._armed === id;
-      return `<button class="pve-btn ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(label)}${armed ? " : cliquez encore pour confirmer" : ""}"><ha-icon icon="${armed ? "mdi:check" : icon}"></ha-icon>${armed ? "<span>Confirmer</span>" : ""}</button>`;
+      // armé : coche orange (petits boutons), « Confirmer » sur les grands boutons du nœud
+      return `<button class="pve-btn ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${armed ? "mdi:check-bold" : icon}"></ha-icon>${armed && /wide/.test(cls) ? "<span>Confirmer</span>" : ""}</button>`;
     };
 
     let body = "";
@@ -1597,7 +1598,9 @@ const PVE_STYLE = `<style>
 .pve-btn:focus-visible { outline: 2px solid var(--med-blue); }
 .pve-btn.go { color: var(--med-down); border-color: color-mix(in srgb, var(--med-down) 45%, transparent); }
 .pve-btn.stop { color: var(--t-red); border-color: color-mix(in srgb, var(--t-red) 40%, transparent); }
-.pve-btn.armed { color: #f0a33a; border-color: #f0a33a; background: color-mix(in srgb, #f0a33a 16%, transparent); }
+.pve-btn.armed { color: #f0a33a; border-color: #f0a33a; background: color-mix(in srgb, #f0a33a 18%, transparent); animation: pve-pulse 1s ease-in-out infinite; }
+@keyframes pve-pulse { 50% { box-shadow: 0 0 0 3px color-mix(in srgb, #f0a33a 30%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .pve-btn.armed { animation: none; } }
 .pve-btn.wide { padding: 0 12px; height: 36px; }
 .pve-lock { display: inline-flex; color: var(--med-muted); } .pve-lock ha-icon { --mdc-icon-size: 18px; }
 .pve-na { display: flex; flex-wrap: wrap; gap: 6px; }
