@@ -17,7 +17,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.7.0-beta.1";
+const CARD_VERSION = "0.7.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2382,7 +2382,7 @@ const OPN_ROLES = [
   ["disk", /_filesystem_used_percentage(?:_root)?$/], ["ups", /_ups_status$/], ["ups_batt", /_ups_battery_charge$/],
 ];
 /** État d'une passerelle (dpinger) et d'une interface, en français. */
-const OPN_GW = { online: ["En ligne", "ok"], none: ["En ligne", "ok"], down: ["Hors ligne", "bad"], loss: ["Pertes", "warn"], delay: ["Latence", "warn"], delay_loss: ["Latence et pertes", "warn"], force_down: ["Désactivée", "off"] };
+const OPN_GW = { online: ["En ligne", "ok"], none: ["En ligne", "ok"], down: ["Hors ligne", "bad"], loss: ["Pertes", "warn"], delay: ["Latence", "warn"], delay_loss: ["Latence et pertes", "warn"], force_down: ["Désactivée", "off"], offline: ["Hors ligne", "bad"], latency: ["Latence", "warn"], packetloss: ["Pertes", "warn"] };
 const opnGw = (s) => OPN_GW[String(s ?? "").toLowerCase().replace(/[+\s]+/g, "_")] || [s ? String(s) : "Inconnu", "off"];
 /** Débit en bit/s d'un capteur, selon son unité (kB/s par défaut de l'intégration, ou converti par Home Assistant). */
 const OPN_RATE = { "b/s": 8, "kb/s": 8e3, "kib/s": 8192, "mb/s": 8e6, "mib/s": 8388608, "gb/s": 8e9, "bit/s": 1, "kbit/s": 1e3, "mbit/s": 1e6, "gbit/s": 1e9 };
@@ -2413,7 +2413,8 @@ class ServeurHaOpnsenseCard extends HTMLElement {
           const what = act.dataset.act;
           if (this._armed === what) {
             this._armed = null;
-            this._hass?.callService("opnsense", what === "reboot" ? "system_reboot" : "system_halt", this._map?.device ? { device_id: this._map.device } : {});
+            if (this._map?.rest) this._hass?.callService("rest_command", `opnsense_${what === "reboot" ? "reboot" : "halt"}`, {});
+            else this._hass?.callService("opnsense", what === "reboot" ? "system_reboot" : "system_halt", this._map?.device ? { device_id: this._map.device } : {});
           } else {
             this._armed = what;
             clearTimeout(this._armTimer);
@@ -2457,13 +2458,19 @@ class ServeurHaOpnsenseCard extends HTMLElement {
   _resolve() {
     if (this._map) return this._map;
     const hass = this._hass, c = this._config, reg = hass.entities || {};
-    const ids = Object.keys(hass.states).filter((id) => reg[id]?.platform === "opnsense" && !reg[id]?.hidden);
-    const device = c.device || reg[ids.find((id) => id.startsWith("sensor."))]?.device_id || null;
+    let ids = Object.keys(hass.states).filter((id) => reg[id]?.platform === "opnsense" && !reg[id]?.hidden);
+    // Sans intégration : capteurs du package REST (packages/opnsense_api.yaml), reconnus à leur préfixe
+    const rest = !ids.length;
+    if (rest) {
+      const pre = new RegExp(`^(sensor|binary_sensor|update)\\.${String(c.prefix || "opnsense").toLowerCase().replace(/[^a-z0-9_]/g, "")}_`);
+      ids = Object.keys(hass.states).filter((id) => pre.test(id) && !reg[id]?.hidden);
+    }
+    const device = rest ? null : c.device || reg[ids.find((id) => id.startsWith("sensor."))]?.device_id || null;
     const mine = ids.filter((id) => !device || reg[id]?.device_id === device);
-    const m = { device, roles: {}, ifaces: {}, gws: {}, temps: [], update: null, notices: null };
+    const m = { device, rest, roles: {}, ifaces: {}, gws: {}, temps: [], update: null, notices: null };
     for (const id of mine) {
       const dom = id.split(".")[0];
-      if (dom === "update") { m.update ||= id; continue; }
+      if (dom === "update" || (dom === "binary_sensor" && /_firmware_updates?_available$/.test(id))) { m.update ||= id; continue; }
       if (dom === "binary_sensor" && /_pending_notices_present$/.test(id)) { m.notices = id; continue; }
       if (dom !== "sensor") continue;
       let x = /_interface_(.+?)_(status|traffic_in_rate|traffic_out_rate)$/.exec(id);
@@ -2492,7 +2499,7 @@ class ServeurHaOpnsenseCard extends HTMLElement {
     const v = this._num(id);
     if (v === null) return null;
     const u = String(this._st(id)?.attributes?.unit_of_measurement || "kB/s").toLowerCase().replace(/\s/g, "");
-    return v * (OPN_RATE[u] || 8e3);
+    return Math.max(0, v * (OPN_RATE[u] || 8e3)); // un compteur remis à zéro donne une dérivée négative
   }
 
   _render() {
@@ -2513,7 +2520,7 @@ class ServeurHaOpnsenseCard extends HTMLElement {
     if (!found) {
       this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}<ha-card class="${themeClass(c.theme, this._hass)}">
         <header><div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:wall-fire")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon><div><div class="title">${esc(c.title || "OPNsense")}</div></div></div></header>
-        <div class="empty">Aucun pare-feu OPNsense trouvé<span>Installez l'intégration OPNsense (HACS : travisghansen/hass-opnsense), puis rechargez la page.</span></div></ha-card>`;
+        <div class="empty">Aucun pare-feu OPNsense trouvé<span>Installez l'intégration OPNsense (HACS : travisghansen/hass-opnsense), ou le package REST fourni avec la carte (packages/opnsense_api.yaml), puis rechargez la page.</span></div></ha-card>`;
       return;
     }
 
@@ -2575,7 +2582,7 @@ class ServeurHaOpnsenseCard extends HTMLElement {
       .sort((a, b) => opnRank(a.name) - opnRank(b.name) || a.name.localeCompare(b.name, "fr"));
     const ifHtml = c.show_interfaces !== false ? ifs.map((i) => {
       const down = i.up && !/^(up|active|connected|unknown|unavailable)$/i.test(i.up);
-      return `<div class="opn-if ${down ? "bad" : ""}" data-entity="${esc(i.in || i.out)}"><div class="opn-n"><b>${esc(i.name)}</b><small>${down ? `<span class="bad">${esc(i.up === "down" ? "Déconnectée" : i.up)}</span>` : "Connectée"}</small></div>
+      return `<div class="opn-if ${down ? "bad" : ""}" data-entity="${esc(i.in || i.out)}"><div class="opn-n"><b>${esc(i.name)}</b><small>${down ? `<span class="bad">Déconnectée</span>` : "Connectée"}</small></div>
         <span class="opn-r in" title="Reçu"><ha-icon icon="mdi:arrow-down"></ha-icon>${bitrate(i.rin)}</span><span class="opn-r out" title="Envoyé"><ha-icon icon="mdi:arrow-up"></ha-icon>${bitrate(i.rout)}</span></div>`;
     }).join("") : "";
 
@@ -2584,9 +2591,12 @@ class ServeurHaOpnsenseCard extends HTMLElement {
       const armed = this._armed === what;
       return `<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-act="${what}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${armed ? "mdi:check-bold" : icon}"></ha-icon>${armed ? "<span>Confirmer</span>" : ""}</button>`;
     };
-    const acts = c.show_actions !== false && this._hass.services?.opnsense?.system_reboot ? [act("reboot", "mdi:restart", "Redémarrer", ""), act("halt", "mdi:power", "Arrêter", "stop")].join("") : "";
+    // Intégration : services opnsense.* ; package REST : rest_command.opnsense_reboot et opnsense_halt, s'ils sont déclarés
+    const svc = this._hass.services || {};
+    const can = (what) => (m.rest ? !!svc.rest_command?.[`opnsense_${what}`] : !!svc.opnsense?.[what === "reboot" ? "system_reboot" : "system_halt"]);
+    const acts = c.show_actions !== false ? [can("reboot") ? act("reboot", "mdi:restart", "Redémarrer", "") : "", can("halt") ? act("halt", "mdi:power", "Arrêter", "stop") : ""].join("") : "";
 
-    const sub = [m.version ? `OPNsense ${m.version}` : m.model, gws.length ? (gwDown.length ? `${gwDown.length} passerelle${gwDown.length > 1 ? "s" : ""} hors ligne` : gwWarn.length ? "passerelle dégradée" : "Internet OK") : ""].filter(Boolean).join(" · ");
+    const sub = [inst ? `OPNsense ${inst}` : m.model, gws.length ? (gwDown.length ? `${gwDown.length} passerelle${gwDown.length > 1 ? "s" : ""} hors ligne` : gwWarn.length ? "passerelle dégradée" : "Internet OK") : ""].filter(Boolean).join(" · ");
     const body = [
       c.show_info !== false && info.length ? sec("mdi:information-outline", "Informations", `<div class="tiles srv-tiles">${info.join("")}</div>`) : "",
       res.length || temps.length ? sec("mdi:speedometer", "Ressources", `${res.length ? `<div class="srv-grid pve-res opn-res">${res.join("")}</div>` : ""}${temps.length ? `<div class="tiles srv-tiles opn-tm">${temps.join("")}</div>` : ""}`) : "",
@@ -2636,6 +2646,7 @@ const OPN_SCHEMA = [
   { name: "icon", selector: { icon: {} } },
   { name: "icon_color", selector: { text: {} } },
   { name: "device", selector: { device: { integration: "opnsense" } } },
+  { name: "prefix", selector: { text: {} } },
   { name: "interfaces", selector: { text: { multiple: true } } },
   { name: "show_info", selector: { boolean: {} } },
   { name: "show_resources", selector: { boolean: {} } },
@@ -2649,6 +2660,7 @@ const OPN_LABELS = {
   icon: "Icône",
   icon_color: "Couleur de l'icône",
   device: "Pare-feu OPNsense (vide = le premier)",
+  prefix: "Sans intégration : début du nom des capteurs du package REST (vide = opnsense)",
   interfaces: "Interfaces affichées (vide = toutes celles qui ont des débits)",
   show_info: "Section Informations (uptime, version, baux DHCP, charge)",
   show_resources: "Section Ressources (CPU, RAM, disque, tables, températures)",
