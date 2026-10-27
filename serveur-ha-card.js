@@ -10,12 +10,14 @@
  *                                températures, ventilateur, actions, réseau et onduleur
  *   custom:serveur-ha-proxmox-card  Proxmox VE : nœuds, stockages, VM et conteneurs, avec
  *                                démarrage, arrêt et redémarrage confirmés en deux clics
+ *   custom:serveur-ha-dns-card   Filtrage DNS (AdGuard Home ou Pi-hole) : requêtes, part bloquée,
+ *                                temps de réponse, protection et réglages, mises à jour
  *
  * Capteurs détectés automatiquement, ou choisis dans la configuration (voir le README).
  */
 
 (() => {
-const CARD_VERSION = "0.4.2";
+const CARD_VERSION = "0.5.0-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1612,6 +1614,326 @@ const PVE_STYLE = `<style>
 @container (max-width: 360px) { .pve-g, .pve-gh { grid-template-columns: 20px minmax(0, 1fr) 80px 64px; gap: 6px; } }
 </style>`;
 
+/* ------------------------------------------------------------ carte DNS (AdGuard Home, Pi-hole) */
+
+const DNS_DEFAULTS = {
+  title: "",
+  icon: "",
+  icon_color: "",
+  show_stats: true, show_details: true, show_switches: true, show_update: true,
+  pause_minutes: [5, 30], // Pi-hole : pauses proposées quand le blocage est actif
+  theme: "v2",
+};
+
+/** Rôles : clé de traduction (AdGuard Home, Pi-hole API v5 et v6), sinon fin du nom de l'entité (français ou anglais). */
+const DNS_ROLES = [
+  ["ratio", "sensor", ["dns_queries_blocked_ratio", "percent_ads_blocked", "ads_percentage_today"], /_(taux_de_requetes_dns_bloquees|dns_queries_blocked_ratio|pourcentage_de_publicites_bloquees(_aujourd_hui)?|ads_percentage_blocked(_today)?)$/],
+  ["blocked", "sensor", ["dns_queries_blocked", "ads_blocked", "ads_blocked_today"], /_(requetes_dns_bloquees|dns_queries_blocked|publicites_bloquees(_aujourd_hui)?|ads_blocked(_today)?)$/],
+  ["queries", "sensor", ["dns_queries", "dns_queries_today"], /_(requetes_dns(_aujourd_hui)?|dns_queries(_today)?)$/],
+  ["speed", "sensor", ["average_processing_speed"], /_(vitesse_de_traitement_moyenne|average_processing_speed)$/],
+  ["rules", "sensor", ["rules_count"], /_(nombre_de_regles|rules_count)$/],
+  ["parental_blocked", "sensor", ["parental_control_blocked"], /_(controle_parental_bloque|parental_control_blocked)$/],
+  ["sb_blocked", "sensor", ["safe_browsing_blocked"], /_(navigation_securisee_bloquee|safe_browsing_blocked)$/],
+  ["ss_enforced", "sensor", ["safe_searches_enforced"], /_(recherches_securisees_appliquees|safe_searches_enforced)$/],
+  ["domains", "sensor", ["domains_being_blocked"], /_(domaines_bloques|domains_blocked|domains_being_blocked)$/],
+  ["clients", "sensor", ["unique_clients"], /_(clients_uniques(_dns)?|dns_unique_clients|unique_clients)$/],
+  ["seen", "sensor", ["clients_ever_seen"], /_(clients_vus|seen_clients|clients_ever_seen)$/],
+  ["cached", "sensor", ["queries_cached"], /_(requetes_dns_en_cache|dns_queries_cached|queries_cached)$/],
+  ["forwarded", "sensor", ["queries_forwarded"], /_(requetes_dns_transferees|dns_queries_forwarded|queries_forwarded)$/],
+  ["unique_domains", "sensor", ["unique_domains"], /_(domaines_uniques(_dns)?|dns_unique_domains|unique_domains)$/],
+  ["status", "binary_sensor", ["status"], /_(statut|status|etat)$/],
+  ["protection", "switch", ["protection"], /_protection$/],
+  ["filtering", "switch", ["filtering"], /_(filtrage|filtering)$/],
+  ["parental", "switch", ["parental"], /_(controle_parental|parental_control)$/],
+  ["safe_browsing", "switch", ["safe_browsing"], /_(navigation_securisee|safe_browsing)$/],
+  ["safe_search", "switch", ["safe_search"], /_(recherche_securisee|safe_search)$/],
+  ["query_log", "switch", ["query_log"], /_(journal_des_requetes|query_log)$/],
+];
+const DNS_SWITCH = {
+  protection: ["mdi:shield-check-outline", "Protection"], blocking: ["mdi:shield-check-outline", "Blocage"],
+  filtering: ["mdi:filter-outline", "Filtrage"], parental: ["mdi:human-male-child", "Contrôle parental"],
+  safe_browsing: ["mdi:web-check", "Navigation sécurisée"], safe_search: ["mdi:magnify-scan", "Recherche sécurisée"],
+  query_log: ["mdi:text-box-search-outline", "Journal des requêtes"],
+};
+const dnsRole = (id, ent) => {
+  const domain = id.split(".")[0];
+  const tk = ent?.translation_key || "";
+  for (const [role, d, tks] of DNS_ROLES) if (d === domain && tk && tks.includes(tk)) return role;
+  for (const [role, d, , re] of DNS_ROLES) if (d === domain && re.test(id)) return role;
+  if (domain === "update") return "update";
+  // Pi-hole : un seul interrupteur, sans clé de traduction (nom de l'appareil) : le blocage
+  if (domain === "switch" && ent?.platform === "pi_hole") return "blocking";
+  return null;
+};
+const DNS_APPS = { adguard: ["AdGuard Home", "mdi:shield-check"], pi_hole: ["Pi-hole", "mdi:pi-hole"] };
+const capital = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+class ServeurHaDnsCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("serveur-ha-dns-card-editor");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { ...DNS_DEFAULTS, ...(config || {}) };
+    this._map = null;
+    this._sig = null;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    if (!this._clicks) {
+      this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const tab = ev.target.closest?.("[data-tab]");
+        if (tab) {
+          this._tab = tab.dataset.tab;
+          try { localStorage.setItem(this._tabKey(), JSON.stringify(this._tab)); } catch (e) { /* stockage indisponible */ }
+          this._sig = null; this._render(); return;
+        }
+        const tog = ev.target.closest?.("[data-toggle]");
+        if (tog) {
+          const id = tog.dataset.toggle;
+          const on = this._st(id)?.state === "on";
+          // couper la protection ou le blocage : deux clics (le premier arme, le second dans les 5 s confirme)
+          if (on && tog.dataset.guard && this._armed !== id) {
+            this._armed = id;
+            clearTimeout(this._armTimer);
+            this._armTimer = setTimeout(() => { this._armed = null; this._sig = null; this._render(); }, 5000);
+          } else {
+            this._armed = null;
+            this._hass?.callService("switch", on ? "turn_off" : "turn_on", { entity_id: id });
+          }
+          this._sig = null; this._render(); return;
+        }
+        const pause = ev.target.closest?.("[data-pause]");
+        if (pause) {
+          const [id, min] = pause.dataset.pause.split("|");
+          const m = Number(min);
+          this._hass?.callService("pi_hole", "disable", { entity_id: id, duration: `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}:00` });
+          return;
+        }
+        const el = ev.target.closest?.("[data-entity]");
+        if (el?.dataset.entity) {
+          const e = new Event("hass-more-info", { bubbles: true, composed: true });
+          e.detail = { entityId: el.dataset.entity };
+          this.dispatchEvent(e);
+        }
+      }));
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    if (this._hass?.entities !== hass.entities || this._hass?.devices !== hass.devices) this._map = null;
+    this._hass = hass;
+    this._render();
+  }
+
+  getCardSize() {
+    return 7;
+  }
+
+  _st(id) {
+    return id ? this._hass?.states?.[id] : undefined;
+  }
+
+  _num(id) {
+    const s = this._st(id);
+    if (!s || s.state === "unavailable" || s.state === "unknown") return null;
+    const v = Number(s.state);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  _tabKey() {
+    return `serveur-ha-dns:${this._config.title || ""}`;
+  }
+
+  /** Serveurs AdGuard Home et Pi-hole, un par appareil, avec un nom lisible même si les appareils ont le même. */
+  _resolve() {
+    if (this._map) return this._map;
+    const hass = this._hass, c = this._config;
+    const devs = hass.devices || {};
+    const byDev = {};
+    for (const [id, e] of Object.entries(hass.entities || {})) {
+      if (!DNS_APPS[e.platform] || !hass.states[id] || e.hidden) continue;
+      const role = dnsRole(id, e);
+      if (!role) continue;
+      const key = e.device_id || `${e.platform}:${e.config_entry_id || "x"}`;
+      const d = (byDev[key] ||= { id: key, app: e.platform, roles: {}, updates: [], ids: [] });
+      d.ids.push(id);
+      if (role === "update") d.updates.push(id);
+      else d.roles[role] ||= id;
+    }
+    const want = (Array.isArray(c.servers) ? c.servers : c.servers ? [c.servers] : []).map((x) => (typeof x === "object" ? x : { device: x }));
+    let list = Object.values(byDev);
+    for (const d of list) {
+      const dev = devs[d.id] || {};
+      d.devName = dev.name_by_user || dev.name || DNS_APPS[d.app][0];
+      // partie commune des entités, sans « dns », « adguard », « home », « pi », « hole » : « principal », « secours »…
+      const objs = d.ids.map((id) => id.split(".")[1]);
+      let pre = objs[0] || "";
+      for (const o of objs) while (pre && !o.startsWith(pre)) pre = pre.slice(0, -1);
+      d.tag = pre.split("_").filter((w) => w && !/^(dns|adguard|home|pi|hole|pihole|serveur|server)$/.test(w)).join(" ");
+    }
+    const dup = (d) => list.filter((x) => x.devName === d.devName).length > 1;
+    for (const d of list) d.name = dev2name(d);
+    function dev2name(d) { return !dup(d) ? d.devName : d.tag ? capital(d.tag) : `${d.devName} ${list.indexOf(d) + 1}`; }
+    if (want.length) {
+      list = want.map((w) => {
+        const d = list.find((x) => x.id === w.device || x.name.toLowerCase() === String(w.device || "").toLowerCase() || x.tag === String(w.device || "").toLowerCase());
+        return d ? { ...d, name: w.name || d.name } : null;
+      }).filter(Boolean);
+    } else list.sort((a, b) => (a.app === b.app ? 0 : a.app === "adguard" ? -1 : 1) || a.name.localeCompare(b.name, "fr"));
+    this._map = list;
+    return list;
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const list = this._resolve();
+    if (this._tab === undefined) { try { this._tab = JSON.parse(localStorage.getItem(this._tabKey()) || "null"); } catch (e) { this._tab = null; } }
+    const srv = list.find((d) => d.id === this._tab) || list[0];
+    const ids = list.flatMap((d) => [...Object.values(d.roles), ...d.updates]);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${srv?.id}|${this._armed}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const guardOf = (d) => d.roles.protection || d.roles.blocking;
+    const isOn = (d) => {
+      const g = guardOf(d);
+      if (g) return this._st(g)?.state === "on";
+      const s = this._st(d.roles.status)?.state;
+      return s === undefined ? null : s === "on";
+    };
+    const reachable = (d) => [...Object.values(d.roles)].some((id) => { const s = this._st(id)?.state; return s && s !== "unavailable"; });
+    const upd = (d) => d.updates.filter((id) => this._st(id)?.state === "on");
+    const off = list.filter((d) => isOn(d) === false || !reachable(d));
+    const updates = list.filter((d) => upd(d).length);
+    const apps = [...new Set(list.map((d) => d.app))];
+    const title = c.title || (apps.length === 1 ? DNS_APPS[apps[0]][0] : "Filtrage DNS");
+    const icon = c.icon || (apps.length === 1 ? DNS_APPS[apps[0]][1] : "mdi:shield-check");
+    const led = (ok, label, id, cls = "") => `<span class="srv-led ${ok ? "ok" : "bad"} ${cls}" data-entity="${esc(id || "")}"><i></i>${label}</span>`;
+    const leds = list.length ? [
+      led(!off.length, apps.includes("pi_hole") && !apps.includes("adguard") ? "Blocage" : "Protection", guardOf(off[0] || list[0]) || ""),
+      updates.length ? `<span class="srv-led upd" data-entity="${esc(upd(updates[0])[0])}"><i></i>Mise à jour</span>` : "",
+    ].join("") : "";
+    const sub = list.length ? `${list.length} serveur${list.length > 1 ? "s" : ""} · ${off.length ? `${off.length} sans protection` : "protection active"}` : "";
+
+    let body = "";
+    if (!srv) {
+      body = `<div class="empty">Aucun serveur AdGuard Home ni Pi-hole trouvé<span>Ajoutez l'intégration AdGuard Home ou Pi-hole (Paramètres › Appareils et services), puis rechargez la page.</span></div>`;
+    } else {
+      const tabs = list.length > 1 ? `<div class="pve-tabs" role="tablist">${list.map((d) => `<button class="pve-tab ${d.id === srv.id ? "on" : ""}" role="tab" aria-selected="${d.id === srv.id}" data-tab="${esc(d.id)}">
+          <i class="pve-dot ${isOn(d) === false || !reachable(d) ? "bad" : "ok"}"></i>${esc(d.name)}<small>${this._num(d.roles.ratio) === null ? "" : `${fmt(this._num(d.roles.ratio), 1)} %`}</small>${upd(d).length ? `<ha-icon class="pve-up" icon="mdi:arrow-up-circle"></ha-icon>` : ""}</button>`).join("")}</div>` : "";
+      const r = srv.roles;
+      const q = this._num(r.queries), b = this._num(r.blocked);
+      const ratio = this._num(r.ratio) ?? (q ? (b / q) * 100 : null);
+      const speed = this._num(r.speed);
+      const on = isOn(srv);
+      // anneau : part des requêtes bloquées
+      const R = 36, C = 2 * Math.PI * R, p = Math.max(0, Math.min(100, ratio ?? 0));
+      const ring = `<svg viewBox="0 0 90 90" class="dns-ring" aria-hidden="true"><circle cx="45" cy="45" r="${R}" class="bg"/><circle cx="45" cy="45" r="${R}" class="fg" stroke-dasharray="${(p / 100) * C} ${C}" transform="rotate(-90 45 45)"/></svg>`;
+      const stat = (id, label, v, unit = "") => (v === null ? "" : `<div class="dns-kv" data-entity="${esc(id)}"><span>${label}</span><b>${v}${unit ? `<small> ${unit}</small>` : ""}</b></div>`);
+      const hero = c.show_stats === false ? "" : `<div class="dns-hero ${on === false ? "off" : ""}" data-entity="${esc(r.ratio || r.queries || "")}">
+          <div class="dns-rw">${ring}<div class="dns-rv"><b>${ratio === null ? "—" : fmt(ratio, ratio < 10 ? 1 : 0)}<small> %</small></b><span>bloqué</span></div></div>
+          <div class="dns-hs">
+            <div class="dns-state ${on === false ? "bad" : on ? "ok" : ""}"><i></i>${on === false ? (srv.app === "pi_hole" ? "Blocage désactivé" : "Protection désactivée") : on ? (srv.app === "pi_hole" ? "Blocage actif" : "Protection active") : "État inconnu"}</div>
+            ${stat(r.queries, "Requêtes", q === null ? null : fmt(q, 0))}
+            ${stat(r.blocked, "Bloquées", b === null ? null : fmt(b, 0))}
+            ${stat(r.speed, "Temps de réponse", speed === null ? null : fmt(speed, speed < 10 ? 1 : 0), "ms")}
+          </div></div>`;
+
+      // détails : ce que chaque application fournit
+      const tile = (id, ic, label, v) => (v === null ? "" : `<div class="tile srv-b" data-entity="${esc(id)}"><ha-icon icon="${ic}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${v}</div></div>`);
+      const n = (id) => { const v = this._num(id); return v === null ? null : fmt(v, 0); };
+      const det = c.show_details === false ? [] : [
+        tile(r.clients, "mdi:devices", "Clients actifs", n(r.clients)),
+        tile(r.domains, "mdi:playlist-remove", "Domaines bloqués", n(r.domains)),
+        tile(r.rules, "mdi:format-list-checks", "Règles", n(r.rules)),
+        tile(r.cached, "mdi:cached", "En cache", n(r.cached)),
+        tile(r.forwarded, "mdi:arrow-decision-outline", "Transférées", n(r.forwarded)),
+        tile(r.unique_domains, "mdi:web", "Domaines uniques", n(r.unique_domains)),
+        tile(r.parental_blocked, "mdi:human-male-child", "Contrôle parental", n(r.parental_blocked)),
+        tile(r.sb_blocked, "mdi:web-check", "Navigation sécurisée", n(r.sb_blocked)),
+        tile(r.ss_enforced, "mdi:magnify-scan", "Recherches sécurisées", n(r.ss_enforced)),
+      ].filter(Boolean);
+
+      // interrupteurs
+      const sw = c.show_switches === false ? [] : ["protection", "blocking", "filtering", "parental", "safe_browsing", "safe_search", "query_log"].filter((k) => r[k] && this._st(r[k])).map((k) => {
+        const id = r[k], s = this._st(id).state, armed = this._armed === id, guard = k === "protection" || k === "blocking";
+        const [ic, label] = DNS_SWITCH[k];
+        return `<button class="tile srv-b dns-sw ${s === "on" ? "good" : s === "off" ? "bad" : ""} ${guard ? "main" : ""} ${armed ? "armed" : ""}" data-toggle="${esc(id)}" ${guard ? 'data-guard="1"' : ""} title="${armed ? "Cliquez encore pour couper" : s === "on" ? "Cliquer pour couper" : "Cliquer pour activer"}">
+          <ha-icon icon="${armed ? "mdi:check-bold" : ic}"></ha-icon><div class="tile-l">${label}</div><div class="tile-n">${armed ? "Confirmer ?" : s === "on" ? "Activé" : s === "off" ? "Désactivé" : "Indisponible"}</div></button>`;
+      });
+      // Pi-hole : pause du blocage
+      const pauses = srv.app === "pi_hole" && r.blocking && this._st(r.blocking)?.state === "on" && c.show_switches !== false
+        ? (Array.isArray(c.pause_minutes) ? c.pause_minutes : [c.pause_minutes]).filter((m) => Number(m) > 0).map((m) => `<button class="tile srv-b dns-sw dns-pause" data-pause="${esc(r.blocking)}|${Number(m)}" title="Couper le blocage pendant ${Number(m)} min"><ha-icon icon="mdi:timer-pause-outline"></ha-icon><div class="tile-l">Pause</div><div class="tile-n">${Number(m)} min</div></button>`)
+        : [];
+
+      // mise à jour
+      const ups = c.show_update === false ? [] : srv.updates.map((id) => {
+        const u = this._st(id), a = u.attributes || {};
+        const label = srv.updates.length > 1 ? (a.title || a.friendly_name || "Mise à jour").replace(/^Pi-?hole\s*/i, "") : DNS_APPS[srv.app][0];
+        return `<div class="tile srv-t nas-dsm ${u.state === "on" ? "up" : ""}" data-entity="${esc(id)}"><div class="tile-l"><ha-icon icon="${u.state === "on" ? "mdi:package-up" : "mdi:package-check"}"></ha-icon>${esc(label)}</div>
+          <div class="srv-kv"><span>${u.state === "on" ? "Dispo" : "Version"}</span><b class="${u.state === "on" ? "bad" : ""}">${esc((u.state === "on" ? a.latest_version : a.installed_version) || "—")}</b></div>
+          <div class="srv-kv"><span>État</span><b class="${u.state === "on" ? "bad" : "ok"}">${u.state === "on" ? "À installer" : "À jour"}</b></div></div>`;
+      });
+
+      const sec = (ic, t, inner) => (inner ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${ic}"></ha-icon>${t}</div>${inner}</div>` : "");
+      body = tabs + (hero ? `<div class="srv-sec">${hero}</div>` : "")
+        + sec("mdi:chart-box-outline", "Détails", det.length ? `<div class="srv-bk dns-det">${det.join("")}</div>` : "")
+        + sec("mdi:toggle-switch-outline", "Réglages", sw.length || pauses.length ? `<div class="srv-bk dns-sws">${sw.join("")}${pauses.join("")}</div>` : "")
+        + sec("mdi:update", "Mise à jour", ups.length ? `<div class="tiles srv-tiles">${ups.join("")}</div>` : "");
+    }
+
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${DNS_STYLE}<ha-card class="${themeClass(c.theme, this._hass)} ${off.length ? "srv-alert" : ""}">
+      <header>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(icon)}" style="color:${esc(c.icon_color || "var(--med-down)")}"></ha-icon>
+          <div><div class="title">${esc(title)}</div><div class="sub">${esc(sub)}</div></div></div>
+        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+      </header>
+      ${body}
+    </ha-card>`;
+  }
+}
+
+const DNS_STYLE = `<style>
+.dns-hero { display: flex; align-items: center; gap: 16px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--med-line); background: var(--med-surface); cursor: pointer; }
+.dns-hero.off { border-color: var(--t-red); }
+.dns-rw { position: relative; width: 104px; height: 104px; flex: none; }
+.dns-ring { width: 100%; height: 100%; display: block; }
+.dns-ring circle { fill: none; stroke-width: 9; }
+.dns-ring .bg { stroke: var(--med-line); }
+.dns-ring .fg { stroke: var(--med-down); stroke-linecap: round; transition: stroke-dasharray .4s ease; }
+.dns-hero.off .dns-ring .fg { stroke: var(--t-red); }
+.dns-rv { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.dns-rv b { font-size: 1.4rem; font-weight: 700; line-height: 1.1; }
+.dns-rv small { font-size: .75rem; color: var(--med-muted); font-weight: 500; }
+.dns-rv span { font-size: .72rem; color: var(--med-muted); }
+.dns-hs { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.dns-state { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: .9rem; margin-bottom: 2px; }
+.dns-state i { width: 8px; height: 8px; border-radius: 50%; background: var(--med-muted); }
+.dns-state.ok { color: var(--med-down); } .dns-state.ok i { background: var(--med-down); }
+.dns-state.bad { color: var(--t-red); } .dns-state.bad i { background: var(--t-red); }
+.dns-kv { display: flex; justify-content: space-between; gap: 8px; font-size: .84rem; color: var(--med-muted); }
+.dns-kv b { color: var(--med-text); font-weight: 700; font-size: .95rem; white-space: nowrap; }
+.dns-kv small { color: var(--med-muted); font-weight: 500; font-size: .72rem; }
+.dns-det { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
+.dns-sws { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
+.dns-sw { all: unset; box-sizing: border-box; cursor: pointer; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px;
+  border-radius: 12px; border: 1px solid var(--med-line); color: inherit; font: inherit; }
+.dns-sw:focus-visible { outline: 2px solid var(--med-blue); }
+.dns-sw .tile-l { font-size: .74rem; }
+.dns-sw.bad { border-color: var(--med-line); } .dns-sw.bad ha-icon { color: var(--med-muted) !important; }
+.dns-sw.main.bad { border-color: var(--t-red); } .dns-sw.main.bad ha-icon, .dns-sw.main.bad .tile-n { color: var(--t-red) !important; }
+.dns-sw.armed { border-color: #f0a33a; background: color-mix(in srgb, #f0a33a 16%, transparent); }
+.dns-sw.armed ha-icon, .dns-sw.armed .tile-n { color: #f0a33a !important; font-weight: 700; }
+.dns-pause ha-icon { color: #f0a33a !important; }
+.dns-pause { border-color: color-mix(in srgb, #f0a33a 35%, transparent); }
+@container (max-width: 360px) { .dns-hero { flex-direction: column; align-items: stretch; } .dns-rw { margin: 0 auto; } }
+</style>`;
+
 /* ------------------------------------------------------------------ style */
 
 const STYLE = `<style>
@@ -1948,6 +2270,29 @@ const PVE_LABELS = {
   theme: "Couleurs de la carte",
 };
 const ServeurHaProxmoxCardEditor = makeEditor(PVE_SCHEMA, PVE_LABELS, PVE_DEFAULTS);
+const DNS_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  { name: "icon_color", selector: { text: {} } },
+  { name: "servers", selector: { device: { multiple: true, filter: [{ integration: "adguard" }, { integration: "pi_hole" }] } } },
+  { name: "show_stats", selector: { boolean: {} } },
+  { name: "show_details", selector: { boolean: {} } },
+  { name: "show_switches", selector: { boolean: {} } },
+  { name: "show_update", selector: { boolean: {} } },
+  THEME_SELECT,
+];
+const DNS_LABELS = {
+  title: "Titre (vide = AdGuard Home, Pi-hole ou Filtrage DNS)",
+  icon: "Icône",
+  icon_color: "Couleur de l'icône",
+  servers: "Serveurs affichés, dans cet ordre (vide = tous)",
+  show_stats: "Requêtes et part bloquée",
+  show_details: "Section Détails",
+  show_switches: "Section Réglages (interrupteurs, pause Pi-hole)",
+  show_update: "Section Mise à jour",
+  theme: "Couleurs de la carte",
+};
+const ServeurHaDnsCardEditor = makeEditor(DNS_SCHEMA, DNS_LABELS, DNS_DEFAULTS);
 
 /* ---------------------------------------------------------- enregistrement */
 
@@ -1961,6 +2306,8 @@ if (typeof customElements !== "undefined") {
   define("serveur-ha-nas-card-editor", ServeurHaNasCardEditor);
   define("serveur-ha-proxmox-card", ServeurHaProxmoxCard);
   define("serveur-ha-proxmox-card-editor", ServeurHaProxmoxCardEditor);
+  define("serveur-ha-dns-card", ServeurHaDnsCard);
+  define("serveur-ha-dns-card-editor", ServeurHaDnsCardEditor);
   window.customCards = window.customCards || [];
   if (!window.customCards.some((c) => c.type === "serveur-ha-card")) {
     window.customCards.push({
@@ -1991,6 +2338,14 @@ if (typeof customElements !== "undefined") {
       type: "serveur-ha-proxmox-card",
       name: "Carte Proxmox VE",
       description: "Nœuds, stockages, VM et conteneurs Proxmox VE : état, CPU, RAM, uptime, mises à jour, démarrage et arrêt confirmés.",
+      preview: true,
+    });
+  }
+  if (!window.customCards.some((c) => c.type === "serveur-ha-dns-card")) {
+    window.customCards.push({
+      type: "serveur-ha-dns-card",
+      name: "Carte Filtrage DNS (AdGuard Home, Pi-hole)",
+      description: "Requêtes, part bloquée, temps de réponse, protection et réglages, mises à jour d'AdGuard Home ou de Pi-hole.",
       preview: true,
     });
   }

@@ -95,7 +95,7 @@
     <aside class="panel" aria-label="Réglages de la démo">
       <h2>Carte</h2>
       <div class="ctl"><div class="seg" data-key="card">
-        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="all">Les 4</button></div></div>
+        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="all">Les 5</button></div></div>
 
       <h2>Affichage</h2>
       <div class="ctl"><div class="ctl-l">Page</div><div class="seg" data-key="page">
@@ -120,6 +120,8 @@
         <button data-v="ok"><i class="sw green"></i>Sain</button><button data-v="bad"><i class="sw red"></i>Disque en panne</button><button data-v="ups"><i class="sw orange"></i>Coupure de courant</button><button data-v="off"><i class="sw"></i>Éteint</button></div></div>
       <div class="ctl" data-for="pve all"><div class="ctl-l">Proxmox</div><div class="seg" data-key="pve">
         <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="hot"><i class="sw orange"></i>Chargé, mise à jour</button><button data-v="down"><i class="sw red"></i>Nœud hors ligne</button></div></div>
+      <div class="ctl" data-for="dns all"><div class="ctl-l">Filtrage DNS</div><div class="seg" data-key="dns">
+        <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="off"><i class="sw red"></i>Protection coupée</button><button data-v="upd"><i class="sw orange"></i>Mise à jour</button></div></div>
     </aside>
 
     <main class="stage">
@@ -165,8 +167,8 @@
     });
   }
 
-  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card" };
-  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok" };
+  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card" };
+  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok" };
   let state = { ...defaults };
   try { state = { ...defaults, ...JSON.parse(localStorage.getItem("serveur-ha-demo") || "{}") }; } catch (e) { /* ignoré */ }
 
@@ -315,6 +317,41 @@
     storage("s2", "pve1", "local-lvm", hot ? 91.5 : 72.5, 319.6);
     storage("s3", "pve2", "local", 26.5, 63.9);
     storage("s4", "pve2", "local-lvm", 6.9, 129.8);
+
+    // --- Filtrage DNS : deux AdGuard Home (même nom d'appareil) et un Pi-hole, fictifs
+    const dOff = state.dns === "off", dUpd = state.dns === "upd";
+    const ag = (dev, tag, q, b, ms, prot) => {
+      devices[dev] = { id: dev, name: "AdGuard Home" };
+      const p = `dns_adguard_home_${tag}`, A = "adguard";
+      add(`sensor.${p}_requetes_dns`, q, { unit_of_measurement: "queries" }, A, "dns_queries", dev);
+      add(`sensor.${p}_requetes_dns_bloquees`, b, { unit_of_measurement: "queries" }, A, "dns_queries_blocked", dev);
+      add(`sensor.${p}_taux_de_requetes_dns_bloquees`, +(b / q * 100).toFixed(2), { unit_of_measurement: "%" }, A, "dns_queries_blocked_ratio", dev);
+      add(`sensor.${p}_vitesse_de_traitement_moyenne`, ms, { unit_of_measurement: "ms" }, A, "average_processing_speed", dev);
+      add(`sensor.${p}_controle_parental_bloque`, 0, { unit_of_measurement: "requests" }, A, "parental_control_blocked", dev);
+      add(`sensor.${p}_navigation_securisee_bloquee`, 3, { unit_of_measurement: "requests" }, A, "safe_browsing_blocked", dev);
+      add(`sensor.${p}_recherches_securisees_appliquees`, 0, { unit_of_measurement: "requests" }, A, "safe_searches_enforced", dev);
+      for (const [k, tk, v] of [["protection", "protection", prot], ["filtrage", "filtering", true], ["controle_parental", "parental", false], ["navigation_securisee", "safe_browsing", true], ["recherche_securisee", "safe_search", false], ["journal_des_requetes", "query_log", true]])
+        add(`switch.${p}_${k}`, v ? "on" : "off", {}, A, tk, dev);
+      add(`update.${p}`, dUpd && tag === "principal" ? "on" : "off", { installed_version: "v0.107.68", latest_version: dUpd && tag === "principal" ? "v0.107.69" : "v0.107.68", title: "AdGuard Home" }, A, null, dev);
+    };
+    ag("ag1", "principal", 142483, 12611, 3.7, !dOff);
+    ag("ag2", "secours", 80384, 19487, 12.8, true);
+    devices.ph = { id: "ph", name: "Pi-hole" };
+    const P = "pi_hole";
+    add("sensor.pi_hole_dns_queries", 98210, {}, P, "dns_queries", "ph");
+    add("sensor.pi_hole_ads_blocked", 15732, {}, P, "ads_blocked", "ph");
+    add("sensor.pi_hole_ads_percentage_blocked", 16.02, { unit_of_measurement: "%" }, P, "percent_ads_blocked", "ph");
+    add("sensor.pi_hole_seen_clients", 23, {}, P, "clients_ever_seen", "ph");
+    add("sensor.pi_hole_dns_unique_clients", 14, {}, P, "unique_clients", "ph");
+    add("sensor.pi_hole_domains_blocked", 182456, {}, P, "domains_being_blocked", "ph");
+    add("sensor.pi_hole_dns_queries_cached", 41208, {}, P, "queries_cached", "ph");
+    add("sensor.pi_hole_dns_queries_forwarded", 39870, {}, P, "queries_forwarded", "ph");
+    add("sensor.pi_hole_dns_unique_domains", 4120, {}, P, "unique_domains", "ph");
+    add("binary_sensor.pi_hole_status", "on", {}, P, "status", "ph");
+    add("switch.pi_hole", "on", { friendly_name: "Pi-hole" }, P, null, "ph");
+    add("update.pi_hole_core_update_available", "off", { title: "Pi-hole Core", installed_version: "v6.1", latest_version: "v6.1" }, P, "core_update_available", "ph");
+    add("update.pi_hole_ftl_update_available", dUpd ? "on" : "off", { title: "Pi-hole FTL", installed_version: "v6.2.3", latest_version: dUpd ? "v6.3" : "v6.2.3" }, P, "ftl_update_available", "ph");
+    add("update.pi_hole_web_update_available", "off", { title: "Pi-hole Web", installed_version: "v6.2", latest_version: "v6.2" }, P, "web_update_available", "ph");
     return { st, ent, devices };
   }
 
@@ -327,6 +364,7 @@
       maj: { type: "custom:serveur-ha-maj-card", theme: t },
       nas: { type: "custom:serveur-ha-nas-card", title: "Synology DS214+", volume_name: "HDD 4 To", ups_name: "Green Cell 600VA", actions: ["switch.ds214", "switch.minipc"], theme: t },
       pve: { type: "custom:serveur-ha-proxmox-card", theme: t },
+      dns: { type: "custom:serveur-ha-dns-card", theme: t },
     };
     return state.card === "all" ? Object.values(c) : [c[state.card]];
   }

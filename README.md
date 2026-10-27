@@ -1,12 +1,13 @@
 # Cartes Serveur HA
 
-**Quatre cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
+**Cinq cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
 
 | Type | Carte |
 | --- | --- |
 | `custom:serveur-ha-card` | **Serveur** (Raspberry Pi, mini-PC, VM) : CPU, température, RAM, disque, réseau, uptime, ventilateur, alimentation sur 24 h, sauvegardes et Google Drive |
 | `custom:serveur-ha-maj-card` | **Home Assistant** : version, mises à jour Core / Supervisor / OS, base de données, certificat SSL et applications |
 | `custom:serveur-ha-nas-card` | **NAS Synology** : santé des volumes et disques, CPU, RAM, températures, ventilateur, actions, réseau et onduleur |
+| `custom:serveur-ha-dns-card` | **Filtrage DNS** (AdGuard Home ou Pi-hole) : requêtes, part bloquée, temps de réponse, protection et réglages, pause, mises à jour |
 | `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
 
 *Basées sur les idées et propositions de [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) sur le forum HACF : merci à lui !*
@@ -27,7 +28,7 @@
 
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 4 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 5 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 ## Installation
 
@@ -212,6 +213,28 @@ nodes: [pve1, pve2]
 protect: [home-assistant, routeur]
 sort: cpu
 ```
+
+## Carte Filtrage DNS — `custom:serveur-ha-dns-card`
+
+```yaml
+type: custom:serveur-ha-dns-card
+```
+
+Compatible avec les intégrations **AdGuard Home** et **Pi-hole** de Home Assistant (Pi-hole 5 et 6), en français comme en anglais. Plusieurs serveurs, même de types différents, s'affichent en **onglets**, avec la part bloquée de chacun. Deux serveurs au même nom d'appareil (« AdGuard Home ») prennent le nom de leurs entités (`dns_adguard_home_principal` → « Principal »).
+
+- **En-tête** : nombre de serveurs, voyants **Protection** (rouge si un serveur ne filtre plus) et **Mise à jour**.
+- **Anneau** : part des requêtes bloquées, état de la protection, requêtes, requêtes bloquées et temps de réponse (AdGuard Home).
+- **Détails**, selon ce que fournit le serveur : contrôle parental, navigation et recherches sécurisées (AdGuard Home) ; clients actifs, domaines bloqués, requêtes en cache et transférées, domaines uniques (Pi-hole).
+- **Réglages** : un clic active ou coupe un interrupteur (filtrage, contrôle parental, navigation sécurisée, recherche sécurisée, journal). **Couper la protection** (AdGuard Home) ou **le blocage** (Pi-hole) demande **un second clic dans les 5 secondes**. Pi-hole : tuiles **Pause 5 min** et **Pause 30 min**.
+- **Mise à jour** : version installée ou version disponible (Core, FTL et Web pour Pi-hole).
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title`, `icon`, `icon_color` | En-tête | AdGuard Home, Pi-hole ou Filtrage DNS |
+| `servers` | Serveurs affichés, dans cet ordre : appareils, ou `{ device, name }` | tous |
+| `pause_minutes` | Pauses Pi-hole proposées (minutes) | `[5, 30]` |
+| `show_stats`, `show_details`, `show_switches`, `show_update` | Afficher chaque partie | `true` |
+| `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ## Support
 
