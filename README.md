@@ -26,6 +26,10 @@
 | --- | --- | --- |
 | ![Proxmox](images/proxmox.png) | ![Proxmox chargé](images/proxmox-alerte.png) | ![Proxmox clair](images/proxmox-clair.png) |
 
+| Filtrage DNS | Protection coupée | Filtrage DNS clair |
+| --- | --- | --- |
+| ![Filtrage DNS](images/dns.png) | ![Protection coupée](images/dns-coupe.png) | ![Filtrage DNS clair](images/dns-clair.png) |
+
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
 **[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 5 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
@@ -227,6 +231,8 @@ Compatible avec les intégrations **AdGuard Home** et **Pi-hole** de Home Assist
 - **Détails**, selon ce que fournit le serveur : contrôle parental, navigation et recherches sécurisées (AdGuard Home) ; clients actifs, domaines bloqués, requêtes en cache et transférées, domaines uniques (Pi-hole).
 - **Réglages** : un clic active ou coupe un interrupteur (filtrage, contrôle parental, navigation sécurisée, recherche sécurisée, journal). **Couper la protection** (AdGuard Home) ou **le blocage** (Pi-hole) demande **un second clic dans les 5 secondes**. Pi-hole : tuiles **Pause 5 min** et **Pause 30 min**.
 - **Mise à jour** : version installée ou version disponible (Core, FTL et Web pour Pi-hole).
+
+> Quand la protection d'AdGuard Home change d'état, l'intégration peut afficher quelques secondes **Filtrage** et **Journal des requêtes** comme désactivés : ils reviennent seuls au rafraîchissement suivant. Vérifiez dans AdGuard Home avant de les réactiver.
 
 | Option | Rôle | Défaut |
 | --- | --- | --- |
