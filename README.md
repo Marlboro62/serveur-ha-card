@@ -28,7 +28,7 @@
 
 # Cartes Serveur HA
 
-**Cinq cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
+**Six cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
 
 | Type | Carte |
 | --- | --- |
@@ -37,6 +37,7 @@
 | `custom:serveur-ha-nas-card` | **NAS Synology** : santé des volumes et disques, CPU, RAM, températures, ventilateur, actions, réseau et onduleur |
 | `custom:serveur-ha-dns-card` | **Filtrage DNS** (AdGuard Home ou Pi-hole) : requêtes, part bloquée, temps de réponse, protection et réglages, pause, mises à jour |
 | `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
+| `custom:serveur-ha-opnsense-card` | **OPNsense** : passerelles (état, latence, pertes), débits des interfaces, CPU, RAM, table d'états, températures, baux DHCP, mise à jour, redémarrage et arrêt confirmés en deux clics |
 
 *Basées sur les idées et propositions de [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) sur le forum HACF : merci à lui !*
 
@@ -58,9 +59,13 @@
 | --- | --- | --- |
 | ![Filtrage DNS](images/dns.png) | ![Protection coupée](images/dns-coupe.png) | ![Filtrage DNS clair](images/dns-clair.png) |
 
+| OPNsense | OPNsense chargé, mise à jour | WAN hors ligne |
+| --- | --- | --- |
+| ![OPNsense](images/opnsense.png) | ![OPNsense chargé](images/opnsense-charge.png) | ![WAN hors ligne](images/opnsense-wan.png) |
+
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 5 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 6 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, OPNsense normal, chargé ou WAN hors ligne), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 ## Installation
 
@@ -270,6 +275,31 @@ Compatible avec les intégrations **AdGuard Home** et **Pi-hole** de Home Assist
 | `servers` | Serveurs affichés, dans cet ordre : appareils, ou `{ device, name }` | tous |
 | `pause_minutes` | Pauses Pi-hole proposées (minutes) | `[5, 30]` |
 | `show_stats`, `show_details`, `show_switches`, `show_update` | Afficher chaque partie | `true` |
+| `theme` | `v2`, `auto` ou `ha` | `v2` |
+
+## Carte OPNsense — `custom:serveur-ha-opnsense-card`
+
+```yaml
+type: custom:serveur-ha-opnsense-card
+```
+
+Demande l'intégration **OPNsense** de HACS ([travisghansen/hass-opnsense](https://github.com/travisghansen/hass-opnsense)), avec un utilisateur et une clé d'API créés dans OPNsense (**Système → Accès → Utilisateurs**). La carte trouve seule le pare-feu ; avec plusieurs pare-feu, choisissez-le dans l'éditeur (`device`).
+
+- **En-tête** : nom et version, état d'Internet, voyants **Passerelles** (rouge si une passerelle est hors ligne), **Mise à jour** et **Alertes** (notifications en attente dans OPNsense). La carte prend une bordure rouge quand une passerelle tombe.
+- **Informations** : uptime, version installée ou disponible, baux DHCP, charge du processeur.
+- **Ressources** : CPU, RAM (utilisée / totale), disque, table d'états pf, tampons réseau (mbuf), swap, et les températures remontées par OPNsense.
+- **Passerelles** : état en français (en ligne, latence, pertes, hors ligne), latence, pertes et gigue, le WAN en premier.
+- **Interfaces** : débit reçu et envoyé de chaque interface, en kbit/s, Mbit/s ou Gbit/s, et interface déconnectée en rouge.
+- **Actions** : **Redémarrer** et **Arrêter** le pare-feu, avec **un second clic dans les 5 secondes** pour confirmer (services `opnsense.system_reboot` et `opnsense.system_halt`).
+
+> Les débits des interfaces et l'état des passerelles sont des capteurs activés par défaut dans l'intégration. Les compteurs (octets, paquets, erreurs) et les autres disques sont désactivés par défaut : activez-les dans Home Assistant si besoin, la carte les ignore.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title`, `icon`, `icon_color` | En-tête | nom du pare-feu, `mdi:wall-fire` |
+| `device` | Pare-feu affiché | le premier trouvé |
+| `interfaces` | Interfaces affichées (nom, par exemple `WAN`, `LAN`) | toutes celles qui ont des débits |
+| `show_info`, `show_resources`, `show_gateways`, `show_interfaces`, `show_actions` | Afficher chaque partie | `true` |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ## Support
