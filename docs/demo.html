@@ -188,7 +188,7 @@
     const load = { ok: [6, 41, 2235, 40.3, 40.9], hot: [74, 81, 690, 82.5, 64.2], bad: [97, 94, 220, 93.1, 79.6] }[state.srv];
     if (state.host === "pi") {
       add("sensor.local_ip", "192.168.1.22", {}, "local_ip", "local_ip");
-      add("binary_sensor.wan_status", "on", { wan_ipaddress: "86.247.12.34" }, "asusrouter");
+      add("binary_sensor.wan_status", "on", { wan_ipaddress: "203.0.113.42" }, "asusrouter");
       add("sensor.system_monitor_utilisation_du_processeur", load[0], { unit_of_measurement: "%" }, sm, "processor_use");
       add("sensor.system_monitor_temperature_du_processeur", load[4], { unit_of_measurement: "°C", device_class: "temperature" }, sm, "processor_temperature");
       add("sensor.system_monitor_utilisation_de_la_memoire", load[1], { unit_of_measurement: "%" }, sm, "memory_use_percent");

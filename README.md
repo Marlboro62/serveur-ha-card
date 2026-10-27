@@ -21,9 +21,13 @@
 | --- | --- | --- |
 | ![Serveur en alerte](images/serveur-alerte.png) | ![Serveur clair](images/serveur-clair.png) | ![NAS en alerte](images/nas-alerte.png) |
 
-*Aperçus réalisés avec des valeurs fictives.*
+| Proxmox VE | Proxmox chargé, mise à jour | Proxmox clair |
+| --- | --- | --- |
+| ![Proxmox](images/proxmox.png) | ![Proxmox chargé](images/proxmox-alerte.png) | ![Proxmox clair](images/proxmox-clair.png) |
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 4 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+*Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
+
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 4 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 ## Installation
 
@@ -186,7 +190,10 @@ Tout est détecté à partir de l'intégration **Proxmox VE** de Home Assistant 
 - **Nœud** : en ligne ou hors ligne, uptime, version de Proxmox et mise à jour, jauges **CPU** et **RAM** (Go utilisés sur le total).
 - **Stockage** : chaque stockage du nœud (local, local-lvm, sauvegardes…), orange à 80 %, rouge à 90 %.
 - **Invités** : une ligne par VM ou conteneur LXC, avec son état, son uptime, le CPU et la RAM ; ceux en marche d'abord, ceux arrêtés en grisé. Un clic ouvre la fiche Home Assistant.
-- **Boutons** : **Démarrer** un invité arrêté, **Redémarrer** ou **Arrêter** un invité en marche, **Tout démarrer**, **Redémarrer** ou **Arrêter** le nœud. Chaque bouton demande **un second clic dans les 5 secondes** pour confirmer.
+- **Boutons** : **Démarrer** un invité arrêté, **Redémarrer** ou **Arrêter** un invité en marche, **Tout démarrer**, **Redémarrer** ou **Arrêter** le nœud. Chaque bouton demande **un second clic dans les 5 secondes** pour confirmer : le premier clic l'arme (coche orange), le second envoie l'ordre. Aucun bouton quand le nœud est hors ligne.
+- **Stockage par nœud** : l'intégration crée un seul appareil par nom de stockage pour tous les nœuds ; la carte retrouve le nœud de chaque série de capteurs dans leur identifiant unique (registre des entités).
+
+> Pour un conteneur, « Arrêter » de l'intégration Proxmox VE est un **arrêt immédiat** (Stop), pas un arrêt propre du système. Pour un invité qui écrit sur disque (base de données, NAS), préférez l'arrêt depuis Proxmox.
 - **Protection** : la VM qui fait tourner Home Assistant (nom contenant « haos » ou « home assistant ») n'a **ni arrêt ni redémarrage**, et son nœud non plus, pour ne pas couper Home Assistant d'un clic. L'option `protect` choisit d'autres invités.
 
 | Option | Rôle | Défaut |
