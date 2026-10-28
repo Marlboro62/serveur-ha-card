@@ -84,6 +84,17 @@ Toutes les cartes ont un **éditeur visuel** et acceptent `theme` : `v2` (bleu n
 
 ---
 
+## Option commune à toutes les cartes
+
+| Option | Rôle | Par défaut |
+| --- | --- | --- |
+| `text_size` | Taille du texte, en % (70 à 200) : toute la carte s'agrandit, texte et icônes, sans rien couper. Aussi dans l'éditeur visuel | `100` |
+
+```yaml
+type: custom:serveur-ha-dns-card
+text_size: 120
+```
+
 ## Carte Serveur — `custom:serveur-ha-card`
 
 ```yaml

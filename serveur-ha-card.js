@@ -17,7 +17,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.7.0-beta.4";
+const CARD_VERSION = "0.7.0-beta.5";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -116,6 +116,11 @@ const since = (iso) => {
 /** « 22/10 23:40 », raccourci à « 22/10 » dans les tuiles étroites par le CSS. */
 const dayMonth = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" });
 
+/** Taille du texte (option text_size, en %) : toute la carte est agrandie, texte et icônes, sans rien couper. */
+const zoomOf = (c) => {
+  const v = Number(c?.text_size);
+  return Number.isFinite(v) && v > 0 && v !== 100 ? `zoom:${Math.min(200, Math.max(70, v)) / 100}` : "";
+};
 const level = (v, warn, alert) => (v === null ? "" : v >= alert ? "b-alert" : v >= warn ? "b-warn" : "b-ok");
 
 class ServeurHaCard extends HTMLElement {
@@ -435,7 +440,7 @@ class ServeurHaCard extends HTMLElement {
       ].join("");
 
     const alertCls = powerOk === false || (temp !== null && temp >= c.temp_alert) ? "srv-alert" : "";
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}<ha-card class="${themeClass(c.theme, this._hass)} ${alertCls}">
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
         <div class="brand"${c.navigation_path ? ` data-nav="${esc(c.navigation_path)}" style="cursor:pointer"` : m.ip ? ` data-entity="${esc(m.ip)}" style="cursor:pointer"` : ""}>
           ${c.icon ? `<ha-icon class="srv-icon" icon="${esc(c.icon)}" style="color:${esc(c.icon_color || "var(--med-green)")}"></ha-icon>` : `<svg viewBox="0 0 32 32" aria-hidden="true"><rect class="srv-box" x="5" y="5" width="22" height="22" rx="4"/><path class="bolt" d="M17.5 9 11 18h4.5l-1.5 8 7-10h-4.6z"/></svg>`}
@@ -694,7 +699,7 @@ class ServeurHaMajCard extends HTMLElement {
     ].join("");
 
     const sub = [c.subtitle, ver(core) ? `Core ${ver(core)}` : null].filter(Boolean).map(esc).join(" · ");
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${MAJ_STYLE}<ha-card class="${themeClass(c.theme, this._hass)}">
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${MAJ_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
       <header>
         <div class="brand" data-entity="${esc(m.system.core || "")}" style="cursor:pointer">
           <svg viewBox="0 0 32 32" aria-hidden="true"><path class="house" d="M4 14.5 16 4l12 10.5V27a1.5 1.5 0 0 1-1.5 1.5h-21A1.5 1.5 0 0 1 4 27z"/><circle class="bolt" cx="16" cy="17" r="3"/><path class="house" d="M16 20v6M16 17l-5 4M16 17l5-3"/></svg>
@@ -1209,7 +1214,7 @@ class ServeurHaNasCard extends HTMLElement {
     ].join("");
 
     const alertCls = online === false || hddOk === false || secOk === false || upsOk === false ? "srv-alert" : "";
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}<ha-card class="${themeClass(c.theme, this._hass)} ${alertCls}">
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
         <div class="brand" ${c.navigation_path ? `data-nav="${esc(c.navigation_path)}"` : `data-entity="${esc(m.tracker || m.cpu || "")}"`} style="cursor:pointer">
           <ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:nas")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
@@ -1609,7 +1614,7 @@ class ServeurHaProxmoxCard extends HTMLElement {
     }
 
     const alertCls = down.length || ups.ok === false ? "srv-alert" : "";
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}<ha-card class="${themeClass(c.theme, this._hass)} ${alertCls}">
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:server-network")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
           <div><div class="title">${esc(c.title || "Proxmox")}</div><div class="sub">${m.nodes.length ? `${m.nodes.filter((n) => !n.other).length} nœud${m.nodes.filter((n) => !n.other).length > 1 ? "s" : ""} · ${up}/${allGuests.length} invités en marche` : "Proxmox VE"}</div></div></div>
@@ -1943,7 +1948,7 @@ class ServeurHaDnsCard extends HTMLElement {
         + sec("mdi:update", "Mise à jour", ups.length ? `<div class="tiles srv-tiles">${ups.join("")}</div>` : "");
     }
 
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${DNS_STYLE}<ha-card class="${themeClass(c.theme, this._hass)} ${off.length ? "srv-alert" : ""}">
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${DNS_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${off.length ? "srv-alert" : ""}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(icon)}" style="color:${esc(c.icon_color || "var(--med-down)")}"></ha-icon>
           <div><div class="title">${esc(title)}</div><div class="sub">${esc(sub)}</div></div></div>
@@ -2138,6 +2143,10 @@ const THEME_SELECT = {
   },
 };
 
+/** Taille du texte, commune à toutes les cartes. */
+const TEXT_SIZE = { name: "text_size", selector: { number: { min: 70, max: 200, step: 5, mode: "slider", unit_of_measurement: "%" } } };
+const COMMON_LABELS = { text_size: "Taille du texte (100 % = normal)" };
+
 /** Éditeur visuel : formulaire Home Assistant construit à partir du schéma. */
 function makeEditor(schema, labels, defaults) {
   const hasDays = schema.some((s) => s.name === "days");
@@ -2157,7 +2166,7 @@ function makeEditor(schema, labels, defaults) {
       if (!this._hass || !this._config) return;
       if (!this._form) {
         this._form = document.createElement("ha-form");
-        this._form.computeLabel = (s) => labels[s.name] || s.name;
+        this._form.computeLabel = (s) => labels[s.name] || COMMON_LABELS[s.name] || s.name;
         this._form.addEventListener("value-changed", (ev) => {
           const v = { ...ev.detail.value };
           if (hasDays && v.days !== undefined) v.days = Number(v.days);
@@ -2193,6 +2202,7 @@ const SRV_SCHEMA = [
   { name: "show_power", selector: { boolean: {} } },
   { name: "show_backup", selector: { boolean: {} } },
   THEME_SELECT,
+  TEXT_SIZE,
 ];
 const SRV_LABELS = {
   title: "Titre (ex. Raspberry Pi 4 4 Go)",
@@ -2228,6 +2238,7 @@ const MAJ_SCHEMA = [
   { name: "show_info", selector: { boolean: {} } },
   { name: "show_apps", selector: { boolean: {} } },
   THEME_SELECT,
+  TEXT_SIZE,
 ];
 const MAJ_LABELS = {
   title: "Titre",
@@ -2269,6 +2280,7 @@ const NAS_SCHEMA = [
   { name: "show_network", selector: { boolean: {} } },
   { name: "show_ups", selector: { boolean: {} } },
   THEME_SELECT,
+  TEXT_SIZE,
 ];
 const NAS_LABELS = {
   device: "NAS (appareil Synology DSM, facultatif)",
@@ -2313,6 +2325,7 @@ const PVE_SCHEMA = [
   { name: "ups_device", selector: { device: { integration: "nut" } } },
   { name: "ups_name", selector: { text: {} } },
   THEME_SELECT,
+  TEXT_SIZE,
 ];
 const PVE_LABELS = {
   title: "Titre",
@@ -2342,6 +2355,7 @@ const DNS_SCHEMA = [
   { name: "show_switches", selector: { boolean: {} } },
   { name: "show_update", selector: { boolean: {} } },
   THEME_SELECT,
+  TEXT_SIZE,
 ];
 const DNS_LABELS = {
   title: "Titre (vide = AdGuard Home, Pi-hole ou Filtrage DNS)",
