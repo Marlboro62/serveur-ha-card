@@ -28,7 +28,7 @@
 
 # Cartes Serveur HA
 
-**Cinq cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
+**Six cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
 
 | Type | Carte |
 | --- | --- |
@@ -36,6 +36,7 @@
 | `custom:serveur-ha-maj-card` | **Home Assistant** : version, mises à jour Core / Supervisor / OS, base de données, certificat SSL et applications |
 | `custom:serveur-ha-nas-card` | **NAS Synology** : santé des volumes et disques, CPU, RAM, températures, ventilateur, actions, réseau et onduleur |
 | `custom:serveur-ha-dns-card` | **Filtrage DNS** (AdGuard Home ou Pi-hole) : requêtes, part bloquée, temps de réponse, protection et réglages, pause, mises à jour |
+| `custom:serveur-ha-linux-card` | **Serveurs Linux** ([Linux Update Dashboard](https://github.com/TheDuffman85/linux-update-dashboard)) : mises à jour en attente, sécurité, paquets, redémarrage requis, installation confirmée en deux clics |
 | `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
 
 **Pare-feu OPNsense** : la carte a son propre dépôt, [Carte OPNsense](https://github.com/Marlboro62/opnsense-card) (`custom:opnsense-card`).
@@ -60,9 +61,13 @@
 | --- | --- | --- |
 | ![Filtrage DNS](images/dns.png) | ![Protection coupée](images/dns-coupe.png) | ![Filtrage DNS clair](images/dns-clair.png) |
 
+| Serveurs Linux | Sécurité, redémarrage, paquets | Serveurs Linux clair |
+| --- | --- | --- |
+| ![Serveurs Linux](images/linux.png) | ![Serveurs Linux en alerte](images/linux-alerte.png) | ![Serveurs Linux clair](images/linux-clair.png) |
+
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 5 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 6 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 ## Installation
 
@@ -284,6 +289,34 @@ Compatible avec les intégrations **AdGuard Home** et **Pi-hole** de Home Assist
 | `pause_minutes` | Pauses Pi-hole proposées (minutes) | `[5, 30]` |
 | `show_stats`, `show_details`, `show_switches`, `show_update` | Afficher chaque partie | `true` |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
+
+## Carte Serveurs Linux — `custom:serveur-ha-linux-card`
+
+```yaml
+type: custom:serveur-ha-linux-card
+```
+
+Elle affiche les serveurs suivis par **[Linux Update Dashboard](https://github.com/TheDuffman85/linux-update-dashboard)** (Debian, Ubuntu, Raspberry Pi OS, Fedora, Arch…), une application qui vérifie les mises à jour de vos machines par SSH. Voir le [tutoriel sur le forum HACF](https://forum.hacf.fr/t/tuto-linux-update-dashboard-gerer-et-centraliser-les-mises-a-jour-de-vos-serveurs-linux-sous-ha/77620).
+
+**Prérequis** : dans Linux Update Dashboard, **Settings → Notifications → MQTT**, activez l'option **Home Assistant**. Chaque serveur devient une entité `update.*` dans Home Assistant (intégration MQTT), que la carte **détecte toute seule**. Aucune autre carte (Mushroom, auto-entities, card-mod) n'est nécessaire.
+
+- **En-tête** : nombre de serveurs, voyants **Sécurité**, **Redémarrage** et **Injoignable**.
+- **Un bloc par serveur**, trié par urgence (sécurité, puis nombre de mises à jour) : système et version, noyau, durée d'allumage, mises à jour en attente, dont **sécurité** (rouge) et **retenues**, **redémarrage requis**, serveur **injoignable** (avec l'heure du dernier contact), mise à jour **en cours**.
+- **Paquets** : la flèche déplie la liste des paquets en attente, version actuelle → nouvelle version (40 au plus).
+- **Mettre à jour** : installe les mises à jour du serveur, avec **un second clic dans les 5 secondes** pour confirmer. Le bouton n'apparaît que si les commandes MQTT sont activées dans Linux Update Dashboard.
+- **Application** : signale une nouvelle version de Linux Update Dashboard lui-même.
+- Un clic sur un serveur ouvre la fiche de l'entité dans Home Assistant.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title`, `icon`, `icon_color` | En-tête | Serveurs Linux, `mdi:linux` |
+| `entities` | Serveurs affichés, dans cet ordre (entités `update.*`) | tous, détectés |
+| `exclude` | Entités à masquer | — |
+| `show_uptodate` | Afficher aussi les serveurs à jour | `true` |
+| `show_os`, `show_packages`, `show_actions`, `show_app` | Système et noyau, liste des paquets, bouton Mettre à jour, mise à jour de l'application | `true` |
+| `theme` | `v2`, `auto` ou `ha` | `v2` |
+
+*Idée de [@cob94440](https://github.com/cob94440).*
 
 ## Support
 

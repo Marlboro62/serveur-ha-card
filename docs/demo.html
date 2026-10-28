@@ -95,7 +95,7 @@
     <aside class="panel" aria-label="Réglages de la démo">
       <h2>Carte</h2>
       <div class="ctl"><div class="seg" data-key="card">
-        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="all">Les 5</button></div></div>
+        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="all">Les 6</button></div></div>
 
       <h2>Affichage</h2>
       <div class="ctl"><div class="ctl-l">Page</div><div class="seg" data-key="page">
@@ -122,6 +122,8 @@
         <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="hot"><i class="sw orange"></i>Chargé, mise à jour</button><button data-v="down"><i class="sw red"></i>Nœud hors ligne</button></div></div>
       <div class="ctl" data-for="dns all"><div class="ctl-l">Filtrage DNS</div><div class="seg" data-key="dns">
         <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="off"><i class="sw red"></i>Protection coupée</button><button data-v="upd"><i class="sw orange"></i>Mise à jour</button></div></div>
+      <div class="ctl" data-for="lnx all"><div class="ctl-l">Serveurs Linux</div><div class="seg" data-key="lnx">
+        <button data-v="ok"><i class="sw green"></i>Tout à jour</button><button data-v="upd"><i class="sw orange"></i>Mises à jour</button><button data-v="sec"><i class="sw red"></i>Sécurité, redémarrage</button></div></div>
     </aside>
 
     <main class="stage">
@@ -167,8 +169,8 @@
     });
   }
 
-  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card" };
-  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok" };
+  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card" };
+  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd" };
   let state = { ...defaults };
   try { state = { ...defaults, ...JSON.parse(localStorage.getItem("serveur-ha-demo") || "{}") }; } catch (e) { /* ignoré */ }
 
@@ -352,6 +354,27 @@
     add("update.pi_hole_core_update_available", "off", { title: "Pi-hole Core", installed_version: "v6.1", latest_version: "v6.1" }, P, "core_update_available", "ph");
     add("update.pi_hole_ftl_update_available", dUpd ? "on" : "off", { title: "Pi-hole FTL", installed_version: "v6.2.3", latest_version: dUpd ? "v6.3" : "v6.2.3" }, P, "ftl_update_available", "ph");
     add("update.pi_hole_web_update_available", "off", { title: "Pi-hole Web", installed_version: "v6.2", latest_version: "v6.2" }, P, "web_update_available", "ph");
+    // --- Serveurs Linux : entités publiées par Linux Update Dashboard (fictives)
+    const L = state.lnx;
+    const pkg = (n, cur, nw, sec, kept) => ({ pkg_manager: "apt", package_name: n, current_version: cur, new_version: nw, is_security: !!sec, is_kept_back: !!kept });
+    const lnx = (i, name, os, ver, kernel, up, pk, opts = {}) => {
+      const sec = pk.filter((p) => p.is_security).length, kept = pk.filter((p) => p.is_kept_back).length;
+      add(`update.ludash_1_system_${i}`, pk.length ? "on" : "off", {
+        friendly_name: `${name} Package updates`, installed_version: "current", latest_version: pk.length ? `u${pk.length}` : "current",
+        title: "Package updates", in_progress: false, supported_features: 1, device_name: "Linux Update Dashboard", channel_id: 1,
+        update_count: pk.length, security_update_count: sec, kept_back_update_count: kept, needs_reboot: !!opts.reboot, reachable: opts.reachable !== false,
+        active_operation: null, packages: pk,
+        system: { id: i, name, os_name: os, os_version: ver, kernel, uptime: up, last_seen_at: iso(-(opts.seen || 5) * 60e3) },
+      }, "mqtt");
+    };
+    const deb = L === "ok" ? [] : [pkg("curl", "8.14.1-2", "8.14.1-2+deb13u1", L === "sec"), pkg("libcurl4t64", "8.14.1-2", "8.14.1-2+deb13u1", L === "sec"),
+      pkg("tzdata", "2025b-4", "2026a-0+deb13u1"), pkg("nginx", "1.26.3-3", "1.26.3-3+deb13u2"), pkg("linux-image-amd64", "6.12.48-1", "6.12.57-1", false, L === "sec")];
+    lnx(1, "Proxmox M1", "Debian GNU/Linux", "13", "6.17.2-1-pve", "up 1 week, 5 days, 4 hours", L === "ok" ? [] : deb.slice(0, 3), { reboot: L === "sec" });
+    lnx(2, "Serveur web", "Debian GNU/Linux", "13", "6.12.48+deb13-amd64", "up 5 weeks, 6 days, 2 hours", deb);
+    lnx(3, "Sauvegardes", "Ubuntu", "24.04.3 LTS", "6.8.0-87-generic", "up 3 days, 7 hours, 12 minutes", []);
+    lnx(4, "Raspberry Pi", "Raspberry Pi OS", "13", "6.12.47+rpt-rpi-v8", "up 2 weeks", [], { reachable: L !== "sec", seen: 180 });
+    add("update.ludash_1_app_update", L === "ok" ? "off" : "on", { friendly_name: "Linux Update Dashboard Update", installed_version: "1.8.0", latest_version: L === "ok" ? "1.8.0" : "1.9.0",
+      update_available: L !== "ok", channel_id: 1, device_name: "Linux Update Dashboard", repository_url: "https://github.com/TheDuffman85/linux-update-dashboard" }, "mqtt");
     return { st, ent, devices };
   }
 
@@ -365,6 +388,7 @@
       nas: { type: "custom:serveur-ha-nas-card", title: "Synology DS214+", volume_name: "HDD 4 To", ups_name: "Green Cell 600VA", actions: ["switch.ds214", "switch.minipc"], theme: t },
       pve: { type: "custom:serveur-ha-proxmox-card", ups_name: "Green Cell 600VA", theme: t },
       dns: { type: "custom:serveur-ha-dns-card", theme: t },
+      lnx: { type: "custom:serveur-ha-linux-card", theme: t },
     };
     return state.card === "all" ? Object.values(c) : [c[state.card]];
   }

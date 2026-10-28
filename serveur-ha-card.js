@@ -17,7 +17,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.7.0";
+const CARD_VERSION = "0.8.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1997,6 +1997,243 @@ const DNS_STYLE = `<style>
 
 /* ------------------------------------------------------------------ style */
 
+/* ------------------------------------------------------------ carte Serveurs Linux (Linux Update Dashboard) */
+
+const LNX_DEFAULTS = {
+  title: "Serveurs Linux",
+  icon: "mdi:linux",
+  show_uptodate: true, // afficher aussi les serveurs à jour
+  show_os: true, // système, noyau, uptime
+  show_packages: true, // liste des paquets en attente (dépliable)
+  show_actions: true, // bouton Mettre à jour (deux clics)
+  show_app: true, // mise à jour de Linux Update Dashboard lui-même
+  theme: "v2",
+};
+
+/** Entités « update » publiées en MQTT par Linux Update Dashboard : un serveur (attribut system) ou l'application. */
+const lnxKind = (s) => {
+  const a = s?.attributes || {};
+  if (a.system && typeof a.system === "object" && "update_count" in a) return "system";
+  if ("channel_id" in a && "update_available" in a && !a.system) return "app";
+  return null;
+};
+const plural = (n, one, many = `${one}s`) => `${n} ${n > 1 ? many : one}`;
+/** Durée d'allumage de « uptime -p » (« up 1 week, 5 days, 3 hours ») en version courte : « 12 j 3 h ». */
+const upFr = (v) => {
+  const txt = String(v ?? "").trim();
+  if (!/^up\b/i.test(txt)) return txt && txt !== "—" ? txt : null;
+  const n = (re) => Number((re.exec(txt) || [])[1] || 0);
+  const d = n(/(\d+)\s*year/) * 365 + n(/(\d+)\s*month/) * 30 + n(/(\d+)\s*week/) * 7 + n(/(\d+)\s*day/), h = n(/(\d+)\s*hour/), m = n(/(\d+)\s*minute/);
+  return d ? `${d} j${h ? ` ${h} h` : ""}` : h ? `${h} h${m ? ` ${String(m).padStart(2, "0")} min` : ""}` : `${m} min`;
+};
+
+class ServeurHaLinuxCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("serveur-ha-linux-card-editor");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { ...LNX_DEFAULTS, ...(config || {}) };
+    this._sig = null;
+    this._open = this._open || new Set();
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    if (!this._clicks) {
+      this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const fold = ev.target.closest?.("[data-fold]");
+        if (fold) {
+          ev.stopPropagation();
+          const id = fold.dataset.fold;
+          if (this._open.has(id)) this._open.delete(id); else this._open.add(id);
+          this._sig = null; this._render(); return;
+        }
+        const inst = ev.target.closest?.("[data-install]");
+        if (inst) {
+          // Mise à jour d'un serveur : premier clic arme, second clic dans les 5 s confirme
+          ev.stopPropagation();
+          const id = inst.dataset.install;
+          if (this._armed === id) {
+            this._armed = null;
+            this._hass?.callService("update", "install", { entity_id: id });
+          } else {
+            this._armed = id;
+            clearTimeout(this._armTimer);
+            this._armTimer = setTimeout(() => { this._armed = null; this._sig = null; this._render(); }, 5000);
+          }
+          this._sig = null; this._render(); return;
+        }
+        const el = ev.target.closest?.("[data-entity]");
+        if (el?.dataset.entity) {
+          const e = new Event("hass-more-info", { bubbles: true, composed: true });
+          e.detail = { entityId: el.dataset.entity };
+          this.dispatchEvent(e);
+        }
+      }));
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
+
+  connectedCallback() {
+    clearInterval(this._tick);
+    this._tick = setInterval(() => { this._sig = null; this._render(); }, 60000);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._tick);
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  /** Serveurs (triés : sécurité, nombre de mises à jour, nom) et entité de l'application. */
+  _resolve() {
+    const c = this._config, states = this._hass.states || {};
+    const given = Array.isArray(c.entities) && c.entities.length ? c.entities : null;
+    const exclude = new Set(c.exclude || []);
+    const ids = (given || Object.keys(states).filter((id) => id.startsWith("update."))).filter((id) => states[id] && !exclude.has(id));
+    const systems = ids.filter((id) => lnxKind(states[id]) === "system").map((id) => ({ id, s: states[id] }));
+    if (!given) {
+      const n = (x) => Number(x.s.attributes.security_update_count) || 0, u = (x) => Number(x.s.attributes.update_count) || 0;
+      systems.sort((a, b) => n(b) - n(a) || u(b) - u(a) ||
+        String(a.s.attributes.system.name || a.id).localeCompare(String(b.s.attributes.system.name || b.id), "fr"));
+    }
+    const app = Object.keys(states).find((id) => id.startsWith("update.") && lnxKind(states[id]) === "app" && !exclude.has(id));
+    return { systems, app };
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const { systems, app } = this._resolve();
+    const appS = app ? this._hass.states[app] : null;
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._armed}|${[...this._open].join(",")}|${Math.floor(Date.now() / 60000)}|` +
+      [...systems.map((x) => x.s), appS].map((s) => (s ? `${s.state}${s.last_updated}` : "-")).join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const A = (x) => x.s.attributes;
+    const off = (x) => x.s.state === "unavailable" || A(x).reachable === false;
+    const nUpd = systems.filter((x) => !off(x) && (Number(A(x).update_count) || 0) > 0).length;
+    const nSec = systems.filter((x) => (Number(A(x).security_update_count) || 0) > 0).length;
+    const nBoot = systems.filter((x) => A(x).needs_reboot === true).length;
+    const nOff = systems.filter(off).length;
+    const leds = [
+      nSec ? `<span class="srv-led bad"><i></i>${plural(nSec, "sécurité", "sécurité")}</span>` : "",
+      nBoot ? `<span class="srv-led upd"><i></i>${plural(nBoot, "redémarrage")}</span>` : "",
+      nOff ? `<span class="srv-led na"><i></i>${plural(nOff, "injoignable")}</span>` : "",
+    ].join("");
+
+    const shown = c.show_uptodate === false ? systems.filter((x) => off(x) || (Number(A(x).update_count) || 0) > 0 || A(x).needs_reboot) : systems;
+    const rows = shown.map((x) => {
+      const a = A(x), sys = a.system || {};
+      const upd = Number(a.update_count) || 0, sec = Number(a.security_update_count) || 0, kept = Number(a.kept_back_update_count) || 0;
+      const busy = a.in_progress === true || (a.active_operation && a.active_operation.type);
+      const down = off(x);
+      const cls = down ? "na" : sec ? "bad" : upd ? "upd" : a.needs_reboot ? "upd" : "ok";
+      const icon = down ? "mdi:lan-disconnect" : sec ? "mdi:shield-alert" : upd ? "mdi:package-up" : a.needs_reboot ? "mdi:restart-alert" : "mdi:check-circle";
+      const os = c.show_os !== false ? [[sys.os_name, sys.os_version].filter(Boolean).join(" "), sys.kernel ? `noyau ${sys.kernel}` : null,
+        upFr(sys.uptime) ? `allumé depuis ${upFr(sys.uptime)}` : null].filter(Boolean).join(" · ") : "";
+      const badges = [
+        down ? `<span class="lnx-b na">injoignable${sys.last_seen_at ? ` · vu ${esc(relTime(sys.last_seen_at) || "")}` : ""}</span>` : "",
+        busy ? `<span class="lnx-b run">mise à jour en cours…</span>` : "",
+        !down && upd ? `<span class="lnx-b upd">${plural(upd, "mise à jour", "mises à jour")}</span>` : "",
+        sec ? `<span class="lnx-b bad">${plural(sec, "sécurité", "sécurité")}</span>` : "",
+        kept ? `<span class="lnx-b">${plural(kept, "retenue")}</span>` : "",
+        a.needs_reboot ? `<span class="lnx-b upd">redémarrage requis</span>` : "",
+        !down && !upd && !a.needs_reboot && !busy ? `<span class="lnx-b ok">à jour</span>` : "",
+      ].join("");
+      const canInstall = c.show_actions !== false && !down && !busy && upd > 0 && ((Number(a.supported_features) || 0) & 1);
+      const armed = this._armed === x.id;
+      const pk = Array.isArray(a.packages) ? a.packages : [];
+      const canFold = c.show_packages !== false && pk.length > 0;
+      const open = canFold && this._open.has(x.id);
+      const list = open ? `<div class="lnx-pk">${pk.slice(0, 40).map((p) => `<div class="lnx-p${p.is_security ? " sec" : ""}">
+          ${p.is_security ? `<ha-icon icon="mdi:shield-alert"></ha-icon>` : `<ha-icon icon="mdi:package-variant"></ha-icon>`}
+          <b>${esc(p.package_name)}</b><span>${esc(p.current_version || "")}${p.new_version ? ` → ${esc(p.new_version)}` : ""}</span>
+          ${p.is_kept_back ? `<em>retenu</em>` : ""}</div>`).join("")}${pk.length > 40 ? `<div class="lnx-more">et ${pk.length - 40} autres</div>` : ""}</div>` : "";
+      return `<div class="lnx-s ${cls}">
+        <div class="lnx-row" data-entity="${esc(x.id)}">
+          <ha-icon class="lnx-i" icon="${icon}"></ha-icon>
+          <div class="lnx-n"><b>${esc(sys.name || x.s.attributes.friendly_name || x.id)}</b>${os ? `<span>${esc(os)}</span>` : ""}</div>
+          <div class="lnx-a">
+            ${canInstall ? `<button class="pve-btn wide go${armed ? " armed" : ""}" data-install="${esc(x.id)}" title="Installer les mises à jour">
+              <ha-icon icon="mdi:download"></ha-icon>${armed ? "Confirmer ?" : "Mettre à jour"}</button>` : ""}
+            ${canFold ? `<button class="pve-btn" data-fold="${esc(x.id)}" title="${open ? "Masquer" : "Voir"} les paquets" aria-expanded="${open}">
+              <ha-icon icon="${open ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>` : ""}
+          </div>
+        </div>
+        <div class="lnx-bs">${badges}</div>${list}
+      </div>`;
+    }).join("");
+
+    const appRow = c.show_app !== false && appS && appS.state === "on"
+      ? `<div class="srv-sec"><div class="lnx-appu" data-entity="${esc(app)}"><ha-icon icon="mdi:update"></ha-icon>
+          <span>Linux Update Dashboard <b>${esc(appS.attributes.installed_version || "")} → ${esc(appS.attributes.latest_version || "")}</b> disponible</span></div></div>` : "";
+
+    const sub = systems.length
+      ? [plural(systems.length, "serveur"), nUpd ? `${nUpd} à mettre à jour` : "tout est à jour"].join(" · ")
+      : "";
+    const body = systems.length
+      ? `<div class="srv-sec">${rows ? `<div class="lnx-list">${rows}</div>` : `<div class="lnx-all">Tous les serveurs sont à jour.</div>`}</div>${appRow}`
+      : `<div class="empty">Aucun serveur trouvé<span>Cette carte lit les entités <code>update.*</code> publiées en MQTT par
+        <b>Linux Update Dashboard</b> (Paramètres → Notifications → MQTT, avec l'option Home Assistant). Indiquez-les dans <code>entities:</code> si besoin.</span></div>`;
+
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${PVE_STYLE}${LNX_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
+      <header>
+        <div class="brand"><ha-icon class="lnx-logo" icon="${esc(c.icon || "mdi:linux")}" style="${c.icon_color ? `color:${esc(c.icon_color)}` : ""}"></ha-icon>
+          <div><div class="title">${esc(c.title)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div></div>
+        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+      </header>
+      ${body}
+    </ha-card>`;
+  }
+}
+
+const LNX_STYLE = `<style>
+.lnx-logo { --mdc-icon-size: 34px; color: var(--med-green); }
+.srv-led.bad i { background: var(--t-red); } .srv-led.bad { border-color: var(--t-red); }
+.lnx-list { display: grid; gap: 6px; }
+.lnx-s { border-radius: 12px; border: 1px solid var(--med-line); background: var(--med-surface); padding: 8px 10px; }
+.lnx-s.upd { border-color: color-mix(in srgb, #f0a33a 55%, var(--med-line)); }
+.lnx-s.bad { border-color: color-mix(in srgb, var(--t-red) 60%, var(--med-line)); }
+.lnx-s.na { opacity: .7; }
+.lnx-row { display: flex; align-items: center; gap: 10px; cursor: pointer; min-width: 0; }
+.lnx-i { --mdc-icon-size: 22px; flex: none; color: var(--med-down); }
+.lnx-s.upd .lnx-i { color: #f0a33a; } .lnx-s.bad .lnx-i { color: var(--t-red); } .lnx-s.na .lnx-i { color: var(--med-muted); }
+.lnx-n { min-width: 0; flex: 1; display: grid; }
+.lnx-n b { font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lnx-n span { font-size: .72rem; color: var(--med-muted); line-height: 1.35; overflow-wrap: anywhere; }
+.lnx-a { display: flex; gap: 6px; flex: none; }
+.lnx-bs { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 0 32px; }
+.lnx-b { padding: 1px 8px; border-radius: 999px; font-size: .7rem; font-weight: 600; border: 1px solid var(--med-line); color: var(--med-muted); white-space: nowrap; }
+.lnx-b.ok { color: var(--med-down); border-color: color-mix(in srgb, var(--med-down) 45%, transparent); }
+.lnx-b.upd { color: #f0a33a; border-color: color-mix(in srgb, #f0a33a 50%, transparent); }
+.lnx-b.bad { color: #fff; background: var(--t-red); border-color: var(--t-red); }
+.lnx-b.run { color: var(--med-blue); border-color: color-mix(in srgb, var(--med-blue) 50%, transparent); }
+.lnx-pk { margin: 8px 0 2px 32px; display: grid; gap: 2px; max-height: 260px; overflow-y: auto; }
+.lnx-p { display: flex; align-items: center; gap: 6px; font-size: .74rem; min-width: 0; }
+.lnx-p ha-icon { --mdc-icon-size: 14px; color: var(--med-muted); flex: none; }
+.lnx-p.sec ha-icon { color: var(--t-red); }
+.lnx-p b { font-weight: 600; flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lnx-p span { color: var(--med-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lnx-p em { font-style: normal; font-size: .66rem; color: #f0a33a; flex: none; }
+.lnx-more, .lnx-all { font-size: .76rem; color: var(--med-muted); padding: 4px 0; }
+.lnx-appu { display: flex; align-items: center; gap: 8px; font-size: .8rem; padding: 8px 10px; border-radius: 12px; cursor: pointer;
+  border: 1px solid color-mix(in srgb, #f0a33a 50%, var(--med-line)); }
+.lnx-appu ha-icon { --mdc-icon-size: 18px; color: #f0a33a; }
+.lnx-appu b { color: #f0a33a; }
+@container (max-width: 380px) { .lnx-bs, .lnx-pk { margin-left: 0; } .pve-btn.wide { padding: 0 8px; } }
+</style>`;
+
 const STYLE = `<style>
 :host {
   --med-bg: #1a2434; --med-surface: #212d40; --med-line: #2f3d55;
@@ -2369,6 +2606,32 @@ const DNS_LABELS = {
   theme: "Couleurs de la carte",
 };
 const ServeurHaDnsCardEditor = makeEditor(DNS_SCHEMA, DNS_LABELS, DNS_DEFAULTS);
+const LNX_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  { name: "icon_color", selector: { text: {} } },
+  { name: "entities", selector: { entity: { domain: "update", multiple: true } } },
+  { name: "show_uptodate", selector: { boolean: {} } },
+  { name: "show_os", selector: { boolean: {} } },
+  { name: "show_packages", selector: { boolean: {} } },
+  { name: "show_actions", selector: { boolean: {} } },
+  { name: "show_app", selector: { boolean: {} } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const LNX_LABELS = {
+  title: "Titre",
+  icon: "Icône",
+  icon_color: "Couleur de l'icône",
+  entities: "Serveurs affichés, dans cet ordre (vide = tous, détectés)",
+  show_uptodate: "Afficher aussi les serveurs à jour",
+  show_os: "Système, noyau et durée d'allumage",
+  show_packages: "Liste des paquets en attente (dépliable)",
+  show_actions: "Bouton Mettre à jour (deux clics)",
+  show_app: "Mise à jour de Linux Update Dashboard",
+  theme: "Couleurs de la carte",
+};
+const ServeurHaLinuxCardEditor = makeEditor(LNX_SCHEMA, LNX_LABELS, LNX_DEFAULTS);
 
 /* ---------------------------------------------------------- enregistrement */
 
@@ -2414,6 +2677,8 @@ if (typeof customElements !== "undefined") {
   define("serveur-ha-proxmox-card-editor", ServeurHaProxmoxCardEditor);
   define("serveur-ha-dns-card", ServeurHaDnsCard);
   define("serveur-ha-dns-card-editor", ServeurHaDnsCardEditor);
+  define("serveur-ha-linux-card", ServeurHaLinuxCard);
+  define("serveur-ha-linux-card-editor", ServeurHaLinuxCardEditor);
   define("serveur-ha-opnsense-card", ServeurHaOpnsenseMoved);
   window.customCards = window.customCards || [];
   if (!window.customCards.some((c) => c.type === "serveur-ha-card")) {
@@ -2453,6 +2718,14 @@ if (typeof customElements !== "undefined") {
       type: "serveur-ha-dns-card",
       name: "Carte Filtrage DNS (AdGuard Home, Pi-hole)",
       description: "Requêtes, part bloquée, temps de réponse, protection et réglages, mises à jour d'AdGuard Home ou de Pi-hole.",
+      preview: true,
+    });
+  }
+  if (!window.customCards.some((c) => c.type === "serveur-ha-linux-card")) {
+    window.customCards.push({
+      type: "serveur-ha-linux-card",
+      name: "Carte Serveurs Linux (mises à jour)",
+      description: "Mises à jour des serveurs Linux suivis par Linux Update Dashboard : paquets, sécurité, redémarrage, installation confirmée.",
       preview: true,
     });
   }
