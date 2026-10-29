@@ -38,6 +38,7 @@
 | `custom:serveur-ha-dns-card` | **Filtrage DNS** (AdGuard Home ou Pi-hole) : requêtes, part bloquée, temps de réponse, protection et réglages, pause, mises à jour |
 | `custom:serveur-ha-linux-card` | **Serveurs Linux** ([Linux Update Dashboard](https://github.com/TheDuffman85/linux-update-dashboard)) : mises à jour en attente, sécurité, paquets, redémarrage requis, installation confirmée en deux clics |
 | `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
+| `custom:serveur-ha-omv-card` | **OpenMediaVault** : système (uptime, version, charge, CPU, RAM), systèmes de fichiers, disques (température, SMART), services, réseau, mises à jour, redémarrage et arrêt confirmés en deux clics |
 
 **Pare-feu OPNsense** : la carte a son propre dépôt, [Carte OPNsense](https://github.com/Marlboro62/opnsense-card) (`custom:opnsense-card`).
 
@@ -264,6 +265,47 @@ type: custom:serveur-ha-proxmox-card
 nodes: [pve1, pve2]
 protect: [home-assistant, routeur]
 sort: cpu
+```
+
+## Carte OpenMediaVault — `custom:serveur-ha-omv-card`
+
+```yaml
+type: custom:serveur-ha-omv-card
+```
+
+Une carte Lovelace ne peut pas se connecter elle-même à OpenMediaVault (le navigateur le bloque, et il faudrait mettre le mot de passe dans la carte). Elle lit donc les capteurs de l'intégration **OpenMediaVault** de [SlyBase](https://github.com/SlyBase/homeassistant-openmediavault), pour **OMV 7 et 8** :
+
+1. HACS › chercher **OpenMediaVault (OMV)** › Télécharger, puis redémarrer Home Assistant ;
+2. **Paramètres › Appareils et services › Ajouter une intégration › OpenMediaVault** : adresse (sans `http://` ni port), compte administrateur OMV, port `80` (ou `443` avec SSL).
+
+Tout est ensuite détecté :
+
+- **En-tête** : en ligne ou hors ligne, version d'OMV, adresse IP et nom d'hôte, voyants **OMV**, **Disques** (rouge si SMART mauvais, secteurs défectueux ou erreurs CRC), **Mise à jour** et **Redémarrage requis** (orange), **UPS**.
+- **Système** : uptime, version d'OMV et paquets à installer, charge moyenne (1, 5 et 15 min), jauges **CPU**, **RAM** (Mo ou Go utilisés sur le total) et température du processeur quand elle existe.
+- **Systèmes de fichiers** : chaque partition (ex. `sdb1`), avec l'espace utilisé sur le total ; orange à 80 %, rouge à 90 %.
+- **Disques** : chaque disque avec son modèle, sa température (orange à 45 °C, rouge à 55 °C), son état **SMART**, les secteurs défectueux et les erreurs CRC.
+- **Services** : NFS, SMB/CIFS, SSH, Rsync… en cours (vert) ou arrêtés (gris). Un clic ouvre la fiche du service.
+- **Débits réseau** : download et upload de chaque interface.
+- **Onduleur** : comme les cartes NAS et Proxmox, si un onduleur est suivi par **Network UPS Tools (NUT)**.
+- **Actions** : **Redémarrer**, **Veille** et **Éteindre** quand OMV est allumé, **Allumer** quand il est éteint (option `power_on` : Wake on LAN, prise ou script). Chaque bouton demande **un second clic dans les 5 secondes**.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `device` | Appareil OpenMediaVault, s'il y en a plusieurs | le premier |
+| `title`, `icon`, `icon_color` | En-tête | `OpenMediaVault`, `mdi:nas` |
+| `ip` | Adresse IP affichée | adresse de l'intégration |
+| `power_on` | Allumage quand OMV est éteint (bouton Wake on LAN, prise, script) | — |
+| `net_max` | Pleine échelle des barres réseau (Mbit/s) | `1000` |
+| `temp_warn`, `temp_alert` | Seuils de température des disques et du processeur (°C) | `45`, `55` |
+| `ups_device`, `ups_name`, `ups` | Onduleur NUT (appareil, nom, capteurs) | le premier trouvé |
+| `show_system`, `show_storage`, `show_disks`, `show_services`, `show_network`, `show_actions`, `show_ups` | Afficher chaque section, et les boutons | `true` |
+| `theme` | `v2`, `auto` ou `ha` | `v2` |
+
+```yaml
+type: custom:serveur-ha-omv-card
+title: NAS maison
+power_on: button.wake_on_lan_00_11_22_33_44_55
+show_ups: false
 ```
 
 ## Carte Filtrage DNS — `custom:serveur-ha-dns-card`

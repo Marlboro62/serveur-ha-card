@@ -95,7 +95,7 @@
     <aside class="panel" aria-label="Réglages de la démo">
       <h2>Carte</h2>
       <div class="ctl"><div class="seg" data-key="card">
-        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="all">Les 6</button></div></div>
+        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="all">Les 7</button></div></div>
 
       <h2>Affichage</h2>
       <div class="ctl"><div class="ctl-l">Page</div><div class="seg" data-key="page">
@@ -124,6 +124,8 @@
         <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="off"><i class="sw red"></i>Protection coupée</button><button data-v="upd"><i class="sw orange"></i>Mise à jour</button></div></div>
       <div class="ctl" data-for="lnx all"><div class="ctl-l">Serveurs Linux</div><div class="seg" data-key="lnx">
         <button data-v="ok"><i class="sw green"></i>Tout à jour</button><button data-v="upd"><i class="sw orange"></i>Mises à jour</button><button data-v="sec"><i class="sw red"></i>Sécurité, redémarrage</button></div></div>
+      <div class="ctl" data-for="omv all"><div class="ctl-l">OpenMediaVault</div><div class="seg" data-key="omv">
+        <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="hot"><i class="sw orange"></i>Disque chaud, mises à jour</button><button data-v="bad"><i class="sw red"></i>Disque en alerte</button><button data-v="off"><i class="sw"></i>Éteint</button></div></div>
     </aside>
 
     <main class="stage">
@@ -169,8 +171,8 @@
     });
   }
 
-  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card" };
-  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd" };
+  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card" };
+  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok" };
   let state = { ...defaults };
   try { state = { ...defaults, ...JSON.parse(localStorage.getItem("serveur-ha-demo") || "{}") }; } catch (e) { /* ignoré */ }
 
@@ -375,6 +377,45 @@
     lnx(4, "Raspberry Pi", "Raspberry Pi OS", "13", "6.12.47+rpt-rpi-v8", "up 2 weeks", [], { reachable: L !== "sec", seen: 180 });
     add("update.ludash_1_app_update", L === "ok" ? "off" : "on", { friendly_name: "Linux Update Dashboard Update", installed_version: "1.8.0", latest_version: L === "ok" ? "1.8.0" : "1.9.0",
       update_available: L !== "ok", channel_id: 1, device_name: "Linux Update Dashboard", repository_url: "https://github.com/TheDuffman85/linux-update-dashboard" }, "mqtt");
+
+    // --- OpenMediaVault (noms fictifs, entités au format de l'intégration OpenMediaVault « omv »)
+    const O = "omv", oh = state.omv === "hot", ob = state.omv === "bad", off = state.omv === "off";
+    devices.omv = { id: "omv", name: "OMV (nas-maison.local)", manufacturer: "OpenMediaVault", model: "Intel(R) Celeron(R) J4125", sw_version: "7.7.24-7 (Sandworm)", configuration_url: "http://192.168.1.30" };
+    devices.omv_d1 = { id: "omv_d1", name: "WDC WD40EFRX-68N32N0 [sda]", via_device_id: "omv" };
+    devices.omv_d2 = { id: "omv_d2", name: "Samsung SSD 870 EVO 250GB [sdb]", via_device_id: "omv" };
+    const ov = (v) => (off ? "unavailable" : v);
+    const oh_ = "sensor.omv_nas_maison_local_";
+    add(oh_ + "cpu_utilization", ov(oh ? 63 : 7), { unit_of_measurement: "%" }, O, null, "omv");
+    add(oh_ + "cpu_temperature", ov(oh ? 71 : 44), { unit_of_measurement: "°C", device_class: "temperature" }, O, null, "omv");
+    add(oh_ + "memory_usage", ov(oh ? 82 : 24), { unit_of_measurement: "%" }, O, null, "omv");
+    add(oh_ + "memory_total", ov(7821), { unit_of_measurement: "MB" }, O, null, "omv");
+    add(oh_ + "memory_used", ov(oh ? 6413 : 1877), { unit_of_measurement: "MB" }, O, null, "omv");
+    add(oh_ + "uptime", ov(iso(-12.4 * D)), { device_class: "timestamp" }, O, null, "omv");
+    add(oh_ + "available_package_updates", ov(oh ? 7 : 0), {}, O, null, "omv");
+    add(oh_ + "load_average_1_min", ov(oh ? 2.41 : 0.12), {}, O, null, "omv");
+    add(oh_ + "load_average_5_min", ov(oh ? 1.87 : 0.09), {}, O, null, "omv");
+    add(oh_ + "load_average_15_min", ov(oh ? 1.2 : 0.05), {}, O, null, "omv");
+    add(oh_ + "enp1s0_tx", ov(oh ? 412.5 : 2.4), { unit_of_measurement: "Mbit/s" }, O, null, "omv");
+    add(oh_ + "enp1s0_rx", ov(oh ? 86.1 : 0.6), { unit_of_measurement: "Mbit/s" }, O, null, "omv");
+    add("binary_sensor.omv_nas_maison_local_reboot_required", ov(oh ? "on" : "off"), {}, O, null, "omv");
+    add("binary_sensor.omv_nas_maison_local_reachable", off ? "off" : "on", { device_class: "connectivity" }, O, null, "omv");
+    for (const [k, n, on] of [["nfs", "NFS", true], ["rsync_server", "RSync server", false], ["smb_cifs", "SMB/CIFS", true], ["ssh", "SSH", true]])
+      add(`binary_sensor.omv_nas_maison_local_${k}_service`, ov(on ? "on" : "off"), { device_class: "running", friendly_name: `OMV (nas-maison.local) ${n} service` }, O, null, "omv");
+    for (const b of ["reboot", "shutdown", "standby"]) add(`button.omv_nas_maison_local_${b}`, ov("unknown"), {}, O, null, "omv");
+    add("button.wake_on_lan_00_11_22_33_44_66", "unknown", { friendly_name: "Allumer NAS maison" }, "wake_on_lan");
+    add("update.omv_nas_maison_local_system_update", ov(oh ? "on" : "off"), { installed_version: "7.7.24-7 (Sandworm)", latest_version: oh ? "7.7.24-7 (+7)" : "7.7.24-7 (Sandworm)" }, O, null, "omv");
+    const disk = (dev, p, name, t, smart, used, total) => {
+      if (t !== null) add(`sensor.${p}_temperature`, ov(t), { unit_of_measurement: "°C", device_class: "temperature" }, O, null, dev);
+      add(`sensor.${p}_smart_status`, ov(smart), {}, O, null, dev);
+      add(`binary_sensor.${p}_${name}_bad_sectors`, ov(ob && dev === "omv_d1" ? "on" : "off"), { device_class: "problem" }, O, null, dev);
+      for (const [n, u] of [[name, used], [name + "1", used]]) {
+        add(`sensor.${p}_${n}_used`, ov(u), { unit_of_measurement: "%", friendly_name: `${devices[dev].name} ${n} used %` }, O, null, dev);
+        add(`sensor.${p}_${n}_used_size`, ov(+(total * u / 100).toFixed(1)), { unit_of_measurement: "GB" }, O, null, dev);
+        add(`sensor.${p}_${n}_total_size`, ov(total), { unit_of_measurement: "GB" }, O, null, dev);
+      }
+    };
+    disk("omv_d1", "wdc_wd40efrx_68n32n0_sda", "sda", oh ? 51 : ob ? 48 : 38, ob ? "BAD" : "GOOD", oh ? 88 : 62, 3936.7);
+    disk("omv_d2", "samsung_ssd_870_evo_250gb_sdb", "sdb", 33, "GOOD", 18, 245.1);
     return { st, ent, devices };
   }
 
@@ -389,6 +430,7 @@
       pve: { type: "custom:serveur-ha-proxmox-card", ups_name: "Green Cell 600VA", theme: t },
       dns: { type: "custom:serveur-ha-dns-card", theme: t },
       lnx: { type: "custom:serveur-ha-linux-card", theme: t },
+      omv: { type: "custom:serveur-ha-omv-card", title: "NAS maison", power_on: "button.wake_on_lan_00_11_22_33_44_66", ups_name: "Green Cell 600VA", theme: t },
     };
     return state.card === "all" ? Object.values(c) : [c[state.card]];
   }

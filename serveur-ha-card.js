@@ -10,6 +10,8 @@
  *                                températures, ventilateur, actions, réseau et onduleur
  *   custom:serveur-ha-proxmox-card  Proxmox VE : nœuds, stockages, VM et conteneurs, avec
  *                                démarrage, arrêt et redémarrage confirmés en deux clics
+ *   custom:serveur-ha-omv-card   OpenMediaVault : système, systèmes de fichiers, disques (SMART),
+ *                                services, réseau, redémarrage et arrêt confirmés en deux clics
  *   custom:serveur-ha-dns-card   Filtrage DNS (AdGuard Home ou Pi-hole) : requêtes, part bloquée,
  *                                temps de réponse, protection et réglages, mises à jour
  *
@@ -17,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.8.0";
+const CARD_VERSION = "0.9.0";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1675,6 +1677,336 @@ const PVE_STYLE = `<style>
 @container (max-width: 360px) { .pve-g, .pve-gh { grid-template-columns: 20px minmax(0, 1fr) 80px 64px; gap: 6px; } }
 </style>`;
 
+/* ------------------------------------------------------------ carte OpenMediaVault */
+
+const OMV_DEFAULTS = {
+  title: "",
+  icon: "mdi:nas",
+  icon_color: "",
+  net_max: 1000, // Mbit/s, pleine échelle des barres réseau
+  temp_warn: 45, temp_alert: 55, // °C, disques et processeur
+  show_system: true, show_storage: true, show_disks: true, show_services: true, show_network: true, show_actions: true,
+  show_ups: true, // section Onduleur, quand un onduleur NUT est trouvé
+  theme: "v2",
+};
+
+/** Rôles des entités de l'appareil principal (intégration OpenMediaVault « omv ») : fin de l'identifiant. */
+const OMV_HUB = [
+  ["cpu", "sensor", /_cpu_(utilization|usage)$|_utilisation_du_processeur$/],
+  ["cpu_temp", "sensor", /_cpu_temperature$|_temperature_du_processeur$/],
+  ["mem", "sensor", /_memory_usage$|_utilisation_de_la_memoire$/],
+  ["mem_total", "sensor", /_memory_total$|_memoire_totale$/],
+  ["mem_used", "sensor", /_memory_used$|_memoire_utilisee$/],
+  ["uptime", "sensor", /_uptime$|_temps_de_fonctionnement$/],
+  ["pkg", "sensor", /_available_package_updates$|_mises_a_jour_disponibles$/],
+  ["load1", "sensor", /_load_average_1_min$/],
+  ["load5", "sensor", /_load_average_5_min$/],
+  ["load15", "sensor", /_load_average_15_min$/],
+  ["reboot_req", "binary_sensor", /_reboot_required$|_redemarrage_requis$/],
+  ["reachable", "binary_sensor", /_reachable$|_joignable$/],
+  ["reboot", "button", /_reboot$|_redemarrer$/],
+  ["shutdown", "button", /_shutdown$|_arreter$|_eteindre$/],
+  ["standby", "button", /_standby$|_veille$/],
+  ["update", "update", /./],
+];
+/** État SMART d'OpenMediaVault en français. */
+const OMV_SMART = { good: ["Bon", "ok"], passed: ["Bon", "ok"], ok: ["Bon", "ok"], bad: ["Mauvais", "bad"], failed: ["En échec", "bad"], warning: ["Attention", "warn"] };
+
+class ServeurHaOmvCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("serveur-ha-omv-card-editor");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { ...OMV_DEFAULTS, ...(config || {}) };
+    this._map = null;
+    this._sig = null;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    if (!this._clicks) {
+      this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const press = ev.target.closest?.("[data-press]");
+        if (press) {
+          // Redémarrer, éteindre, veille, allumer : premier clic arme, second clic dans les 5 s confirme
+          ev.stopPropagation();
+          const id = press.dataset.press;
+          if (this._armed === id) {
+            this._armed = null;
+            const domain = id.split(".")[0];
+            if (domain === "button") this._hass?.callService("button", "press", { entity_id: id });
+            else if (domain === "script") this._hass?.callService("script", "turn_on", { entity_id: id });
+            else this._hass?.callService("homeassistant", "toggle", { entity_id: id });
+          } else {
+            this._armed = id;
+            clearTimeout(this._armTimer);
+            this._armTimer = setTimeout(() => { this._armed = null; this._sig = null; this._render(); }, 5000);
+          }
+          this._sig = null; this._render(); return;
+        }
+        const el = ev.target.closest?.("[data-entity]");
+        if (el?.dataset.entity) {
+          const e = new Event("hass-more-info", { bubbles: true, composed: true });
+          e.detail = { entityId: el.dataset.entity };
+          this.dispatchEvent(e);
+        }
+      }));
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    if (this._hass?.entities !== hass.entities || this._hass?.devices !== hass.devices) this._map = null;
+    this._hass = hass;
+    this._render();
+  }
+
+  connectedCallback() {
+    clearInterval(this._tick);
+    this._tick = setInterval(() => { this._sig = null; this._render(); }, 60000);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._tick);
+  }
+
+  getCardSize() {
+    return 10;
+  }
+
+  _st(id) {
+    return id ? this._hass?.states?.[id] : undefined;
+  }
+
+  _num(id) {
+    const s = this._st(id);
+    if (!s || s.state === "unavailable" || s.state === "unknown") return null;
+    const v = Number(s.state);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  _txt(id) {
+    const s = this._st(id)?.state;
+    return s === undefined || s === "unavailable" || s === "unknown" || s === "" ? null : s;
+  }
+
+  _unit(id, d = "") {
+    return this._st(id)?.attributes?.unit_of_measurement ?? d;
+  }
+
+  /** Appareil OpenMediaVault (choisi ou le premier), ses disques et systèmes de fichiers, services et interfaces réseau. */
+  _resolve() {
+    if (this._map) return this._map;
+    const hass = this._hass, c = this._config;
+    const reg = hass.entities || {}, devs = hass.devices || {};
+    const all = Object.entries(reg).filter(([id, e]) => e.platform === "omv" && hass.states[id] && !e.hidden);
+    // appareil principal : celui choisi, sinon celui qui porte l'utilisation du processeur
+    const hubId = c.device || all.find(([id]) => OMV_HUB[0][2].test(id))?.[1].device_id || all.find(([, e]) => !devs[e.device_id]?.via_device_id)?.[1].device_id;
+    const hub = { roles: {}, services: [], ifaces: {} };
+    const children = {};
+    for (const [id, e] of all) {
+      const domain = id.split(".")[0];
+      if (e.device_id === hubId) {
+        const role = OMV_HUB.find(([, d, re]) => d === domain && re.test(id));
+        if (role && !hub.roles[role[0]]) { hub.roles[role[0]] = id; continue; }
+        const st = hass.states[id];
+        if (domain === "binary_sensor" && (st.attributes?.device_class === "running" || /_service$/.test(id))) { hub.services.push(id); continue; }
+        const net = /_([a-z0-9]+)_(tx|rx)$/.exec(id);
+        if (domain === "sensor" && net && /bit\/s|B\/s/i.test(st.attributes?.unit_of_measurement || "")) (hub.ifaces[net[1]] ||= {})[net[2]] = id;
+      } else if (devs[e.device_id]?.via_device_id === hubId || !hubId) {
+        (children[e.device_id] ||= []).push(id);
+      }
+    }
+    // disques : température, SMART, secteurs défectueux, erreurs CRC ; espaces utilisés en % (partitions de préférence)
+    const disks = [], fs = [];
+    for (const [devId, ids] of Object.entries(children)) {
+      const dev = devs[devId] || {};
+      const short = (/\[([^\]]+)\]/.exec(dev.name || "") || [, dev.name_by_user || dev.name || "Disque"])[1];
+      const d = { id: devId, short, model: (dev.name_by_user || dev.name || "").replace(/\s*\[[^\]]+\]\s*$/, ""), roles: {} };
+      const used = [];
+      for (const id of ids) {
+        const st = hass.states[id];
+        if (st.attributes?.device_class === "temperature") d.roles.temp ||= id;
+        else if (/_smart_status$|_etat_smart$/.test(id)) d.roles.smart ||= id;
+        else if (/_bad_sectors$|_secteurs_defectueux$/.test(id)) d.roles.bad ||= id;
+        else if (/_crc_errors$|_erreurs_crc$/.test(id)) d.roles.crc ||= id;
+        else if (id.startsWith("sensor.") && /_used$|_utilise$/.test(id) && st.attributes?.unit_of_measurement === "%") used.push(id);
+      }
+      // nom de l'espace : dans le nom affiché (« sdb1 used % ») ; un disque entier est ignoré quand ses partitions sont là
+      const nameOf = (id) => String(hass.states[id].attributes?.friendly_name || id).replace(dev.name || "", "").replace(/\s*(used|utilisé)\s*%?\s*$/i, "").trim() || short;
+      const names = used.map((id) => ({ id, name: nameOf(id), base: id.replace(/_(used|utilise)$/, "") }));
+      for (const u of names) {
+        if (names.some((o) => o !== u && o.name.length > u.name.length && o.name.startsWith(u.name))) continue;
+        fs.push({ ...u, used_size: `${u.base}_used_size`, total_size: `${u.base}_total_size`, disk: short });
+      }
+      if (d.roles.temp || d.roles.smart || d.roles.bad || d.roles.crc) disks.push(d);
+    }
+    const byName = (a, b) => String(a.short || a.name).localeCompare(String(b.short || b.name), "fr", { numeric: true });
+    disks.sort(byName); fs.sort(byName);
+    this._map = { hubId, dev: devs[hubId], hub, disks, fs, ups: c.show_ups !== false ? nutMap(hass, c) : {} };
+    return this._map;
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const m = this._resolve();
+    const r = m.hub.roles;
+    const ids = [...Object.values(r), ...m.hub.services, ...Object.values(m.hub.ifaces).flatMap((x) => Object.values(x)),
+      ...m.disks.flatMap((d) => Object.values(d.roles)), ...m.fs.flatMap((f) => [f.id, f.used_size, f.total_size]), ...Object.values(m.ups || {}), c.power_on];
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._armed}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const sec = (icon, t, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${icon}"></ha-icon>${t}</div>${body}</div>` : "");
+    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => `<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
+    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
+        <div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
+        <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
+    const btn = (id, icon, label, cls = "") => {
+      if (!id || !this._st(id)) return "";
+      const armed = this._armed === id;
+      return `<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${armed ? "mdi:check-bold" : icon}"></ha-icon>${armed ? "<span>Confirmer</span>" : ""}</button>`;
+    };
+    const size = (id) => { const v = this._num(id); if (v === null) return null; const u = this._unit(id, "GB"); return v >= 1000 && /^GB$/i.test(u) ? `${fmt(v / 1000, 2)} To` : `${fmt(v, v < 10 ? 1 : 0)} ${u.replace(/^GB$/i, "Go").replace(/^TB$/i, "To").replace(/^MB$/i, "Mo")}`; };
+
+    const reach = this._st(r.reachable);
+    const online = reach ? reach.state === "on" : this._txt(r.cpu) !== null;
+    const dev = m.dev || {};
+    const host = (/\(([^)]+)\)/.exec(dev.name || "") || [, dev.name_by_user || dev.name || ""])[1];
+    const cfgHost = (() => { try { return dev.configuration_url ? new URL(dev.configuration_url).hostname : null; } catch (e) { return null; } })();
+    const ip = c.ip || cfgHost || null;
+    const version = dev.sw_version || this._st(r.update)?.attributes?.installed_version || null;
+
+    // --- voyants
+    const disksBad = m.disks.some((d) => { const s = String(this._txt(d.roles.smart) || "").toLowerCase(); return (s && OMV_SMART[s]?.[1] === "bad") || this._st(d.roles.bad)?.state === "on" || this._st(d.roles.crc)?.state === "on"; });
+    const upd = this._st(r.update);
+    const pkg = this._num(r.pkg);
+    const needUpd = upd?.state === "on" || (pkg !== null && pkg > 0);
+    const rebootReq = this._st(r.reboot_req)?.state === "on";
+    const ups = upsBlock(this, m.ups || {}, c);
+    const led = (ok, label, id, cls = "") => `<span class="srv-led ${ok ? "ok" : "bad"} ${cls}" data-entity="${esc(id || "")}"><i></i>${label}</span>`;
+    const leds = m.hubId ? [
+      led(online, "OMV", r.reachable || r.cpu),
+      m.disks.length ? led(!disksBad, "Disques", m.disks[0].roles.smart || m.disks[0].roles.temp) : "",
+      needUpd ? `<span class="srv-led upd" data-entity="${esc(r.update || r.pkg || "")}"><i></i>Mise à jour</span>` : "",
+      rebootReq ? `<span class="srv-led upd" data-entity="${esc(r.reboot_req)}"><i></i>Redémarrage requis</span>` : "",
+      ups.ok === null ? "" : led(ups.ok, "UPS", m.ups.status || m.ups.status_raw),
+    ].join("") : "";
+
+    let body = "";
+    if (!m.hubId) {
+      body = `<div class="empty">Aucun OpenMediaVault trouvé<span>Installez l'intégration OpenMediaVault (HACS, dépôt SlyBase/homeassistant-openmediavault), ajoutez-la dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`;
+    } else {
+      // --- système
+      let system = "";
+      if (c.show_system !== false) {
+        const boot = online ? this._txt(r.uptime) : null;
+        const inst = upd?.attributes?.installed_version || version;
+        const short = (v) => (/\d+(?:\.\d+)+/.exec(v || "") || [v || null])[0]; // « 7.7.24-7 (Sandworm) » → « 7.7.24 »
+        const loads = [r.load1, r.load5, r.load15].map((id) => this._num(id));
+        const tiles = [
+          boot && since(boot) ? `<div class="tile srv-t" data-entity="${esc(r.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
+          upd || pkg !== null ? `<div class="tile srv-t nas-dsm ${needUpd ? "up" : ""}" data-entity="${esc(r.update || r.pkg)}" title="${esc(inst || "")}"><div class="tile-l"><ha-icon icon="${needUpd ? "mdi:package-up" : "mdi:package-check"}"></ha-icon>OMV</div>
+            ${kv([["Version", short(inst)], needUpd ? ["Paquets", pkg !== null && pkg > 0 ? fmt(pkg, 0) : "Oui", "bad"] : ["État", "À jour", "ok"]])}</div>` : "",
+          loads.some((v) => v !== null) ? `<div class="tile srv-t" data-entity="${esc(r.load1 || r.load5)}"><div class="tile-l"><ha-icon icon="mdi:chart-line-variant"></ha-icon>Charge</div>
+            <div class="omv-load">${loads.map((v, i) => `<span><b>${v === null ? "—" : fmt(v, 2)}</b><small>${[1, 5, 15][i]} min</small></span>`).join("")}</div></div>` : "",
+        ].filter(Boolean);
+        const memTotal = this._num(r.mem_total), memUsed = this._num(r.mem_used), memPct = this._num(r.mem) ?? (memUsed !== null && memTotal ? (memUsed / memTotal) * 100 : null);
+        const mo = (v) => (v === null ? null : v >= 1024 ? `${fmt(v / 1024, 1)} Go` : `${fmt(v, 0)} Mo`);
+        const temp = this._num(r.cpu_temp);
+        const res = [
+          gauge(r.cpu, "mdi:cpu-64-bit", "CPU", this._num(r.cpu), "", 70, 90),
+          gauge(r.mem || r.mem_used, "mdi:memory", "RAM", memPct, memUsed !== null && memTotal !== null ? `${mo(memUsed)} / ${mo(memTotal)}` : "", 80, 92),
+          temp !== null ? gauge(r.cpu_temp, "mdi:thermometer", "Température", temp, "", c.temp_warn, c.temp_alert, ` ${esc(this._unit(r.cpu_temp, "°C"))}`, 100) : "",
+        ].filter(Boolean);
+        system = sec("mdi:information-outline", "Système", `${tiles.length ? `<div class="tiles srv-tiles">${tiles.join("")}</div>` : ""}${res.length ? `<div class="srv-grid pve-res">${res.join("")}</div>` : ""}`);
+      }
+
+      // --- systèmes de fichiers
+      const fsHtml = c.show_storage !== false ? m.fs.map((f) => {
+        const used = size(f.used_size), total = size(f.total_size);
+        return gauge(f.id, "mdi:harddisk", esc(f.name), this._num(f.id), used && total ? `${used} / ${total}` : "", 80, 90);
+      }).filter(Boolean) : [];
+
+      // --- disques
+      const diskHtml = c.show_disks !== false ? m.disks.map((d) => {
+        const t = this._num(d.roles.temp);
+        const s = String(this._txt(d.roles.smart) || "").toLowerCase();
+        const [sTxt, sCls] = s ? OMV_SMART[s] || [this._txt(d.roles.smart), ""] : [null, ""];
+        const flag = (id) => { const v = this._st(id)?.state; return v === "on" ? ["Alerte", "bad"] : v === "off" ? ["OK", "ok"] : null; };
+        const bad = flag(d.roles.bad), crc = flag(d.roles.crc);
+        const hot = t !== null && t >= c.temp_alert ? "bad" : t !== null && t >= c.temp_warn ? "warn" : "";
+        const alert = sCls === "bad" || bad?.[1] === "bad" || crc?.[1] === "bad";
+        return `<div class="tile srv-t omv-disk ${alert ? "bad" : hot}" data-entity="${esc(d.roles.smart || d.roles.temp || "")}" title="${esc(d.model)}">
+          <div class="tile-l"><ha-icon icon="mdi:harddisk"></ha-icon>${esc(d.short)}${t !== null ? `<b class="omv-t ${hot}">${fmt(t, 0)} ${esc(this._unit(d.roles.temp, "°C"))}</b>` : ""}</div>
+          <div class="omv-model">${esc(d.model)}</div>
+          ${kv([["SMART", sTxt, sCls], ["Secteurs défectueux", bad?.[0] ?? null, bad?.[1]], ["Erreurs CRC", crc?.[0] ?? null, crc?.[1]]])}</div>`;
+      }) : [];
+
+      // --- services
+      const devName = dev.name || "";
+      const svc = c.show_services !== false ? m.hub.services.map((id) => {
+        const st = this._st(id);
+        const on = st.state === "on";
+        const name = String(st.attributes?.friendly_name || id).replace(devName, "").replace(/\s*(service|serveur)\s*$/i, "").replace(/\s*service\s*/i, " ").trim();
+        return `<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}" title="${on ? "En cours" : "Arrêté"}"><i></i>${esc(name)}</span>`;
+      }) : [];
+
+      // --- réseau
+      const netMax = Number(c.net_max) || 1000;
+      const nets = c.show_network !== false ? Object.entries(m.hub.ifaces).flatMap(([name, x]) => [
+        x.rx ? gauge(x.rx, "mdi:download", "Download", this._num(x.rx), esc(name), 101, 101, ` ${esc(this._unit(x.rx, "Mbit/s"))}`, netMax, this._num(x.rx) < 10 ? 2 : 0).replace('class="srv-g"', 'class="srv-g srv-in"') : "",
+        x.tx ? gauge(x.tx, "mdi:upload", "Upload", this._num(x.tx), esc(name), 101, 101, ` ${esc(this._unit(x.tx, "Mbit/s"))}`, netMax, this._num(x.tx) < 10 ? 2 : 0).replace('class="srv-g"', 'class="srv-g srv-out"') : "",
+      ]).filter(Boolean) : [];
+
+      // --- actions : allumé → redémarrer, veille, éteindre ; éteint → allumer (option power_on)
+      const acts = c.show_actions !== false ? (online
+        ? [btn(r.reboot, "mdi:restart", "Redémarrer"), btn(r.standby, "mdi:power-sleep", "Veille"), btn(r.shutdown, "mdi:power", "Éteindre", "stop")]
+        : [btn(c.power_on, "mdi:power", "Allumer", "go")]).filter(Boolean) : [];
+
+      body = system
+        + sec("mdi:folder-network-outline", "Systèmes de fichiers", fsHtml.length ? `<div class="srv-grid pve-res">${fsHtml.join("")}</div>` : "")
+        + sec("mdi:harddisk", "Disques", diskHtml.length ? `<div class="tiles srv-tiles omv-disks">${diskHtml.join("")}</div>` : "")
+        + sec("mdi:cog-outline", `Services <small class="pve-n">${svc.length ? `${m.hub.services.filter((id) => this._st(id)?.state === "on").length}/${svc.length} en cours` : ""}</small>`, svc.length ? `<div class="omv-svcs">${svc.join("")}</div>` : "")
+        + sec("mdi:swap-vertical", "Débits réseau", nets.length ? `<div class="srv-grid">${nets.join("")}</div>` : "")
+        + sec("mdi:power-plug-battery-outline", "Onduleur", ups.html)
+        + sec("mdi:gesture-tap-button", "Actions", acts.length ? `<div class="pve-na">${acts.join("")}</div>` : "");
+    }
+
+    const alertCls = (m.hubId && !online) || disksBad || ups.ok === false ? "srv-alert" : "";
+    const sub = [online ? "En ligne" : m.hubId ? "Hors ligne" : "OpenMediaVault", version ? `OMV ${(/\d+(?:\.\d+)+(?:-\d+)?/.exec(version) || [version])[0]}` : null].filter(Boolean).join(" · ");
+    const sub2 = [ip, host && host !== ip ? host : null].filter(Boolean).join(" · ");
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${OMV_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
+      <header>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:nas")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+          <div><div class="title">${esc(c.title || "OpenMediaVault")}</div><div class="sub">${esc(sub)}</div>${sub2 ? `<div class="sub">${esc(sub2)}</div>` : ""}</div></div>
+        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+      </header>
+      ${body}
+    </ha-card>`;
+  }
+}
+
+const OMV_STYLE = `<style>
+.omv-load { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 4px; }
+.omv-load span { display: grid; min-width: 0; } .omv-load b { font-size: .9rem; } .omv-load small { font-size: .62rem; color: var(--med-muted); white-space: nowrap; }
+.omv-disks { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.omv-disk .tile-l { width: 100%; }
+.omv-t { margin-left: auto; font-size: .9rem; color: var(--med-down); }
+.omv-t.warn { color: #f0a33a; } .omv-t.bad { color: var(--t-red); }
+.omv-disk.warn { border-color: #f0a33a; } .omv-disk.bad { border-color: var(--t-red); }
+.omv-model { font-size: .7rem; color: var(--med-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 2px 0 4px; }
+.omv-svcs { display: flex; flex-wrap: wrap; gap: 6px; }
+.omv-svc { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; cursor: pointer; font-size: .8rem; font-weight: 600;
+  border: 1px solid var(--med-line); background: var(--med-surface); color: var(--med-muted); }
+.omv-svc i { width: 8px; height: 8px; border-radius: 50%; background: var(--med-muted); }
+.omv-svc.on { color: var(--med-text); border-color: color-mix(in srgb, var(--med-down) 45%, transparent); }
+.omv-svc.on i { background: var(--med-down); }
+</style>`;
+
 /* ------------------------------------------------------------ carte DNS (AdGuard Home, Pi-hole) */
 
 const DNS_DEFAULTS = {
@@ -2582,6 +2914,46 @@ const PVE_LABELS = {
   theme: "Couleurs de la carte",
 };
 const ServeurHaProxmoxCardEditor = makeEditor(PVE_SCHEMA, PVE_LABELS, PVE_DEFAULTS);
+const OMV_SCHEMA = [
+  { name: "device", selector: { device: { integration: "omv" } } },
+  { name: "title", selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  { name: "icon_color", selector: { text: {} } },
+  { name: "ip", selector: { text: {} } },
+  { name: "power_on", selector: { entity: { domain: ["button", "switch", "script", "input_boolean"] } } },
+  { name: "net_max", selector: { number: { min: 1, max: 100000, mode: "box", unit_of_measurement: "Mbit/s" } } },
+  { name: "show_system", selector: { boolean: {} } },
+  { name: "show_storage", selector: { boolean: {} } },
+  { name: "show_disks", selector: { boolean: {} } },
+  { name: "show_services", selector: { boolean: {} } },
+  { name: "show_network", selector: { boolean: {} } },
+  { name: "show_actions", selector: { boolean: {} } },
+  { name: "show_ups", selector: { boolean: {} } },
+  { name: "ups_device", selector: { device: { integration: "nut" } } },
+  { name: "ups_name", selector: { text: {} } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const OMV_LABELS = {
+  device: "OpenMediaVault (appareil de l'intégration, facultatif)",
+  title: "Titre (OpenMediaVault par défaut)",
+  icon: "Icône",
+  icon_color: "Couleur de l'icône",
+  ip: "Adresse IP affichée (vide = adresse de l'intégration)",
+  power_on: "Allumage quand OMV est éteint : Wake on LAN, prise ou script (facultatif)",
+  net_max: "Pleine échelle des barres réseau",
+  show_system: "Section Système (uptime, version, charge, CPU, RAM)",
+  show_storage: "Section Systèmes de fichiers",
+  show_disks: "Section Disques (température, SMART)",
+  show_services: "Section Services (NFS, SMB, SSH…)",
+  show_network: "Section Débits réseau",
+  show_actions: "Boutons redémarrer, veille, éteindre (deux clics)",
+  show_ups: "Section Onduleur (NUT)",
+  ups_device: "Onduleur (appareil NUT, facultatif)",
+  ups_name: "Nom de l'onduleur (facultatif)",
+  theme: "Couleurs de la carte",
+};
+const ServeurHaOmvCardEditor = makeEditor(OMV_SCHEMA, OMV_LABELS, OMV_DEFAULTS);
 const DNS_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -2675,6 +3047,8 @@ if (typeof customElements !== "undefined") {
   define("serveur-ha-nas-card-editor", ServeurHaNasCardEditor);
   define("serveur-ha-proxmox-card", ServeurHaProxmoxCard);
   define("serveur-ha-proxmox-card-editor", ServeurHaProxmoxCardEditor);
+  define("serveur-ha-omv-card", ServeurHaOmvCard);
+  define("serveur-ha-omv-card-editor", ServeurHaOmvCardEditor);
   define("serveur-ha-dns-card", ServeurHaDnsCard);
   define("serveur-ha-dns-card-editor", ServeurHaDnsCardEditor);
   define("serveur-ha-linux-card", ServeurHaLinuxCard);
@@ -2710,6 +3084,14 @@ if (typeof customElements !== "undefined") {
       type: "serveur-ha-proxmox-card",
       name: "Carte Proxmox VE",
       description: "Nœuds, stockages, VM et conteneurs Proxmox VE : état, CPU, RAM, uptime, mises à jour, démarrage et arrêt confirmés.",
+      preview: true,
+    });
+  }
+  if (!window.customCards.some((c) => c.type === "serveur-ha-omv-card")) {
+    window.customCards.push({
+      type: "serveur-ha-omv-card",
+      name: "Carte OpenMediaVault",
+      description: "OpenMediaVault : système, systèmes de fichiers, disques (température, SMART), services, réseau, mises à jour, redémarrage et arrêt confirmés.",
       preview: true,
     });
   }
