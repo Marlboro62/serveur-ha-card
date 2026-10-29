@@ -66,6 +66,10 @@
 | --- | --- | --- |
 | ![Serveurs Linux](images/linux.png) | ![Serveurs Linux en alerte](images/linux-alerte.png) | ![Serveurs Linux clair](images/linux-clair.png) |
 
+| OpenMediaVault | Disque en alerte | OpenMediaVault clair |
+| --- | --- | --- |
+| ![OpenMediaVault](images/omv.png) | ![OpenMediaVault, disque en alerte](images/omv-alerte.png) | ![OpenMediaVault clair](images/omv-clair.png) |
+
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
 **[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 6 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
