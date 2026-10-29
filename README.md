@@ -48,27 +48,27 @@
 
 | Serveur | Home Assistant | NAS Synology |
 | --- | --- | --- |
-| ![Serveur](images/serveur-sombre.png) | ![Home Assistant](images/home-assistant.png) | ![NAS](images/nas.png) |
+| ![Serveur](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/serveur-sombre.png) | ![Home Assistant](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/home-assistant.png) | ![NAS](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/nas.png) |
 
 | Serveur en alerte | Clair | NAS en alerte |
 | --- | --- | --- |
-| ![Serveur en alerte](images/serveur-alerte.png) | ![Serveur clair](images/serveur-clair.png) | ![NAS en alerte](images/nas-alerte.png) |
+| ![Serveur en alerte](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/serveur-alerte.png) | ![Serveur clair](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/serveur-clair.png) | ![NAS en alerte](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/nas-alerte.png) |
 
 | Proxmox VE | Proxmox chargé, mise à jour | Proxmox clair |
 | --- | --- | --- |
-| ![Proxmox](images/proxmox.png) | ![Proxmox chargé](images/proxmox-alerte.png) | ![Proxmox clair](images/proxmox-clair.png) |
+| ![Proxmox](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/proxmox.png) | ![Proxmox chargé](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/proxmox-alerte.png) | ![Proxmox clair](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/proxmox-clair.png) |
 
 | Filtrage DNS | Protection coupée | Filtrage DNS clair |
 | --- | --- | --- |
-| ![Filtrage DNS](images/dns.png) | ![Protection coupée](images/dns-coupe.png) | ![Filtrage DNS clair](images/dns-clair.png) |
+| ![Filtrage DNS](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/dns.png) | ![Protection coupée](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/dns-coupe.png) | ![Filtrage DNS clair](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/dns-clair.png) |
 
 | Serveurs Linux | Sécurité, redémarrage, paquets | Serveurs Linux clair |
 | --- | --- | --- |
-| ![Serveurs Linux](images/linux.png) | ![Serveurs Linux en alerte](images/linux-alerte.png) | ![Serveurs Linux clair](images/linux-clair.png) |
+| ![Serveurs Linux](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/linux.png) | ![Serveurs Linux en alerte](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/linux-alerte.png) | ![Serveurs Linux clair](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/linux-clair.png) |
 
 | OpenMediaVault | Disque en alerte | OpenMediaVault clair |
 | --- | --- | --- |
-| ![OpenMediaVault](images/omv.png) | ![OpenMediaVault, disque en alerte](images/omv-alerte.png) | ![OpenMediaVault clair](images/omv-clair.png) |
+| ![OpenMediaVault](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/omv.png) | ![OpenMediaVault, disque en alerte](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/omv-alerte.png) | ![OpenMediaVault clair](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/omv-clair.png) |
 
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
@@ -231,7 +231,7 @@ Les entités sont trouvées via l'intégration **Synology DSM**, pour **tous les
 | `navigation_path` | Page ouverte en cliquant sur le titre | — |
 | `show_info`, `show_resources`, `show_thermal`, `show_actions`, `show_network`, `show_ups` | Afficher chaque section | `true` |
 
-D'autres exemples sont dans [`exemples/`](exemples/).
+D'autres exemples sont dans [`exemples/`](https://github.com/Marlboro62/serveur-ha-card/blob/main/exemples/).
 
 ## Carte Proxmox VE — `custom:serveur-ha-proxmox-card`
 
