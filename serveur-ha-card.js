@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.11.0-beta.1";
+const CARD_VERSION = "0.11.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2662,7 +2662,7 @@ class ServeurHaPingCard extends HTMLElement {
       const loss = up ? this._num(h.roles.loss) : null;
       const jit = up ? this._num(h.roles.jitter) : null;
       const cls = up === false ? "down" : up === null ? "na" : loss > 0 ? "warn" : lat(avg);
-      const detail = up === false ? (downSince(h) ? `hors ligne depuis ${downSince(h)}` : "hors ligne")
+      const detail = up === false ? (downSince(h) ? `depuis ${downSince(h)}` : "hors ligne")
         : [avg !== null ? ms(avg) : null, loss > 0 ? `${fmt(loss, 0)} % perdus` : null].filter(Boolean).join(" · ");
       const title = [h.name, h.ip, up === false ? "Hors ligne" : up ? "En ligne" : "Inconnu",
         avg !== null ? `Moyenne ${ms(avg)}` : null, this._num(h.roles.max) !== null && up ? `Max ${ms(this._num(h.roles.max))}` : null,
@@ -2737,7 +2737,7 @@ const PING_STYLE = `<style>
 .ping-n { display: grid; min-width: 0; }
 .ping-n span { font-size: .78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ping-n small { font-size: .68rem; color: var(--med-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ping-h.s-down small { color: var(--t-red); }
+.ping-h.s-down small { color: var(--t-red); white-space: normal; }
 ha-card > .srv-sec:last-child { margin-bottom: 12px; }
 </style>`;
 
