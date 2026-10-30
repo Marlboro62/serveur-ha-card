@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.10.0";
+const CARD_VERSION = "0.11.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2471,6 +2471,276 @@ const ASUS_STYLE = `<style>
 .asus-acts .pve-btn span { font-size: .74rem; }
 </style>`;
 
+/* ------------------------------------------------------------ carte Réseau (Ping) */
+
+const PING_DEFAULTS = {
+  title: "Réseau",
+  icon: "mdi:lan",
+  icon_color: "",
+  group_by: "auto", // auto : par type d'appareil ; area : par pièce ; none : une seule liste
+  expanded: false, // groupes dépliés à l'ouverture
+  warn_ms: 20, alert_ms: 100, // latence moyenne : orange, rouge
+  exclude: [], // noms ou entités à ignorer
+  theme: "v2",
+};
+
+/** Capteurs d'un appareil Ping : clé de traduction, sinon fin de l'identifiant (français ou anglais). */
+const PING_ROLES = [
+  ["avg", /round_trip_time_av/, /_(round_trip_time_average|round_trip_time_avg|temps_d_aller_retour_moyen)$/],
+  ["max", /round_trip_time_max/, /_(round_trip_time_maximum|round_trip_time_max|temps_d_aller_retour_maximum)$/],
+  ["min", /round_trip_time_min/, /_(round_trip_time_minimum|round_trip_time_min|temps_d_aller_retour_minimum)$/],
+  ["jitter", /jitter|mdev/, /_(jitter|gigue|round_trip_time_mean_deviation|ecart_moyen_du_temps_d_aller_retour)$/],
+  ["loss", /loss/, /_(packet_loss|perte_de_paquets)$/],
+];
+
+/** Types d'appareils, d'après leur nom (ordre d'affichage). */
+const PING_GROUPS = [
+  ["net", "Réseau", "mdi:router-network", /rout|point d'acc|access point|switch|unbound|adguard|pi-?hole|dns|wireguard|vpn|nginx|proxy manager|traefik|opnsense|pfsense|box/i],
+  ["srv", "Serveurs", "mdi:server", /proxmox|pimox|pve|home assistant|haos|nas|synology|diskstation|openmediavault|omv|unraid|truenas|docker|mqtt|esphome|zigbee2mqtt|z2m|go2rtc|frigate|grafana|influx|victoria|mariadb|postgres|plex|jellyfin|emby|tautulli|transmission|qbittorrent|sonarr|radarr|fireshare|peanut|spoolman|myelectricaldata|nextcloud|vaultwarden|serveur|server/i],
+  ["print", "Imprimantes", "mdi:printer-3d", /imprimante|printer|ender|znp|k1\b|bambu|prusa|voron|klipper|moonraker|octoprint/i],
+  ["media", "Multimédia", "mdi:television", /tv\b|télé|tele|chromecast|nest hub|fire ?tv|shield|apple tv|sonos|enceinte|echo|google home|kodi/i],
+  ["mobile", "Téléphones et ordinateurs", "mdi:cellphone-link", /phone|téléphone|telephone|pad\b|tablette|tablet|ipad|pc\b|portable|laptop|ordinateur|macbook|poco|redmi|realme|pixel|galaxy|iphone|n73/i],
+  ["home", "Domotique", "mdi:home-automation", /prise|plug|bt proxy|bluetooth|passerelle|gateway|awtrix|aspirateur|vacuum|robot|caméra|camera|cam\b|shelly|sonoff|tasmota|esp|capteur|sensor|lampe|light|ampoule/i],
+];
+
+const PING_MATCH = ["print", "mobile", "net", "srv", "media", "home"];
+
+class ServeurHaPingCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("serveur-ha-ping-card-editor");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { ...PING_DEFAULTS, ...(config || {}) };
+    this._map = null;
+    this._sig = null;
+    this._open = new Set(this._config.expanded ? ["*"] : []);
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    if (!this._clicks) {
+      this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const fold = ev.target.closest?.("[data-fold]");
+        if (fold) {
+          // groupe : déplier ou replier
+          ev.stopPropagation();
+          const k = fold.dataset.fold;
+          if (this._open.has("*")) { this._open = new Set(this._groupKeys || []); this._open.delete(k); }
+          else if (this._open.has(k)) this._open.delete(k);
+          else this._open.add(k);
+          this._sig = null; this._render(); return;
+        }
+        const el = ev.target.closest?.("[data-entity]");
+        if (el?.dataset.entity) {
+          const e = new Event("hass-more-info", { bubbles: true, composed: true });
+          e.detail = { entityId: el.dataset.entity };
+          this.dispatchEvent(e);
+        }
+      }));
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    if (this._hass?.entities !== hass.entities || this._hass?.devices !== hass.devices || this._hass?.areas !== hass.areas) this._map = null;
+    this._hass = hass;
+    this._render();
+  }
+
+  connectedCallback() {
+    clearInterval(this._tick);
+    this._tick = setInterval(() => { this._sig = null; this._render(); }, 60000);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._tick);
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  _st(id) {
+    return id ? this._hass?.states?.[id] : undefined;
+  }
+
+  _num(id) {
+    const s = this._st(id);
+    if (!s || s.state === "unavailable" || s.state === "unknown") return null;
+    const v = Number(s.state);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  /** Appareils suivis par l'intégration Ping : capteur de connexion, latences, gigue, perte de paquets, groupe. */
+  _resolve() {
+    if (this._map) return this._map;
+    const hass = this._hass, c = this._config;
+    const reg = hass.entities || {}, devs = hass.devices || {}, areas = hass.areas || {};
+    const ex = (Array.isArray(c.exclude) ? c.exclude : String(c.exclude || "").split(",")).map((x) => String(x).trim().toLowerCase()).filter(Boolean);
+    const byDev = {};
+    for (const [id, e] of Object.entries(reg)) {
+      if (e.platform !== "ping" || !hass.states[id] || e.hidden) continue;
+      const key = e.device_id || id;
+      const d = (byDev[key] ||= { key, dev: devs[e.device_id], roles: {}, area: e.area_id || devs[e.device_id]?.area_id || null });
+      const domain = id.split(".")[0];
+      if (domain === "binary_sensor") d.roles.up ||= id;
+      else if (domain === "device_tracker") d.roles.tracker ||= id;
+      else if (domain === "sensor") {
+        const role = PING_ROLES.find(([, tk, re]) => (e.translation_key && tk.test(e.translation_key)) || re.test(id));
+        if (role && !d.roles[role[0]]) d.roles[role[0]] = id;
+      }
+    }
+    const hosts = Object.values(byDev).filter((d) => d.roles.up || d.roles.tracker).map((d) => {
+      const up = this._st(d.roles.up);
+      const name = d.dev?.name_by_user || d.dev?.name || up?.attributes?.friendly_name || d.roles.up;
+      const ip = this._st(d.roles.tracker)?.attributes?.ip || (/(\d+_\d+_\d+_\d+)/.exec(d.roles.up || "") || [, ""])[1].replace(/_/g, ".") || null;
+      return { ...d, name, ip };
+    }).filter((h) => !ex.some((x) => h.name.toLowerCase() === x || Object.values(h.roles).includes(x) || h.ip === x));
+    // groupes : par pièce, par type d'appareil (nom), ou un seul
+    const groupOf = (h) => {
+      if (c.group_by === "none") return ["all", "Appareils", "mdi:lan"];
+      if (c.group_by === "area") {
+        const a = areas[h.area];
+        return a ? [`area:${h.area}`, a.name, a.icon || "mdi:texture-box"] : ["noarea", "Sans pièce", "mdi:help-circle-outline"];
+      }
+      // téléphones testés avant le multimédia : « Téléphone » contient « Télé »
+      const g = PING_MATCH.map((k) => PING_GROUPS.find((x) => x[0] === k)).find(([, , , re]) => re.test(h.name));
+      return g ? g.slice(0, 3) : ["other", "Autres", "mdi:devices"];
+    };
+    const groups = new Map();
+    for (const h of hosts) {
+      const [k, label, icon] = groupOf(h);
+      if (!groups.has(k)) groups.set(k, { key: k, label, icon, hosts: [] });
+      groups.get(k).hosts.push(h);
+    }
+    const order = PING_GROUPS.map((g) => g[0]);
+    const list = [...groups.values()].sort((a, b) => {
+      const ia = order.indexOf(a.key), ib = order.indexOf(b.key);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.label.localeCompare(b.label, "fr");
+    });
+    const ipNum = (ip) => (ip || "").split(".").reduce((n, x) => n * 256 + (Number(x) || 0), 0);
+    for (const g of list) g.hosts.sort((a, b) => ipNum(a.ip) - ipNum(b.ip) || a.name.localeCompare(b.name, "fr", { numeric: true }));
+    this._map = { hosts, groups: list };
+    return this._map;
+  }
+
+  /** En ligne : capteur de connexion (on), sinon suivi d'appareil (home). null si inconnu. */
+  _isUp(h) {
+    const s = this._st(h.roles.up) || this._st(h.roles.tracker);
+    if (!s || s.state === "unavailable" || s.state === "unknown") return null;
+    return s.state === "on" || s.state === "home";
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const m = this._resolve();
+    this._groupKeys = m.groups.map((g) => g.key);
+    const ids = m.hosts.flatMap((h) => [h.roles.up, h.roles.avg, h.roles.loss]);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${[...this._open].join(",")}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const warn = Number(c.warn_ms) || 20, alert = Number(c.alert_ms) || 100;
+    const ms = (v) => (v === null ? "—" : `${fmt(v, v < 10 ? 1 : 0)} ms`);
+    const lat = (v) => (v === null ? "" : v >= alert ? "bad" : v >= warn ? "warn" : "ok");
+    const downSince = (h) => { const s = this._st(h.roles.up); return s?.last_changed ? since(s.last_changed) : null; };
+    const open = (k) => this._open.has("*") || this._open.has(k);
+
+    const hosts = m.hosts;
+    const down = hosts.filter((h) => this._isUp(h) === false);
+    const upN = hosts.filter((h) => this._isUp(h) === true).length;
+    const lossy = hosts.filter((h) => this._isUp(h) && (this._num(h.roles.loss) || 0) > 0);
+    const avgs = hosts.map((h) => (this._isUp(h) ? this._num(h.roles.avg) : null)).filter((v) => v !== null);
+    const mean = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : null;
+
+    const tile = (h) => {
+      const up = this._isUp(h);
+      const avg = up ? this._num(h.roles.avg) : null;
+      const loss = up ? this._num(h.roles.loss) : null;
+      const jit = up ? this._num(h.roles.jitter) : null;
+      const cls = up === false ? "down" : up === null ? "na" : loss > 0 ? "warn" : lat(avg);
+      const detail = up === false ? (downSince(h) ? `hors ligne depuis ${downSince(h)}` : "hors ligne")
+        : [avg !== null ? ms(avg) : null, loss > 0 ? `${fmt(loss, 0)} % perdus` : null].filter(Boolean).join(" · ");
+      const title = [h.name, h.ip, up === false ? "Hors ligne" : up ? "En ligne" : "Inconnu",
+        avg !== null ? `Moyenne ${ms(avg)}` : null, this._num(h.roles.max) !== null && up ? `Max ${ms(this._num(h.roles.max))}` : null,
+        jit !== null ? `Gigue ${ms(jit)}` : null, loss !== null ? `Perte ${fmt(loss, 0)} %` : null].filter(Boolean).join(" · ");
+      return `<div class="ping-h s-${cls || "ok"}" data-entity="${esc(h.roles.up || h.roles.tracker)}" title="${esc(title)}"><i></i><div class="ping-n"><span>${esc(h.name)}</span><small>${esc(detail || h.ip || "")}</small></div></div>`;
+    };
+
+    // --- hors ligne, toujours visibles en haut
+    const downHtml = down.length ? `<div class="srv-sec"><div class="srv-h ping-bad"><ha-icon icon="mdi:lan-disconnect"></ha-icon>Hors ligne <small class="pve-n">${down.length}</small></div><div class="ping-grid">${down.map(tile).join("")}</div></div>` : "";
+
+    // --- groupes, repliés par défaut : un point par appareil, la liste au clic
+    const groupsHtml = m.groups.map((g) => {
+      const n = g.hosts.length, ok = g.hosts.filter((h) => this._isUp(h) === true).length, bad = g.hosts.filter((h) => this._isUp(h) === false).length;
+      const isOpen = open(g.key);
+      const dots = g.hosts.map((h) => { const u = this._isUp(h); return `<i class="${u === false ? "down" : u === null ? "na" : "ok"}"></i>`; }).join("");
+      return `<div class="ping-g ${isOpen ? "open" : ""}">
+        <button class="ping-gh" data-fold="${esc(g.key)}" aria-expanded="${isOpen}"><ha-icon icon="${esc(g.icon)}"></ha-icon><span class="ping-gl">${esc(g.label)}</span>
+          <span class="ping-dots">${dots}</span><b class="${bad ? "bad" : "ok"}">${ok}/${n}</b><ha-icon class="ping-chev" icon="${isOpen ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
+        ${isOpen ? `<div class="ping-grid">${g.hosts.map(tile).join("")}</div>` : ""}
+      </div>`;
+    }).join("");
+
+    const body = !hosts.length
+      ? `<div class="empty">Aucun appareil suivi par Ping<span>Ajoutez l'intégration Ping (ICMP) pour chaque appareil dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`
+      : `<div class="ping-sum">
+          <div class="${down.length ? "bad" : "ok"}"><b>${upN}<small>/${hosts.length}</small></b><span>en ligne</span></div>
+          <div class="${down.length ? "bad" : ""}"><b>${down.length}</b><span>hors ligne</span></div>
+          <div class="${lat(mean)}"><b>${mean === null ? "—" : fmt(mean, mean < 10 ? 1 : 0)}<small> ms</small></b><span>latence moyenne</span></div>
+          <div class="${lossy.length ? "warn" : ""}"><b>${lossy.length}</b><span>perte de paquets</span></div>
+        </div>${downHtml}<div class="srv-sec ping-groups">${groupsHtml}</div>`;
+
+    const leds = hosts.length ? (down.length
+      ? `<span class="srv-led bad"><i></i>${down.length} hors ligne</span>`
+      : `<span class="srv-led ok"><i></i>Tout en ligne</span>`) : "";
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${PVE_STYLE}${PING_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${down.length ? "srv-alert" : ""}">
+      <header>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:lan")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+          <div><div class="title">${esc(c.title || "Réseau")}</div><div class="sub">${hosts.length} appareil${hosts.length > 1 ? "s" : ""} suivi${hosts.length > 1 ? "s" : ""} par Ping</div></div></div>
+        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+      </header>
+      ${body}
+    </ha-card>`;
+  }
+}
+
+const PING_STYLE = `<style>
+.ping-sum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 4px 12px 0; }
+@container (max-width: 420px) { .ping-sum { grid-template-columns: repeat(2, 1fr); } }
+.ping-sum > div { display: grid; justify-items: center; padding: 8px 4px; border-radius: 12px; border: 1px solid var(--med-line); background: var(--med-surface); }
+.ping-sum b { font-size: 1.2rem; } .ping-sum b small { font-size: .7rem; color: var(--med-muted); font-weight: 500; }
+.ping-sum span { font-size: .68rem; color: var(--med-muted); text-align: center; }
+.ping-sum .ok b { color: var(--med-down); } .ping-sum .warn b { color: #f0a33a; } .ping-sum .bad b { color: var(--t-red); }
+.ping-sum .bad { border-color: color-mix(in srgb, var(--t-red) 55%, transparent); }
+.ping-bad ha-icon { color: var(--t-red); }
+.ping-groups { display: grid; gap: 6px; }
+.ping-g { border: 1px solid var(--med-line); border-radius: 12px; overflow: hidden; }
+.ping-gh { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 12px; font-size: .84rem; }
+.ping-gh:hover { background: var(--med-surface); }
+.ping-gh > ha-icon { --mdc-icon-size: 18px; color: var(--med-blue); flex: none; }
+.ping-gl { font-weight: 600; white-space: nowrap; }
+.ping-dots { flex: 1; display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; min-width: 0; }
+.ping-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--med-down); }
+.ping-dots i.down { background: var(--t-red); } .ping-dots i.na { background: var(--med-muted); }
+.ping-gh b { font-size: .8rem; white-space: nowrap; } .ping-gh b.ok { color: var(--med-down); } .ping-gh b.bad { color: var(--t-red); }
+.ping-chev { --mdc-icon-size: 18px; color: var(--med-muted); flex: none; }
+.ping-g.open .ping-grid { padding: 0 8px 8px; }
+.ping-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.ping-h { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 10px; cursor: pointer; border: 1px solid var(--med-line); background: var(--med-surface); min-width: 0; }
+.ping-h > i { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--med-down); }
+.ping-h.s-warn > i { background: #f0a33a; } .ping-h.s-bad > i, .ping-h.s-down > i { background: var(--t-red); } .ping-h.s-na > i { background: var(--med-muted); }
+.ping-h.s-down { border-color: color-mix(in srgb, var(--t-red) 55%, transparent); }
+.ping-n { display: grid; min-width: 0; }
+.ping-n span { font-size: .78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ping-n small { font-size: .68rem; color: var(--med-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ping-h.s-down small { color: var(--t-red); }
+ha-card > .srv-sec:last-child { margin-bottom: 12px; }
+</style>`;
+
 /* ------------------------------------------------------------ carte DNS (AdGuard Home, Pi-hole) */
 
 const DNS_DEFAULTS = {
@@ -3456,6 +3726,35 @@ const ASUS_LABELS = {
   theme: "Couleurs de la carte",
 };
 const ServeurHaAsusCardEditor = makeEditor(ASUS_SCHEMA, ASUS_LABELS, ASUS_DEFAULTS);
+const PING_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  { name: "icon_color", selector: { text: {} } },
+  {
+    name: "group_by",
+    selector: { select: { mode: "dropdown", options: [
+      { value: "auto", label: "Par type d'appareil (d'après le nom)" },
+      { value: "area", label: "Par pièce" },
+      { value: "none", label: "Une seule liste" },
+    ] } },
+  },
+  { name: "expanded", selector: { boolean: {} } },
+  { name: "warn_ms", selector: { number: { min: 1, max: 1000, mode: "box", unit_of_measurement: "ms" } } },
+  { name: "alert_ms", selector: { number: { min: 1, max: 5000, mode: "box", unit_of_measurement: "ms" } } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const PING_LABELS = {
+  title: "Titre",
+  icon: "Icône",
+  icon_color: "Couleur de l'icône",
+  group_by: "Regroupement des appareils",
+  expanded: "Groupes dépliés à l'ouverture",
+  warn_ms: "Latence orange à partir de",
+  alert_ms: "Latence rouge à partir de",
+  theme: "Couleurs de la carte",
+};
+const ServeurHaPingCardEditor = makeEditor(PING_SCHEMA, PING_LABELS, PING_DEFAULTS);
 const DNS_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -3553,6 +3852,8 @@ if (typeof customElements !== "undefined") {
   define("serveur-ha-omv-card-editor", ServeurHaOmvCardEditor);
   define("serveur-ha-asus-card", ServeurHaAsusCard);
   define("serveur-ha-asus-card-editor", ServeurHaAsusCardEditor);
+  define("serveur-ha-ping-card", ServeurHaPingCard);
+  define("serveur-ha-ping-card-editor", ServeurHaPingCardEditor);
   define("serveur-ha-dns-card", ServeurHaDnsCard);
   define("serveur-ha-dns-card-editor", ServeurHaDnsCardEditor);
   define("serveur-ha-linux-card", ServeurHaLinuxCard);
@@ -3604,6 +3905,14 @@ if (typeof customElements !== "undefined") {
       type: "serveur-ha-asus-card",
       name: "Carte Routeur ASUS",
       description: "Routeur ASUS (AsusRouter) : Internet, débits, Wi-Fi, ports, appareils connectés, VPN, firmware, redémarrage confirmé.",
+      preview: true,
+    });
+  }
+  if (!window.customCards.some((c) => c.type === "serveur-ha-ping-card")) {
+    window.customCards.push({
+      type: "serveur-ha-ping-card",
+      name: "Carte Réseau (Ping)",
+      description: "Appareils suivis par Ping : en ligne ou hors ligne, latence, gigue et perte de paquets, groupés par type ou par pièce.",
       preview: true,
     });
   }

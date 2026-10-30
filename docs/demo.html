@@ -95,7 +95,7 @@
     <aside class="panel" aria-label="Réglages de la démo">
       <h2>Carte</h2>
       <div class="ctl"><div class="seg" data-key="card">
-        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="all">Les 8</button></div></div>
+        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="ping">Réseau</button><button data-v="all">Les 9</button></div></div>
 
       <h2>Affichage</h2>
       <div class="ctl"><div class="ctl-l">Page</div><div class="seg" data-key="page">
@@ -126,6 +126,8 @@
         <button data-v="ok"><i class="sw green"></i>Tout à jour</button><button data-v="upd"><i class="sw orange"></i>Mises à jour</button><button data-v="sec"><i class="sw red"></i>Sécurité, redémarrage</button></div></div>
       <div class="ctl" data-for="omv all"><div class="ctl-l">OpenMediaVault</div><div class="seg" data-key="omv">
         <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="hot"><i class="sw orange"></i>Disque chaud, mises à jour</button><button data-v="bad"><i class="sw red"></i>Disque en alerte</button><button data-v="off"><i class="sw"></i>Éteint</button></div></div>
+      <div class="ctl" data-for="ping all"><div class="ctl-l">Réseau (Ping)</div><div class="seg" data-key="ping">
+        <button data-v="ok"><i class="sw green"></i>Tout en ligne</button><button data-v="slow"><i class="sw orange"></i>Lent, pertes</button><button data-v="down"><i class="sw red"></i>Appareils hors ligne</button></div></div>
       <div class="ctl" data-for="asus all"><div class="ctl-l">Routeur ASUS</div><div class="seg" data-key="asus">
         <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="busy"><i class="sw orange"></i>Chargé, mise à jour</button><button data-v="down"><i class="sw red"></i>Internet coupé</button></div></div>
     </aside>
@@ -173,8 +175,8 @@
     });
   }
 
-  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card" };
-  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok" };
+  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card", ping: "serveur-ha-ping-card" };
+  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok", ping: "ok" };
   let state = { ...defaults };
   try { state = { ...defaults, ...JSON.parse(localStorage.getItem("serveur-ha-demo") || "{}") }; } catch (e) { /* ignoré */ }
 
@@ -464,6 +466,24 @@
     for (const b of ["reboot", "restart_wireless", "refresh_clients"]) aa("button", b, "unknown");
     aa("light", "led", "on");
     aa("update", "firmware_update", ab ? "on" : "off", { installed_version: "3.0.0.6.102_35404", latest_version: ab ? "3.0.0.6.102_37000" : "3.0.0.6.102_35404" });
+    // --- réseau (noms et adresses fictifs, entités au format de l'intégration Ping)
+    const ps = state.ping === "slow", pd = state.ping === "down";
+    const hostsP = [["Routeur", 1, 0.7], ["DNS local", 3, 1.1], ["Proxmox 1", 5, 0.4], ["Proxmox 2", 6, 0.5], ["Home Assistant", 17, 0.3], ["MQTT", 9, 0.6], ["NAS Synology", 30, 0.8],
+      ["OpenMediaVault", 23, 0.9], ["Plex", 31, 1.2], ["Imprimante 3D", 41, 4.8], ["Imprimante bureau", 45, 3.1], ["TV salon", 59, 6.2], ["Chromecast", 61, 8.4], ["Téléphone 1", 80, 12.5],
+      ["Tablette", 90, 9.8], ["Passerelle Zigbee", 100, 2.2], ["Prise lave-linge", 133, 7.1], ["Prise bureau", 135, 6.6], ["Caméra entrée", 26, 3.4], ["Aspirateur robot", 120, 15.2]];
+    hostsP.forEach(([name, n, rtt], i) => {
+      const ip = `192.168.1.${n}`, k = ip.replace(/\./g, "_"), dev = `ping_${n}`;
+      const off = pd && (name === "Aspirateur robot" || name === "Tablette" || name === "Prise bureau");
+      devices[dev] = { id: dev, name, manufacturer: "Ping" };
+      st[`binary_sensor.${k}`] = { entity_id: `binary_sensor.${k}`, state: off ? "off" : "on", attributes: { device_class: "connectivity" }, last_changed: iso(-(i + 1) * 0.7 * H) };
+      ent[`binary_sensor.${k}`] = { entity_id: `binary_sensor.${k}`, platform: "ping", device_id: dev };
+      add(`device_tracker.${k}`, off ? "not_home" : "home", { ip, source_type: "router" }, "ping", null, dev);
+      const r = ps ? rtt * (i % 3 ? 4 : 18) : rtt;
+      add(`sensor.${k}_temps_d_aller_retour_moyen`, off ? "unavailable" : r.toFixed(2), { unit_of_measurement: "ms" }, "ping", "round_trip_time_avg", dev);
+      add(`sensor.${k}_temps_d_aller_retour_maximum`, off ? "unavailable" : (r * 1.8).toFixed(2), { unit_of_measurement: "ms" }, "ping", "round_trip_time_max", dev);
+      add(`sensor.${k}_gigue`, off ? "unavailable" : (r * 0.3).toFixed(2), { unit_of_measurement: "ms" }, "ping", "jitter", dev);
+      add(`sensor.${k}_perte_de_paquets`, off ? "unavailable" : ps && i % 4 === 0 ? "20" : "0", { unit_of_measurement: "%" }, "ping", "packet_loss", dev);
+    });
     return { st, ent, devices };
   }
 
@@ -480,6 +500,7 @@
       lnx: { type: "custom:serveur-ha-linux-card", theme: t },
       omv: { type: "custom:serveur-ha-omv-card", title: "NAS maison", power_on: "button.wake_on_lan_00_11_22_33_44_66", ups_name: "Green Cell 600VA", theme: t },
       asus: { type: "custom:serveur-ha-asus-card", theme: t },
+      ping: { type: "custom:serveur-ha-ping-card", theme: t },
     };
     return state.card === "all" ? Object.values(c) : [c[state.card]];
   }

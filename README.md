@@ -28,7 +28,7 @@
 
 # Cartes Serveur HA
 
-**Huit cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
+**Neuf cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
 
 | Type | Carte |
 | --- | --- |
@@ -39,6 +39,7 @@
 | `custom:serveur-ha-linux-card` | **Serveurs Linux** ([Linux Update Dashboard](https://github.com/TheDuffman85/linux-update-dashboard)) : mises à jour en attente, sécurité, paquets, redémarrage requis, installation confirmée en deux clics |
 | `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
 | `custom:serveur-ha-asus-card` | **Routeur ASUS** ([AsusRouter](https://github.com/Vaskivskyi/ha-asusrouter)) : Internet et IP publique, débits, Wi-Fi et réseaux invités, ports Ethernet, appareils connectés, VPN, firmware, températures, redémarrage confirmé en deux clics |
+| `custom:serveur-ha-ping-card` | **Réseau** (intégration Ping) : appareils en ligne ou hors ligne, latence, gigue et perte de paquets, groupés par type ou par pièce, groupes dépliables |
 | `custom:serveur-ha-omv-card` | **OpenMediaVault** : système (uptime, version, charge, CPU, RAM), systèmes de fichiers, disques (température, SMART), services, réseau, mises à jour, redémarrage et arrêt confirmés en deux clics |
 
 **Pare-feu OPNsense** : la carte a son propre dépôt, [Carte OPNsense](https://github.com/Marlboro62/opnsense-card) (`custom:opnsense-card`).
@@ -75,9 +76,13 @@
 | --- | --- | --- |
 | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/asus.png" alt="Routeur ASUS" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/asus-alerte.png" alt="Routeur ASUS chargé" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/asus-clair.png" alt="Routeur ASUS clair" width="300"> |
 
+| Réseau, appareils hors ligne | Réseau | Réseau clair, lent, pertes |
+| --- | --- | --- |
+| <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/ping-alerte.png" alt="Réseau, appareils hors ligne" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/ping.png" alt="Réseau" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/ping-clair.png" alt="Réseau clair" width="300"> |
+
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 8 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 9 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 ## Installation
 
@@ -356,6 +361,36 @@ type: custom:serveur-ha-asus-card
 title: Box internet
 wan_max: 500
 latest: 0
+```
+
+## Carte Réseau — `custom:serveur-ha-ping-card`
+
+```yaml
+type: custom:serveur-ha-ping-card
+```
+
+La carte reprend tous les appareils suivis par l'intégration **Ping (ICMP)** de Home Assistant (une entrée par appareil, dans Paramètres › Appareils et services › Ajouter une intégration › Ping). Rien à configurer : elle les trouve toute seule.
+
+- **En-tête** : nombre d'appareils, voyant **Tout en ligne** ou **N hors ligne**.
+- **Résumé** : appareils en ligne, hors ligne, latence moyenne et nombre d'appareils qui perdent des paquets.
+- **Hors ligne** : les appareils injoignables, toujours visibles en haut, avec la durée depuis la coupure.
+- **Groupes** : Réseau, Serveurs, Imprimantes, Multimédia, Téléphones et ordinateurs, Domotique, d'après le nom de chaque appareil (ou par pièce). Chaque groupe est **replié** : un point par appareil (vert, rouge si hors ligne) et le compte en ligne ; un clic déplie les appareils, avec leur latence moyenne (orange à 20 ms, rouge à 100 ms) et la perte de paquets. Le survol donne l'adresse IP, la latence maximale et la gigue ; un clic ouvre la fiche de l'appareil.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title`, `icon`, `icon_color` | En-tête | `Réseau`, `mdi:lan` |
+| `group_by` | `auto` (par type d'appareil), `area` (par pièce) ou `none` (une seule liste) | `auto` |
+| `expanded` | Groupes dépliés à l'ouverture | `false` |
+| `warn_ms`, `alert_ms` | Latence moyenne orange, rouge (ms) | `20`, `100` |
+| `exclude` | Appareils à ignorer (noms, entités ou adresses IP) | — |
+| `theme` | `v2`, `auto` ou `ha` | `v2` |
+
+```yaml
+type: custom:serveur-ha-ping-card
+group_by: area
+exclude:
+  - Téléphone invité
+  - 192.168.1.150
 ```
 
 ## Carte Filtrage DNS — `custom:serveur-ha-dns-card`
