@@ -28,7 +28,7 @@
 
 # Cartes Serveur HA
 
-**Onze cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
+**Douze cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
 
 | Type | Carte |
 | --- | --- |
@@ -42,6 +42,7 @@
 | `custom:serveur-ha-ping-card` | **Réseau** (intégration Ping) : appareils en ligne ou hors ligne, latence, gigue et perte de paquets, groupés par type ou par pièce, groupes dépliables |
 | `custom:serveur-ha-wireguard-card` | **VPN WireGuard** ([WGDashboard](https://github.com/donaldzou/WGDashboard)) : serveurs, pairs connectés, dernier handshake, données reçues et envoyées |
 | `custom:serveur-ha-glances-card` | **Serveurs Glances** : CPU, RAM, disques par point de montage, températures, ventilateurs, réseau et processus de chaque serveur, repliés en une ligne |
+| `custom:serveur-ha-media-card` | **Serveurs multimédia** (Plex, Jellyfin, Emby) : ce qui est en lecture, qui regarde et sur quel lecteur, avancement, bibliothèques, mise à jour du serveur |
 | `custom:serveur-ha-omv-card` | **OpenMediaVault** : système (uptime, version, charge, CPU, RAM), systèmes de fichiers, disques (température, SMART), services, réseau, mises à jour, redémarrage et arrêt confirmés en deux clics |
 
 **Pare-feu OPNsense** : la carte a son propre dépôt, [Carte OPNsense](https://github.com/Marlboro62/opnsense-card) (`custom:opnsense-card`).
@@ -90,9 +91,13 @@
 | --- | --- | --- |
 | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/glances.png" alt="Serveurs Glances" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/glances-alerte.png" alt="Serveurs Glances en alerte" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/glances-clair.png" alt="Serveurs Glances clair" width="300"> |
 
+| Serveurs multimédia | Rien en lecture, lecteurs dépliés | Multimédia clair |
+| --- | --- | --- |
+| <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/multimedia.png" alt="Serveurs multimédia" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/multimedia-repos.png" alt="Serveurs multimédia au repos" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/multimedia-clair.png" alt="Serveurs multimédia clair" width="300"> |
+
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 11 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 12 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 ## Installation
 
@@ -459,6 +464,29 @@ La carte reprend tous les serveurs suivis par l'intégration **Glances** de Home
 | `expanded` | Serveurs dépliés à l'ouverture | `false` |
 | `temp_warn`, `temp_alert` | Température orange, rouge (°C) | `70`, `85` |
 | `net_max` | Pleine échelle des barres réseau (Mbit/s) | `1000` |
+| `theme` | `v2`, `auto` ou `ha` | `v2` |
+
+## Carte Serveurs multimédia — `custom:serveur-ha-media-card`
+
+```yaml
+type: custom:serveur-ha-media-card
+```
+
+La carte reprend tous les serveurs des intégrations **Plex**, **Jellyfin** et **Emby** de Home Assistant, sans rien configurer :
+
+- **En-tête** : serveurs trouvés et voyant **N en lecture** ou **Aucune lecture**.
+- **Un bloc par serveur** : nom, version, voyant **Mise à jour** quand une nouvelle version est disponible, et nombre de lectures en cours.
+- **Chaque lecture en cours** : jaquette, titre (série et épisode `S02E04`, artiste et album, ou film), utilisateur, lecteur, type de média, barre d'avancement avec le temps écoulé et la durée. En pause, l'icône passe en orange.
+- **Bibliothèques** : nombre de films, séries, morceaux… (Plex : capteurs `Library` désactivés par défaut, à activer dans l'intégration).
+- **Lecteurs** : liste dépliable des lecteurs connus, en vert quand ils sont joignables.
+
+Un clic sur une lecture, une bibliothèque ou un lecteur ouvre sa fiche dans Home Assistant (lecture, pause, volume).
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title`, `icon`, `icon_color` | En-tête | `Serveurs multimédia`, `mdi:play-box-multiple` |
+| `show_libraries` | Afficher les bibliothèques | `true` |
+| `show_clients` | Liste dépliable des lecteurs | `true` |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ## Carte Filtrage DNS — `custom:serveur-ha-dns-card`

@@ -95,7 +95,7 @@
     <aside class="panel" aria-label="Réglages de la démo">
       <h2>Carte</h2>
       <div class="ctl"><div class="seg" data-key="card">
-        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="ping">Réseau</button><button data-v="wg">WireGuard</button><button data-v="gl">Glances</button><button data-v="all">Les 11</button></div></div>
+        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="ping">Réseau</button><button data-v="wg">WireGuard</button><button data-v="gl">Glances</button><button data-v="media">Multimédia</button><button data-v="all">Les 12</button></div></div>
 
       <h2>Affichage</h2>
       <div class="ctl"><div class="ctl-l">Page</div><div class="seg" data-key="page">
@@ -128,6 +128,8 @@
         <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="hot"><i class="sw orange"></i>Disque chaud, mises à jour</button><button data-v="bad"><i class="sw red"></i>Disque en alerte</button><button data-v="off"><i class="sw"></i>Éteint</button></div></div>
       <div class="ctl" data-for="gl all"><div class="ctl-l">Serveurs Glances</div><div class="seg" data-key="gl">
         <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="hot"><i class="sw red"></i>Chaud, disque plein</button></div></div>
+      <div class="ctl" data-for="media all"><div class="ctl-l">Serveurs multimédia</div><div class="seg" data-key="media">
+        <button data-v="play"><i class="sw green"></i>Lectures en cours</button><button data-v="idle"><i class="sw"></i>Rien en lecture</button></div></div>
       <div class="ctl" data-for="wg all"><div class="ctl-l">VPN WireGuard</div><div class="seg" data-key="wg">
         <button data-v="some"><i class="sw green"></i>Pairs connectés</button><button data-v="none"><i class="sw"></i>Aucun pair</button></div></div>
       <div class="ctl" data-for="ping all"><div class="ctl-l">Réseau (Ping)</div><div class="seg" data-key="ping">
@@ -179,8 +181,8 @@
     });
   }
 
-  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card", ping: "serveur-ha-ping-card", wg: "serveur-ha-wireguard-card", gl: "serveur-ha-glances-card" };
-  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok", ping: "ok", wg: "some", gl: "ok" };
+  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card", ping: "serveur-ha-ping-card", wg: "serveur-ha-wireguard-card", gl: "serveur-ha-glances-card", media: "serveur-ha-media-card" };
+  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok", ping: "ok", wg: "some", gl: "ok", media: "play" };
   let state = { ...defaults };
   try { state = { ...defaults, ...JSON.parse(localStorage.getItem("serveur-ha-demo") || "{}") }; } catch (e) { /* ignoré */ }
 
@@ -536,6 +538,22 @@
       g("total", 220 + i * 140, { fn: "Total" }, "process_total");
       g("threads", 410 + i * 260, { fn: "Threads" }, "process_thread");
     });
+    // --- serveurs multimédia (noms, lecteurs et titres fictifs)
+    const mp = state.media === "play";
+    const art = (bg, t) => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 54 76"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${bg}"/><stop offset="1" stop-color="#111"/></linearGradient></defs><rect width="54" height="76" fill="url(#g)"/><text x="27" y="44" font-size="20" text-anchor="middle" fill="#fff" font-family="Arial" font-weight="700">${t}</text></svg>`);
+    devices.plex = { id: "plex", name: "Plex-Media", manufacturer: "Plex", sw_version: "1.43.5.11079-abc" };
+    devices.jf = { id: "jf", name: "Jellyfin", manufacturer: "Jellyfin", sw_version: "10.11.2" };
+    add("sensor.plex_media", mp ? 2 : 0, { unit_of_measurement: "watching", friendly_name: "Plex" }, "plex", null, "plex");
+    add("update.plex_media_mise_a_jour", "on", { installed_version: "1.43.5.11079", latest_version: "1.43.6.11120", friendly_name: "Plex-Media Mise à jour" }, "plex", null, "plex");
+    add("sensor.plex_media_library_films", 412, { friendly_name: "Plex-Media Library - Films" }, "plex", null, "plex");
+    add("sensor.plex_media_library_series_tv", 57, { friendly_name: "Plex-Media Library - Séries TV" }, "plex", null, "plex");
+    add("sensor.plex_media_library_musique", 1834, { friendly_name: "Plex-Media Library - Musique" }, "plex", null, "plex");
+    const pl = (k, name, s, a = {}, dev = "plex", pf = "plex") => { devices[`p_${k}`] = { id: `p_${k}`, name, via_device_id: dev }; add(`media_player.${pf}_${k}`, s, { friendly_name: name, ...a }, pf, null, `p_${k}`); };
+    pl("tv_salon", "Plex (Plex for Android (TV) - TV Salon)", mp ? "playing" : "idle", mp ? { media_content_type: "episode", media_series_title: "Les Voyageurs du ciel", media_title: "Le dernier phare", media_season: 2, media_episode: 4, media_duration: 2760, media_position: 1310, media_position_updated_at: new Date().toISOString(), username: "Invité", entity_picture: art("#2b6cb0", "S2") } : {});
+    pl("chambre", "Plex (Plex for Android (TV) - Chambre)", mp ? "paused" : "idle", mp ? { media_content_type: "movie", media_title: "Horizon bleu", media_library_title: "Films", media_content_rating: "Tous publics", media_duration: 6480, media_position: 4870, media_position_updated_at: new Date().toISOString(), username: "Maison", entity_picture: art("#b7791f", "HB") } : {});
+    pl("navigateur", "Plex (Plex Web - Navigateur)", "unavailable");
+    add("sensor.jellyfin_clients_actifs", mp ? 1 : 0, { unit_of_measurement: "clients", friendly_name: "Jellyfin Clients actifs" }, "jellyfin", null, "jf");
+    pl("tablette", "Tablette", mp ? "playing" : "idle", mp ? { media_content_type: "music", media_title: "Matin calme", media_artist: "Trio Lumière", media_album_name: "Saisons", media_duration: 245, media_position: 92, media_position_updated_at: new Date().toISOString() } : {}, "jf", "jellyfin");
     return { st, ent, devices };
   }
 
@@ -555,6 +573,7 @@
       ping: { type: "custom:serveur-ha-ping-card", theme: t },
       wg: { type: "custom:serveur-ha-wireguard-card", theme: t },
       gl: { type: "custom:serveur-ha-glances-card", theme: t },
+      media: { type: "custom:serveur-ha-media-card", theme: t },
     };
     return state.card === "all" ? Object.values(c) : [c[state.card]];
   }

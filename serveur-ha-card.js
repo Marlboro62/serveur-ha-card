@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.13.0";
+const CARD_VERSION = "0.14.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3239,6 +3239,220 @@ const GL_STYLE = `<style>
 .gl-t b { white-space: nowrap; } .gl-t.warn b { color: #f0a33a; } .gl-t.bad b { color: var(--t-red); } .gl-t.ok b { color: var(--med-down); }
 </style>`;
 
+/* ------------------------------------------------------------ carte Serveurs multimédia (Plex, Jellyfin, Emby) */
+
+const MEDIA_DEFAULTS = {
+  title: "Serveurs multimédia",
+  icon: "mdi:play-box-multiple",
+  icon_color: "",
+  show_libraries: true,
+  show_clients: true, // lecteurs connus, dépliables
+  theme: "v2",
+};
+const MEDIA_APPS = {
+  plex: ["Plex", "mdi:plex", "#e5a00d"],
+  jellyfin: ["Jellyfin", "mdi:jellyfish", "#aa5cc3"],
+  emby: ["Emby", "mdi:emby", "#52b54b"],
+};
+// « Plex (Plex for Android (TV) - TV Salon) » → « TV Salon »
+const mediaPlayerName = (n) => String(n || "").replace(/^(Plex|Jellyfin|Emby)\s*\((.*)\)$/i, "$2").replace(/^.* - /, "").trim();
+const MEDIA_TYPES = { movie: "Film", tvshow: "Série", episode: "Épisode", music: "Musique", track: "Musique", video: "Vidéo", photo: "Photo", channel: "Chaîne" };
+
+class ServeurHaMediaCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("serveur-ha-media-card-editor");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { ...MEDIA_DEFAULTS, ...(config || {}) };
+    this._map = null;
+    this._sig = null;
+    this._open = new Set();
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    if (!this._clicks) {
+      this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const fold = ev.target.closest?.("[data-fold]");
+        if (fold) {
+          ev.stopPropagation();
+          const k = fold.dataset.fold;
+          if (this._open.has(k)) this._open.delete(k); else this._open.add(k);
+          this._sig = null; this._render(); return;
+        }
+        const el = ev.target.closest?.("[data-entity]");
+        if (el?.dataset.entity) {
+          const e = new Event("hass-more-info", { bubbles: true, composed: true });
+          e.detail = { entityId: el.dataset.entity };
+          this.dispatchEvent(e);
+        }
+      }));
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    if (this._hass?.entities !== hass.entities || this._hass?.devices !== hass.devices) this._map = null;
+    this._hass = hass;
+    this._render();
+  }
+
+  connectedCallback() {
+    clearInterval(this._tick);
+    this._tick = setInterval(() => { this._sig = null; this._render(); }, 30000);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._tick);
+  }
+
+  getCardSize() {
+    return 5;
+  }
+
+  _st(id) {
+    return id ? this._hass?.states?.[id] : undefined;
+  }
+
+  /** Serveurs (appareil principal de chaque intégration) et leurs lecteurs (appareils rattachés). */
+  _resolve() {
+    if (this._map) return this._map;
+    const hass = this._hass;
+    const reg = hass.entities || {}, devs = hass.devices || {};
+    const servers = {};
+    const srvOf = (platform, devId) => {
+      const dev = devs[devId];
+      const top = dev?.via_device_id && devs[dev.via_device_id] ? dev.via_device_id : devId;
+      const key = `${platform}:${top || "x"}`;
+      return (servers[key] ||= { key, platform, dev: devs[top], name: devs[top]?.name_by_user || devs[top]?.name || MEDIA_APPS[platform][0], count: null, update: null, libs: [], players: [] });
+    };
+    for (const [id, e] of Object.entries(reg)) {
+      if (!MEDIA_APPS[e.platform] || !hass.states[id] || e.hidden) continue;
+      const s = srvOf(e.platform, e.device_id);
+      const domain = id.split(".")[0];
+      if (domain === "media_player") s.players.push(id);
+      else if (domain === "update") s.update ||= id;
+      else if (domain === "sensor" && /_library_|bibliotheque/.test(id)) s.libs.push(id);
+      else if (domain === "sensor") s.count ||= id;
+    }
+    const list = Object.values(servers).sort((a, b) => a.name.localeCompare(b.name, "fr"));
+    this._map = { servers: list };
+    return this._map;
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const m = this._resolve();
+    const ids = m.servers.flatMap((s) => [s.count, s.update, ...s.libs, ...s.players]);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${[...this._open].join(",")}|${Math.floor(Date.now() / 30000)}|` + ids.map((id) => { const o = this._st(id); return o ? `${o.state}|${o.attributes?.media_title}|${o.attributes?.media_position}` : "-"; }).join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const playing = (id) => /^(playing|paused|buffering)$/.test(this._st(id)?.state || "");
+    const clock = (s) => { if (!Number.isFinite(s)) return ""; s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), mn = Math.floor((s % 3600) / 60); return h ? `${h} h ${String(mn).padStart(2, "0")}` : `${mn} min`; };
+    // titre affiché : série et épisode, artiste et morceau, ou film
+    const titleOf = (a) => {
+      const ep = a.media_season && a.media_episode ? ` · S${String(a.media_season).padStart(2, "0")}E${String(a.media_episode).padStart(2, "0")}` : "";
+      if (a.media_series_title) return [a.media_series_title, `${a.media_title || ""}${ep}`];
+      if (a.media_artist) return [a.media_title || "", [a.media_artist, a.media_album_name].filter(Boolean).join(" · ")];
+      return [a.media_title || a.media_content_id || "Lecture", [a.media_library_title, a.media_content_rating].filter(Boolean).join(" · ")];
+    };
+    const session = (id) => {
+      const o = this._st(id), a = o.attributes || {};
+      const [t1, t2] = titleOf(a);
+      const dur = Number(a.media_duration), posAt = Date.parse(a.media_position_updated_at || "");
+      let pos = Number(a.media_position);
+      if (o.state === "playing" && Number.isFinite(pos) && Number.isFinite(posAt)) pos += (Date.now() - posAt) / 1000;
+      const pct = Number.isFinite(dur) && dur > 0 && Number.isFinite(pos) ? Math.min(100, (pos / dur) * 100) : null;
+      const who = [a.username || a.user, mediaPlayerName(a.friendly_name)].filter(Boolean).join(" · ");
+      const pic = a.entity_picture ? `<img src="${esc(a.entity_picture)}" alt="" loading="lazy">` : `<ha-icon icon="${a.media_content_type === "music" || a.media_artist ? "mdi:music" : "mdi:movie-open-outline"}"></ha-icon>`;
+      return `<div class="md-s ${o.state}" data-entity="${esc(id)}">
+          <div class="md-art">${pic}</div>
+          <div class="md-i"><div class="md-t">${esc(t1)}</div>${t2 ? `<div class="md-t2">${esc(t2)}</div>` : ""}
+            <div class="md-w"><ha-icon icon="${o.state === "paused" ? "mdi:pause" : "mdi:play"}"></ha-icon>${esc(who || "Lecteur")}${MEDIA_TYPES[a.media_content_type] ? ` · ${MEDIA_TYPES[a.media_content_type]}` : ""}</div>
+            ${pct !== null ? `<div class="md-p"><div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div><small>${clock(pos)} / ${clock(dur)}</small></div>` : ""}</div>
+        </div>`;
+    };
+
+    let totalPlaying = 0;
+    const blocks = m.servers.map((s) => {
+      const [app, appIcon, appColor] = MEDIA_APPS[s.platform];
+      const now = s.players.filter(playing);
+      totalPlaying += now.length;
+      const upd = this._st(s.update);
+      const needUpd = upd?.state === "on";
+      const version = s.dev?.sw_version || upd?.attributes?.installed_version;
+      const libs = c.show_libraries !== false ? s.libs.map((id) => {
+        const o = this._st(id); const n = Number(o?.state);
+        const name = String(o?.attributes?.friendly_name || id).replace(/^.*?(library|bibliothèque)\s*-?\s*/i, "") || id;
+        return Number.isFinite(n) ? `<span class="md-lib" data-entity="${esc(id)}"><b>${fmt(n, 0)}</b>${esc(name)}</span>` : "";
+      }).filter(Boolean) : [];
+      const isOpen = this._open.has(s.key);
+      const known = s.players.filter((id) => this._st(id)?.state !== "unavailable");
+      const clients = c.show_clients !== false && s.players.length ? `<button class="md-more" data-fold="${esc(s.key)}"><ha-icon icon="${isOpen ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon>${isOpen ? "Réduire" : `Lecteurs (${known.length} disponible${known.length > 1 ? "s" : ""} sur ${s.players.length})`}</button>
+          ${isOpen ? `<div class="md-cl">${s.players.map((id) => { const o = this._st(id); const on = o?.state !== "unavailable"; return `<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}"><i></i>${esc(mediaPlayerName(o?.attributes?.friendly_name) || id)}</span>`; }).join("")}</div>` : ""}` : "";
+      return `<div class="md-srv">
+          <div class="md-h" data-entity="${esc(s.count || s.update || "")}">
+            <span class="md-app" style="--app:${appColor}"><ha-icon icon="${appIcon}"></ha-icon></span>
+            <div class="md-hn"><b>${esc(s.name)}</b><small>${esc([app, version ? `v${String(version).split("-")[0]}` : null].filter(Boolean).join(" · "))}</small></div>
+            ${needUpd ? `<span class="srv-led upd" data-entity="${esc(s.update)}"><i></i>Mise à jour</span>` : ""}
+            <span class="md-n ${now.length ? "on" : ""}">${now.length ? `${now.length} en lecture` : "Rien en lecture"}</span>
+          </div>
+          ${now.length ? `<div class="md-ss">${now.map(session).join("")}</div>` : ""}
+          ${libs.length ? `<div class="md-libs">${libs.join("")}</div>` : ""}
+          ${clients}
+        </div>`;
+    }).join("");
+
+    const body = !m.servers.length
+      ? `<div class="empty">Aucun serveur multimédia trouvé<span>Ajoutez l'intégration Plex, Jellyfin ou Emby dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`
+      : `<div class="md-list">${blocks}</div>`;
+    const leds = m.servers.length ? `<span class="srv-led ${totalPlaying ? "ok" : "na"}"><i></i>${totalPlaying ? `${totalPlaying} en lecture` : "Aucune lecture"}</span>` : "";
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${OMV_STYLE}${MEDIA_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
+      <header>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:play-box-multiple")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+          <div><div class="title">${esc(c.title || "Serveurs multimédia")}</div><div class="sub">${m.servers.map((s) => esc(MEDIA_APPS[s.platform][0])).filter((v, i, a) => a.indexOf(v) === i).join(" · ") || "Plex, Jellyfin, Emby"}</div></div></div>
+        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+      </header>
+      ${body}
+    </ha-card>`;
+  }
+}
+
+const MEDIA_STYLE = `<style>
+.srv-led.upd i { background: #f0a33a; } .srv-led.upd { border-color: #f0a33a; cursor: pointer; }
+.md-list { display: grid; gap: 8px; margin: 4px 12px 14px; }
+.md-srv { border: 1px solid var(--med-line); border-radius: 14px; padding: 10px 12px; display: grid; gap: 8px; }
+.md-h { display: flex; align-items: center; gap: 10px; cursor: pointer; flex-wrap: wrap; }
+.md-app { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--app) 18%, transparent); flex: none; }
+.md-app ha-icon { --mdc-icon-size: 22px; color: var(--app); }
+.md-hn { display: grid; flex: 1; min-width: 0; } .md-hn b { font-size: .92rem; } .md-hn small { font-size: .72rem; color: var(--med-muted); }
+.md-n { font-size: .78rem; color: var(--med-muted); white-space: nowrap; } .md-n.on { color: var(--med-down); font-weight: 700; }
+.md-ss { display: grid; gap: 6px; }
+.md-s { display: grid; grid-template-columns: 54px 1fr; gap: 10px; padding: 8px; border-radius: 12px; background: var(--med-surface); cursor: pointer; }
+.md-art { width: 54px; height: 76px; border-radius: 8px; overflow: hidden; background: var(--med-line); display: grid; place-items: center; }
+.md-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.md-art ha-icon { --mdc-icon-size: 26px; color: var(--med-muted); }
+.md-i { display: grid; gap: 2px; min-width: 0; align-content: start; }
+.md-t { font-weight: 700; font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.md-t2 { font-size: .76rem; color: var(--med-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.md-w { display: flex; align-items: center; gap: 4px; font-size: .74rem; color: var(--med-text); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.md-w ha-icon { --mdc-icon-size: 15px; color: var(--med-down); } .md-s.paused .md-w ha-icon { color: #f0a33a; }
+.md-p { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; margin-top: 4px; }
+.md-p .bar { height: 5px; } .md-p .bar i { background: var(--med-blue); }
+.md-p small { font-size: .68rem; color: var(--med-muted); white-space: nowrap; }
+.md-libs { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; }
+.md-lib { display: grid; justify-items: center; padding: 6px 4px; border-radius: 10px; background: var(--med-surface); font-size: .7rem; color: var(--med-muted); cursor: pointer; text-align: center; }
+.md-lib b { font-size: 1rem; color: var(--med-text); }
+.md-more { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
+  padding: 6px; border-radius: 10px; border: 1px solid var(--med-line); font-size: .76rem; font-weight: 600; color: var(--med-muted); }
+.md-more:hover { color: var(--med-text); border-color: var(--med-blue); } .md-more ha-icon { --mdc-icon-size: 17px; }
+.md-cl { display: flex; flex-wrap: wrap; gap: 6px; }
+</style>`;
+
 /* ------------------------------------------------------------ carte DNS (AdGuard Home, Pi-hole) */
 
 const DNS_DEFAULTS = {
@@ -4305,6 +4519,24 @@ const GL_LABELS = {
   theme: "Couleurs de la carte",
 };
 const ServeurHaGlancesCardEditor = makeEditor(GL_SCHEMA, GL_LABELS, GL_DEFAULTS);
+const MEDIA_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  { name: "icon_color", selector: { text: {} } },
+  { name: "show_libraries", selector: { boolean: {} } },
+  { name: "show_clients", selector: { boolean: {} } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const MEDIA_LABELS = {
+  title: "Titre",
+  icon: "Icône",
+  icon_color: "Couleur de l'icône",
+  show_libraries: "Afficher les bibliothèques (capteurs à activer dans l'intégration)",
+  show_clients: "Liste des lecteurs connus (dépliable)",
+  theme: "Couleurs de la carte",
+};
+const ServeurHaMediaCardEditor = makeEditor(MEDIA_SCHEMA, MEDIA_LABELS, MEDIA_DEFAULTS);
 const DNS_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -4408,6 +4640,8 @@ if (typeof customElements !== "undefined") {
   define("serveur-ha-wireguard-card-editor", ServeurHaWireguardCardEditor);
   define("serveur-ha-glances-card", ServeurHaGlancesCard);
   define("serveur-ha-glances-card-editor", ServeurHaGlancesCardEditor);
+  define("serveur-ha-media-card", ServeurHaMediaCard);
+  define("serveur-ha-media-card-editor", ServeurHaMediaCardEditor);
   define("serveur-ha-dns-card", ServeurHaDnsCard);
   define("serveur-ha-dns-card-editor", ServeurHaDnsCardEditor);
   define("serveur-ha-linux-card", ServeurHaLinuxCard);
@@ -4483,6 +4717,14 @@ if (typeof customElements !== "undefined") {
       type: "serveur-ha-glances-card",
       name: "Carte Serveurs Glances",
       description: "Serveurs suivis par Glances : CPU, RAM, disques, températures, ventilateurs, réseau, processus.",
+      preview: true,
+    });
+  }
+  if (!window.customCards.some((c) => c.type === "serveur-ha-media-card")) {
+    window.customCards.push({
+      type: "serveur-ha-media-card",
+      name: "Carte Serveurs multimédia (Plex, Jellyfin, Emby)",
+      description: "Ce qui est en lecture, qui regarde et où, avancement, bibliothèques et mises à jour des serveurs Plex, Jellyfin ou Emby.",
       preview: true,
     });
   }
