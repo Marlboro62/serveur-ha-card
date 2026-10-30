@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.10.0-beta.1";
+const CARD_VERSION = "0.10.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2085,6 +2085,14 @@ class ServeurHaAsusCard extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     if (!this._clicks) {
       this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const filter = ev.target.closest?.("[data-devs]");
+        if (filter) {
+          // liste des appareils : « Voir tous » ou une tuile (Wi-Fi 2,4 GHz, 5 GHz, filaire) déplie ou replie la liste
+          ev.stopPropagation();
+          const f = filter.dataset.devs;
+          this._devs = this._devs === f ? null : f;
+          this._sig = null; this._render(); return;
+        }
         const press = ev.target.closest?.("[data-press]");
         if (press) {
           // Redémarrer, redémarrer le Wi-Fi, LED : premier clic arme, second clic dans les 5 s confirme
@@ -2180,7 +2188,7 @@ class ServeurHaAsusCard extends HTMLElement {
     const m = this._resolve();
     const r = m.roles;
     const ids = [...Object.values(r), ...m.guests, ...m.vpns];
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._armed}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => { const s = this._st(id); return s ? `${s.state}|${s.last_updated}` : "-"; }).join("|");
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._armed}|${this._devs}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => { const s = this._st(id); return s ? `${s.state}|${s.last_updated}` : "-"; }).join("|");
     if (sig === this._sig) return;
     this._sig = sig;
 
@@ -2329,10 +2337,10 @@ class ServeurHaAsusCard extends HTMLElement {
         const total = this._num(r.clients);
         const guestsN = this._num(r.guests);
         const tiles = [
-          ["Wi-Fi 2,4 GHz", count(/^2ghz$/), "mdi:wifi"],
-          ["Wi-Fi 5 GHz", count(/^5ghz/), "mdi:wifi"],
-          ["Filaire", count(/^wired$/), "mdi:ethernet"],
-          ["Invités", guestsN, "mdi:account-multiple-outline"],
+          ["Wi-Fi 2,4 GHz", count(/^2ghz$/), "mdi:wifi", "2ghz"],
+          ["Wi-Fi 5 GHz", count(/^5ghz/), "mdi:wifi", "5ghz"],
+          ["Filaire", count(/^wired$/), "mdi:ethernet", "wired"],
+          ["Invités", guestsN, "mdi:account-multiple-outline", "guest"],
         ].filter(([, v], i) => v !== null && (v > 0 || i < 3) && (devices.length || i === 3));
         const latestList = Array.isArray(st(r.latest)?.attributes?.list) ? [...st(r.latest).attributes.list] : [];
         latestList.sort((a, b) => String(b?.connected || "").localeCompare(String(a?.connected || "")));
@@ -2342,9 +2350,26 @@ class ServeurHaAsusCard extends HTMLElement {
           const when = d?.connected ? since(d.connected) : null;
           return `<div class="asus-dev" data-entity="${esc(r.latest)}"><ha-icon icon="${/wired/.test(d?.connection_type || "") ? "mdi:ethernet" : "mdi:wifi"}"></ha-icon><span>${esc(name)}</span><small>${esc([ASUS_LINK[d?.connection_type] || null, when ? `il y a ${when}` : null].filter(Boolean).join(" · "))}</small></div>`;
         });
+        // liste complète, dépliée par « Voir tous » ou par une tuile : par type de connexion, puis par nom
+        const open = this._devs && devices.length ? this._devs : null;
+        const ORDER = { "2ghz": 1, "5ghz": 2, "5ghz2": 3, "6ghz": 4, wired: 5 };
+        const label = (d) => String(d?.name || d?.ip || d?.mac || "Appareil").replace(/^\[\d+\]\s*/, "");
+        const shown = !open ? [] : devices
+          .filter((d) => open === "all" || (open === "guest" ? d?.guest : String(d?.connection_type || "").startsWith(open)))
+          .sort((a, b) => (ORDER[a?.connection_type] || 9) - (ORDER[b?.connection_type] || 9) || label(a).localeCompare(label(b), "fr", { numeric: true }));
+        const full = shown.map((d) => {
+          const when = d?.connected ? since(d.connected) : null;
+          return `<div class="asus-dev"><ha-icon icon="${/wired/.test(d?.connection_type || "") ? "mdi:ethernet" : "mdi:wifi"}"></ha-icon><div class="asus-dn"><span>${esc(label(d))}</span><small>${esc([d?.ip || null, ASUS_LINK[d?.connection_type] || null, when ? `depuis ${when}` : null].filter(Boolean).join(" · "))}</small></div></div>`;
+        });
+        const openName = { all: "Tous les appareils", "2ghz": "Wi-Fi 2,4 GHz", "5ghz": "Wi-Fi 5 GHz", wired: "Filaire", guest: "Invités" }[open];
+        const more = devices.length
+          ? `<button class="asus-more ${open ? "on" : ""}" data-devs="${open || "all"}"><ha-icon icon="${open ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon>${open ? "Réduire" : `Voir les ${fmt(devices.length, 0)} appareils`}</button>`
+          : "";
         clients = sec("mdi:devices", `Appareils connectés <small class="pve-n">${total !== null ? fmt(total, 0) : ""}</small>`,
-          `${tiles.length ? `<div class="asus-counts" data-entity="${esc(r.clients || "")}">${tiles.map(([label, v, icon]) => `<div><ha-icon icon="${icon}"></ha-icon><b>${v === null ? "—" : fmt(v, 0)}</b><small>${label}</small></div>`).join("")}</div>` : ""}
-          ${latest.length ? `<div class="asus-sub">Dernières connexions</div><div class="asus-devs">${latest.join("")}</div>` : ""}`);
+          `${tiles.length ? `<div class="asus-counts">${tiles.map(([lbl, v, icon, key]) => `<div class="${open === key ? "on" : ""}" ${devices.length && v ? `data-devs="${key}" title="Voir les appareils : ${lbl}"` : ""}><ha-icon icon="${icon}"></ha-icon><b>${v === null ? "—" : fmt(v, 0)}</b><small>${lbl}</small></div>`).join("")}</div>` : ""}
+          ${open ? `<div class="asus-sub">${openName} <b>${fmt(shown.length, 0)}</b></div><div class="asus-devs asus-all">${full.join("") || `<div class="asus-note">Aucun appareil</div>`}</div>`
+            : latest.length ? `<div class="asus-sub">Dernières connexions</div><div class="asus-devs">${latest.join("")}</div>` : ""}
+          ${more}`);
       }
 
       // --- VPN, contrôle parental
@@ -2409,7 +2434,17 @@ const ASUS_STYLE = `<style>
 .asus-port.g { border-color: color-mix(in srgb, var(--med-down) 55%, transparent); } .asus-port.g ha-icon, .asus-port.g small { color: var(--med-down); }
 .asus-port.m { border-color: color-mix(in srgb, #f0a33a 55%, transparent); } .asus-port.m ha-icon, .asus-port.m small { color: #f0a33a; }
 .asus-port.off { opacity: .55; }
-.asus-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; cursor: pointer; }
+.asus-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; }
+.asus-counts > [data-devs] { cursor: pointer; } .asus-counts > [data-devs]:hover { border-color: var(--med-blue); }
+.asus-counts > .on { border-color: var(--med-blue); }
+.asus-more { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 8px;
+  padding: 7px; border-radius: 10px; border: 1px solid var(--med-line); font-size: .78rem; font-weight: 600; color: var(--med-muted); }
+.asus-more:hover, .asus-more.on { color: var(--med-text); border-color: var(--med-blue); }
+.asus-more ha-icon { --mdc-icon-size: 18px; }
+.asus-sub b { color: var(--med-text); margin-left: 4px; }
+.asus-all { max-height: 420px; overflow-y: auto; }
+.asus-all .asus-dev { cursor: default; grid-template-columns: 20px 1fr; }
+.asus-dn { display: grid; min-width: 0; } .asus-dn small { white-space: normal; }
 .asus-counts > div { display: grid; justify-items: center; padding: 8px 4px; border-radius: 10px; border: 1px solid var(--med-line); background: var(--med-surface); }
 .asus-counts ha-icon { --mdc-icon-size: 18px; color: var(--med-blue); }
 .asus-counts b { font-size: 1.15rem; } .asus-counts small { font-size: .68rem; color: var(--med-muted); text-align: center; }
