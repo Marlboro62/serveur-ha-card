@@ -28,7 +28,7 @@
 
 # Cartes Serveur HA
 
-**Six cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
+**Huit cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
 
 | Type | Carte |
 | --- | --- |
@@ -38,6 +38,7 @@
 | `custom:serveur-ha-dns-card` | **Filtrage DNS** (AdGuard Home ou Pi-hole) : requêtes, part bloquée, temps de réponse, protection et réglages, pause, mises à jour |
 | `custom:serveur-ha-linux-card` | **Serveurs Linux** ([Linux Update Dashboard](https://github.com/TheDuffman85/linux-update-dashboard)) : mises à jour en attente, sécurité, paquets, redémarrage requis, installation confirmée en deux clics |
 | `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
+| `custom:serveur-ha-asus-card` | **Routeur ASUS** ([AsusRouter](https://github.com/Vaskivskyi/ha-asusrouter)) : Internet et IP publique, débits, Wi-Fi et réseaux invités, ports Ethernet, appareils connectés, VPN, firmware, températures, redémarrage confirmé en deux clics |
 | `custom:serveur-ha-omv-card` | **OpenMediaVault** : système (uptime, version, charge, CPU, RAM), systèmes de fichiers, disques (température, SMART), services, réseau, mises à jour, redémarrage et arrêt confirmés en deux clics |
 
 **Pare-feu OPNsense** : la carte a son propre dépôt, [Carte OPNsense](https://github.com/Marlboro62/opnsense-card) (`custom:opnsense-card`).
@@ -70,9 +71,13 @@
 | --- | --- | --- |
 | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/omv.png" alt="OpenMediaVault" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/omv-alerte.png" alt="OpenMediaVault, disque en alerte" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/omv-clair.png" alt="OpenMediaVault clair" width="300"> |
 
+| Routeur ASUS | Chargé, mise à jour du firmware | Routeur ASUS clair |
+| --- | --- | --- |
+| <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/asus.png" alt="Routeur ASUS" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/asus-alerte.png" alt="Routeur ASUS chargé" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/asus-clair.png" alt="Routeur ASUS clair" width="300"> |
+
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 6 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 8 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 ## Installation
 
@@ -310,6 +315,47 @@ type: custom:serveur-ha-omv-card
 title: NAS maison
 power_on: button.wake_on_lan_00_11_22_33_44_55
 show_ups: false
+```
+
+## Carte Routeur ASUS — `custom:serveur-ha-asus-card`
+
+```yaml
+type: custom:serveur-ha-asus-card
+```
+
+La carte lit les capteurs de l'intégration **[AsusRouter](https://github.com/Vaskivskyi/ha-asusrouter)** (HACS), pour les routeurs ASUS (firmware ASUS ou Asuswrt-Merlin) :
+
+1. HACS › chercher **AsusRouter** › Télécharger, puis redémarrer Home Assistant ;
+2. **Paramètres › Appareils et services › Ajouter une intégration › AsusRouter** : adresse du routeur et compte administrateur.
+
+Tout est ensuite détecté :
+
+- **En-tête** : modèle, version du firmware, adresse IP du routeur, voyants **Internet** (vert ou rouge), **Internet bloqué** et **Mise à jour**.
+- **Système** : uptime, firmware (à jour ou nouvelle version), charge moyenne (1, 5 et 15 min), jauges **CPU** (avec chaque cœur), **RAM** (Mo utilisés sur le total) et températures du processeur et des radios Wi-Fi (orange à 80 °C, rouge à 95 °C).
+- **Internet** : connexion, IP publique, débits download et upload, volume échangé depuis le démarrage du routeur.
+- **Wi-Fi** : bandes 2,4 et 5 GHz (activées ou non, nombre d'appareils, SSID au survol), réseaux invités actifs, débits en réception et en envoi par bande et en filaire. Seul le SSID est lu : le mot de passe du Wi-Fi, que l'intégration expose, n'est jamais affiché.
+- **Ports** : port WAN et ports LAN, connectés à 1 Gbit/s (vert), 100 Mbit/s (orange) ou déconnectés.
+- **Appareils connectés** : nombre total, en Wi-Fi 2,4 GHz, 5 GHz, filaire et sur le réseau invités, et les dernières connexions.
+- **VPN** : clients et serveurs OpenVPN ou WireGuard actifs, contrôle parental.
+- **Actions** : **Redémarrer**, **Redémarrer le Wi-Fi**, **Actualiser les appareils**, allumer ou éteindre les **LED**. Chaque bouton demande **un second clic dans les 5 secondes**.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `device` | Routeur, s'il y en a plusieurs | le premier |
+| `title`, `icon`, `icon_color` | En-tête | modèle du routeur, `mdi:router-wireless` |
+| `ip` | Adresse IP affichée | adresse du routeur |
+| `wan_max` | Pleine échelle des barres Internet (Mbit/s, le débit de l'abonnement) | `1000` |
+| `wifi_max` | Pleine échelle des barres Wi-Fi et filaire (Mbit/s) | `300` |
+| `temp_warn`, `temp_alert` | Seuils de température (°C) | `80`, `95` |
+| `latest` | Dernières connexions affichées (0 = aucune) | `5` |
+| `show_system`, `show_internet`, `show_wifi`, `show_ports`, `show_clients`, `show_vpn`, `show_actions` | Afficher chaque section, et les boutons | `true` |
+| `theme` | `v2`, `auto` ou `ha` | `v2` |
+
+```yaml
+type: custom:serveur-ha-asus-card
+title: Box internet
+wan_max: 500
+latest: 0
 ```
 
 ## Carte Filtrage DNS — `custom:serveur-ha-dns-card`

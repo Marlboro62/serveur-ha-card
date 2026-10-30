@@ -95,7 +95,7 @@
     <aside class="panel" aria-label="Réglages de la démo">
       <h2>Carte</h2>
       <div class="ctl"><div class="seg" data-key="card">
-        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="all">Les 7</button></div></div>
+        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="all">Les 8</button></div></div>
 
       <h2>Affichage</h2>
       <div class="ctl"><div class="ctl-l">Page</div><div class="seg" data-key="page">
@@ -126,6 +126,8 @@
         <button data-v="ok"><i class="sw green"></i>Tout à jour</button><button data-v="upd"><i class="sw orange"></i>Mises à jour</button><button data-v="sec"><i class="sw red"></i>Sécurité, redémarrage</button></div></div>
       <div class="ctl" data-for="omv all"><div class="ctl-l">OpenMediaVault</div><div class="seg" data-key="omv">
         <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="hot"><i class="sw orange"></i>Disque chaud, mises à jour</button><button data-v="bad"><i class="sw red"></i>Disque en alerte</button><button data-v="off"><i class="sw"></i>Éteint</button></div></div>
+      <div class="ctl" data-for="asus all"><div class="ctl-l">Routeur ASUS</div><div class="seg" data-key="asus">
+        <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="busy"><i class="sw orange"></i>Chargé, mise à jour</button><button data-v="down"><i class="sw red"></i>Internet coupé</button></div></div>
     </aside>
 
     <main class="stage">
@@ -171,8 +173,8 @@
     });
   }
 
-  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card" };
-  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok" };
+  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card" };
+  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok" };
   let state = { ...defaults };
   try { state = { ...defaults, ...JSON.parse(localStorage.getItem("serveur-ha-demo") || "{}") }; } catch (e) { /* ignoré */ }
 
@@ -416,6 +418,52 @@
     };
     disk("omv_d1", "wdc_wd40efrx_68n32n0_sda", "sda", oh ? 51 : ob ? 48 : 38, ob ? "BAD" : "GOOD", oh ? 88 : 62, 3936.7);
     disk("omv_d2", "samsung_ssd_870_evo_250gb_sdb", "sdb", 33, "GOOD", 18, 245.1);
+    // --- routeur ASUS (noms fictifs, entités au format de l'intégration AsusRouter « asusrouter »)
+    const A = "asusrouter", ab = state.asus === "busy", ad = state.asus === "down", a_ = "rt_ax58u_";
+    devices.asus = { id: "asus", name: "RT-AX58U", manufacturer: "ASUSTek", model: "RT-AX58U", sw_version: "3.0.0.6.102_35404", configuration_url: "http://192.168.1.1" };
+    const aa = (d, id, s, attrs = {}) => add(`${d}.${a_}${id}`, s, attrs, A, null, "asus");
+    aa("sensor", "cpu", ab ? 68.4 : 6.2, { unit_of_measurement: "%", core_1: ab ? 71 : 5, core_2: ab ? 66 : 8, core_3: ab ? 70 : 4, core_4: ab ? 67 : 7 });
+    aa("sensor", "ram", ab ? 86.3 : 41.2, { unit_of_measurement: "%", used: ab ? 452500 : 216000, total: 524288 });
+    aa("sensor", "boot_time", iso(-(ab ? 41 : 7.4) * D), { device_class: "timestamp" });
+    aa("sensor", "uptime", Math.round((ab ? 41 : 7.4) * 86400), { unit_of_measurement: "s", device_class: "duration" });
+    [["1", ab ? 2.31 : 0.15], ["5", ab ? 1.92 : 0.12], ["15", ab ? 1.4 : 0.09]].forEach(([n, v]) => aa("sensor", `load_average_${n}_min`, v));
+    aa("sensor", "temperature_cpu", ab ? 91 : 72, { unit_of_measurement: "°C", device_class: "temperature" });
+    aa("sensor", "temperature_2_4_ghz", ab ? 58 : 46, { unit_of_measurement: "°C", device_class: "temperature" });
+    aa("sensor", "temperature_5_ghz", ab ? 63 : 51, { unit_of_measurement: "°C", device_class: "temperature" });
+    aa("sensor", "wan_download_speed", ad ? 0 : ab ? 742.6 : 12.4, { unit_of_measurement: "Mbit/s", device_class: "data_rate" });
+    aa("sensor", "wan_upload_speed", ad ? 0 : ab ? 186.3 : 1.8, { unit_of_measurement: "Mbit/s", device_class: "data_rate" });
+    aa("sensor", "wan_download", ab ? 1874.2 : 63.1, { unit_of_measurement: "GB", device_class: "data_size" });
+    aa("sensor", "wan_upload", ab ? 312.8 : 9.7, { unit_of_measurement: "GB", device_class: "data_size" });
+    aa("sensor", "2_4_ghz_download_speed", ab ? 38.2 : 1.1, { unit_of_measurement: "Mbit/s" });
+    aa("sensor", "2_4_ghz_upload_speed", ab ? 12.5 : 0.3, { unit_of_measurement: "Mbit/s" });
+    aa("sensor", "5_ghz_download_speed", ab ? 214.7 : 8.6, { unit_of_measurement: "Mbit/s" });
+    aa("sensor", "5_ghz_upload_speed", ab ? 41.9 : 1.2, { unit_of_measurement: "Mbit/s" });
+    aa("sensor", "wired_download_speed", ab ? 488.1 : 3.9, { unit_of_measurement: "Mbit/s" });
+    aa("sensor", "wired_upload_speed", ab ? 132.4 : 0.8, { unit_of_measurement: "Mbit/s" });
+    aa("sensor", "wan_ip", ad ? "unavailable" : "203.0.113.42");
+    const adev = [["Téléviseur salon", "5ghz", 0.4], ["Tablette", "5ghz", 1.2], ["Aspirateur robot", "2ghz", 6], ["Prise connectée bureau", "2ghz", 30], ["Imprimante", "wired", 0], ["NAS", "wired", 0], ["Box TV", "wired", 0], ["Ordinateur portable", "5ghz", 0.1], ["Station météo", "2ghz", 52], ["Enceinte cuisine", "5ghz", 3]];
+    const devs = adev.map(([name, type, h], i) => ({ mac: `00:11:22:33:44:${String(i).padStart(2, "0")}`, ip: `192.168.1.${100 + i}`, name, connection_type: type, guest: false, ...(type === "wired" ? {} : { connected: iso(-h * H) }) }));
+    aa("sensor", "connected_devices", devs.length, { devices: devs });
+    aa("sensor", "connected_guestnetwork_devices", ab ? 2 : 0);
+    const recent = devs.filter((d) => d.connected).sort((a, b) => b.connected.localeCompare(a.connected)).slice(0, 5);
+    aa("sensor", "latest_connected", recent[0].connected, { device_class: "timestamp", list: recent });
+    aa("sensor", "aimesh", 1, { list: [{ mac: "00:11:22:33:44:ff", ip: "192.168.1.1", model: "RT-AX58U", type: "router", connected: true }] });
+    aa("binary_sensor", "internet", ad ? "off" : "on", { device_class: "connectivity" });
+    aa("binary_sensor", "wan", ad ? "off" : "on", { device_class: "connectivity" });
+    aa("binary_sensor", "dual_wan", "off", { device_class: "connectivity" });
+    aa("binary_sensor", "port_status_wan", "on", { list: { 0: { state: true, link_rate: 1000 } } });
+    aa("binary_sensor", "port_status_lan", "on", { list: { 1: { state: true, link_rate: 1000 }, 2: { state: true, link_rate: 1000 }, 3: { state: false, link_rate: 0 }, 4: { state: true, link_rate: 100 } } });
+    aa("switch", "wireless_2_4_ghz", "on", { ssid: "Maison", device_class: "wlan" });
+    aa("switch", "wireless_5_ghz", "on", { ssid: "Maison-5G", device_class: "wlan" });
+    aa("switch", "guest_2_4_ghz_1", ab ? "on" : "off", { ssid: "Invités" });
+    aa("switch", "guest_5_ghz_1", "off", { ssid: "Invités-5G" });
+    aa("switch", "wireguard_server_1", "on");
+    aa("switch", "openvpn_client_1", "off");
+    aa("switch", "parental_control", "off");
+    aa("switch", "block_internet", "off");
+    for (const b of ["reboot", "restart_wireless", "refresh_clients"]) aa("button", b, "unknown");
+    aa("light", "led", "on");
+    aa("update", "firmware_update", ab ? "on" : "off", { installed_version: "3.0.0.6.102_35404", latest_version: ab ? "3.0.0.6.102_37000" : "3.0.0.6.102_35404" });
     return { st, ent, devices };
   }
 
@@ -431,6 +479,7 @@
       dns: { type: "custom:serveur-ha-dns-card", theme: t },
       lnx: { type: "custom:serveur-ha-linux-card", theme: t },
       omv: { type: "custom:serveur-ha-omv-card", title: "NAS maison", power_on: "button.wake_on_lan_00_11_22_33_44_66", ups_name: "Green Cell 600VA", theme: t },
+      asus: { type: "custom:serveur-ha-asus-card", theme: t },
     };
     return state.card === "all" ? Object.values(c) : [c[state.card]];
   }

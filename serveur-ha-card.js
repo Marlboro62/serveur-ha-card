@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.9.1";
+const CARD_VERSION = "0.10.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2007,6 +2007,422 @@ const OMV_STYLE = `<style>
 .omv-svc.on i { background: var(--med-down); }
 </style>`;
 
+/* ------------------------------------------------------------ carte routeur ASUS (AsusRouter) */
+
+const ASUS_DEFAULTS = {
+  title: "",
+  icon: "mdi:router-wireless",
+  icon_color: "",
+  wan_max: 1000, // Mbit/s, pleine échelle des barres Internet
+  wifi_max: 300, // Mbit/s, pleine échelle des barres Wi-Fi et filaire
+  temp_warn: 80, temp_alert: 95, // °C, processeur et radios
+  show_system: true, show_internet: true, show_wifi: true, show_ports: true, show_clients: true, show_vpn: true, show_actions: true,
+  latest: 5, // derniers appareils connectés affichés
+  theme: "v2",
+};
+
+/** Rôles des entités du routeur (intégration AsusRouter « asusrouter ») : domaine et fin de l'identifiant. */
+const ASUS_ROLES = [
+  ["cpu", "sensor", /(?<!_temperature)_cpu$/],
+  ["ram", "sensor", /_ram$/],
+  ["uptime", "sensor", /_uptime$/],
+  ["boot", "sensor", /_boot_time$/],
+  ["load1", "sensor", /_load_average_1_min$/],
+  ["load5", "sensor", /_load_average_5_min$/],
+  ["load15", "sensor", /_load_average_15_min$/],
+  ["t_cpu", "sensor", /_temperature_cpu$/],
+  ["t_24", "sensor", /_temperature_2_4_ghz$/],
+  ["t_5", "sensor", /_temperature_5_ghz$/],
+  ["t_52", "sensor", /_temperature_5_ghz_2$/],
+  ["t_6", "sensor", /_temperature_6_ghz$/],
+  ["wan_rx", "sensor", /_wan_download_speed$/],
+  ["wan_tx", "sensor", /_wan_upload_speed$/],
+  ["wan_rx_total", "sensor", /_wan_download$/],
+  ["wan_tx_total", "sensor", /_wan_upload$/],
+  ["w24_rx", "sensor", /_2_4_ghz_download_speed$/],
+  ["w24_tx", "sensor", /_2_4_ghz_upload_speed$/],
+  ["w5_rx", "sensor", /_5_ghz_download_speed$/],
+  ["w5_tx", "sensor", /_5_ghz_upload_speed$/],
+  ["lan_rx", "sensor", /_wired_download_speed$/],
+  ["lan_tx", "sensor", /_wired_upload_speed$/],
+  ["wan_ip", "sensor", /_wan_ip$/],
+  ["clients", "sensor", /_connected_devices$/],
+  ["guests", "sensor", /_connected_guestnetwork_devices$/],
+  ["latest", "sensor", /_latest_connected$/],
+  ["mesh", "sensor", /_aimesh$/],
+  ["internet", "binary_sensor", /_internet$/],
+  ["wan", "binary_sensor", /(?<!_dual)_wan$/],
+  ["ports_lan", "binary_sensor", /_port_status_lan$/],
+  ["ports_wan", "binary_sensor", /_port_status_wan$/],
+  ["wifi24", "switch", /_wireless_2_4_ghz$/],
+  ["wifi5", "switch", /_wireless_5_ghz$/],
+  ["wifi52", "switch", /_wireless_5_ghz_2$/],
+  ["wifi6", "switch", /_wireless_6_ghz$/],
+  ["block", "switch", /_block_internet$/],
+  ["parental", "switch", /_parental_control$/],
+  ["reboot", "button", /_reboot$/],
+  ["restart_wifi", "button", /_restart_wireless$/],
+  ["refresh", "button", /_refresh_clients$/],
+  ["led", "light", /_led$/],
+  ["update", "update", /_firmware_update$/],
+];
+/** Type de connexion d'un appareil (attribut devices de « Connected Devices »). */
+const ASUS_LINK = { "2ghz": "Wi-Fi 2,4 GHz", "5ghz": "Wi-Fi 5 GHz", "5ghz2": "Wi-Fi 5 GHz", "6ghz": "Wi-Fi 6 GHz", wired: "Filaire" };
+
+class ServeurHaAsusCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("serveur-ha-asus-card-editor");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { ...ASUS_DEFAULTS, ...(config || {}) };
+    this._map = null;
+    this._sig = null;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    if (!this._clicks) {
+      this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const press = ev.target.closest?.("[data-press]");
+        if (press) {
+          // Redémarrer, redémarrer le Wi-Fi, LED : premier clic arme, second clic dans les 5 s confirme
+          ev.stopPropagation();
+          const id = press.dataset.press;
+          if (this._armed === id) {
+            this._armed = null;
+            const domain = id.split(".")[0];
+            if (domain === "button") this._hass?.callService("button", "press", { entity_id: id });
+            else this._hass?.callService("homeassistant", "toggle", { entity_id: id });
+          } else {
+            this._armed = id;
+            clearTimeout(this._armTimer);
+            this._armTimer = setTimeout(() => { this._armed = null; this._sig = null; this._render(); }, 5000);
+          }
+          this._sig = null; this._render(); return;
+        }
+        const el = ev.target.closest?.("[data-entity]");
+        if (el?.dataset.entity) {
+          const e = new Event("hass-more-info", { bubbles: true, composed: true });
+          e.detail = { entityId: el.dataset.entity };
+          this.dispatchEvent(e);
+        }
+      }));
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    if (this._hass?.entities !== hass.entities || this._hass?.devices !== hass.devices) this._map = null;
+    this._hass = hass;
+    this._render();
+  }
+
+  connectedCallback() {
+    clearInterval(this._tick);
+    this._tick = setInterval(() => { this._sig = null; this._render(); }, 60000);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._tick);
+  }
+
+  getCardSize() {
+    return 10;
+  }
+
+  _st(id) {
+    return id ? this._hass?.states?.[id] : undefined;
+  }
+
+  _num(id) {
+    const s = this._st(id);
+    if (!s || s.state === "unavailable" || s.state === "unknown") return null;
+    const v = Number(s.state);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  _txt(id) {
+    const s = this._st(id)?.state;
+    return s === undefined || s === "unavailable" || s === "unknown" || s === "" ? null : s;
+  }
+
+  _unit(id, d = "") {
+    return this._st(id)?.attributes?.unit_of_measurement ?? d;
+  }
+
+  /** Routeur (choisi ou le premier) : rôles de ses entités, réseaux invités et VPN. */
+  _resolve() {
+    if (this._map) return this._map;
+    const hass = this._hass, c = this._config;
+    const reg = hass.entities || {}, devs = hass.devices || {};
+    const all = Object.entries(reg).filter(([id, e]) => e.platform === "asusrouter" && hass.states[id] && !e.hidden);
+    // routeur : celui choisi, sinon celui qui porte le capteur CPU
+    const devId = c.device || all.find(([id]) => /^sensor\..*(?<!_temperature)_cpu$/.test(id))?.[1].device_id || all[0]?.[1].device_id;
+    const roles = {}, guests = [], vpns = [];
+    for (const [id, e] of all) {
+      if (e.device_id !== devId) continue;
+      const domain = id.split(".")[0];
+      const role = ASUS_ROLES.find(([, d, re]) => d === domain && re.test(id));
+      if (role && !roles[role[0]]) { roles[role[0]] = id; continue; }
+      if (domain === "switch" && /_guest_(2_4|5|6)_ghz(_\d)?_\d$/.test(id)) guests.push(id);
+      else if (domain === "switch" && /_(openvpn|wireguard)_(client|server)_\d$/.test(id)) vpns.push(id);
+    }
+    const byId = (a, b) => a.localeCompare(b, "fr", { numeric: true });
+    this._map = { devId, dev: devs[devId], roles, guests: guests.sort(byId), vpns: vpns.sort(byId) };
+    return this._map;
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const m = this._resolve();
+    const r = m.roles;
+    const ids = [...Object.values(r), ...m.guests, ...m.vpns];
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._armed}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => { const s = this._st(id); return s ? `${s.state}|${s.last_updated}` : "-"; }).join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const sec = (icon, t, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${icon}"></ha-icon>${t}</div>${body}</div>` : "");
+    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => `<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
+    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
+        <div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
+        <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
+    const rate = (id, icon, label, max, sub, cls) => {
+      const v = this._num(id);
+      return v === null ? "" : gauge(id, icon, label, v, sub, 101, 101, ` ${esc(this._unit(id, "Mbit/s"))}`, max, v < 10 ? 2 : v < 100 ? 1 : 0).replace('class="srv-g"', `class="srv-g ${cls}"`);
+    };
+    const btn = (id, icon, label, cls = "") => {
+      if (!id || !this._st(id)) return "";
+      const armed = this._armed === id;
+      return `<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${armed ? "mdi:check-bold" : icon}"></ha-icon>${armed ? "<span>Confirmer</span>" : ""}</button>`;
+    };
+    const chip = (id, label, on, title = "") => `<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}" title="${esc(title || (on ? "Activé" : "Désactivé"))}"><i></i>${esc(label)}</span>`;
+    const go = (v) => (v === null ? null : v >= 1000 ? `${fmt(v / 1000, 2)} To` : `${fmt(v, v < 10 ? 2 : 1)} Go`);
+
+    const dev = m.dev || {};
+    const st = (id) => this._st(id);
+    const internet = st(r.internet);
+    const online = internet ? internet.state === "on" : st(r.wan) ? st(r.wan).state === "on" : null;
+    const upd = st(r.update);
+    const needUpd = upd?.state === "on";
+    const version = dev.sw_version || upd?.attributes?.installed_version || null;
+    const meshList = st(r.mesh)?.attributes?.list;
+    const routerIp = c.ip || (Array.isArray(meshList) ? meshList.find((n) => n?.type === "router")?.ip : null)
+      || (() => { try { return dev.configuration_url ? new URL(dev.configuration_url).hostname : null; } catch (e) { return null; } })();
+
+    // --- voyants
+    const led = (ok, label, id) => (ok === null ? "" : `<span class="srv-led ${ok ? "ok" : "bad"}" data-entity="${esc(id || "")}"><i></i>${label}</span>`);
+    const leds = m.devId ? [
+      led(online, "Internet", r.internet || r.wan),
+      st(r.block)?.state === "on" ? `<span class="srv-led bad" data-entity="${esc(r.block)}"><i></i>Internet bloqué</span>` : "",
+      needUpd ? `<span class="srv-led upd" data-entity="${esc(r.update)}"><i></i>Mise à jour</span>` : "",
+    ].join("") : "";
+
+    // appareils connectés (attribut devices) : par type de connexion
+    const devices = Array.isArray(st(r.clients)?.attributes?.devices) ? st(r.clients).attributes.devices : [];
+    const count = (re) => devices.filter((d) => re.test(String(d?.connection_type || ""))).length;
+
+    let body = "";
+    if (!m.devId) {
+      body = `<div class="empty">Aucun routeur ASUS trouvé<span>Installez l'intégration AsusRouter (HACS, dépôt Vaskivskyi/ha-asusrouter), ajoutez-la dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`;
+    } else {
+      // --- système
+      let system = "";
+      if (c.show_system !== false) {
+        const boot = this._txt(r.boot) || (this._num(r.uptime) !== null ? new Date(Date.now() - this._num(r.uptime) * 1000).toISOString() : null);
+        const loads = [r.load1, r.load5, r.load15].map((id) => this._num(id));
+        const latest = upd?.attributes?.latest_version;
+        // « 3.0.0.4.386.14_2 » → « 386.14_2 », comme dans l'interface ASUS (version complète au survol)
+        const fw = (v) => (v ? String(v).replace(/^3\.0\.0\.\d+\./, "") : v);
+        const tiles = [
+          boot && since(boot) ? `<div class="tile srv-t" data-entity="${esc(r.boot || r.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
+          upd || version ? `<div class="tile srv-t nas-dsm ${needUpd ? "up" : ""}" data-entity="${esc(r.update || "")}" title="${esc(version || "")}"><div class="tile-l"><ha-icon icon="${needUpd ? "mdi:package-up" : "mdi:package-check"}"></ha-icon>Firmware</div>
+            ${kv([["Version", fw(version)], needUpd ? ["Nouvelle", fw(latest) || "Oui", "bad"] : upd ? ["État", "À jour", "ok"] : [null, null]])}</div>` : "",
+          loads.some((v) => v !== null) ? `<div class="tile srv-t" data-entity="${esc(r.load1 || r.load5)}"><div class="tile-l"><ha-icon icon="mdi:chart-line-variant"></ha-icon>Charge</div>
+            <div class="omv-load">${loads.map((v, i) => `<span><b>${v === null ? "—" : fmt(v, 2)}</b><small>${[1, 5, 15][i]} min</small></span>`).join("")}</div></div>` : "",
+        ].filter(Boolean);
+        const cpuA = st(r.cpu)?.attributes || {};
+        const cores = Object.keys(cpuA).filter((k) => /^core_\d+$/.test(k)).sort((a, b) => a.localeCompare(b, "fr", { numeric: true })).map((k) => `${fmt(cpuA[k], 0)} %`);
+        const ramA = st(r.ram)?.attributes || {};
+        const mo = (kb) => (Number.isFinite(Number(kb)) ? `${fmt(Number(kb) / 1024, 0)} Mo` : null);
+        const temps = [["t_cpu", "Temp."], ["t_24", "2,4 GHz"], ["t_5", "5 GHz"], ["t_52", "5 GHz (2)"], ["t_6", "6 GHz"]]
+          .map(([k, label]) => (this._num(r[k]) === null ? "" : gauge(r[k], "mdi:thermometer", label, this._num(r[k]), "", c.temp_warn, c.temp_alert, ` ${esc(this._unit(r[k], "°C"))}`, 110)));
+        const res = [
+          gauge(r.cpu, "mdi:cpu-32-bit", "CPU", this._num(r.cpu), cores.length > 1 ? `Cœurs ${cores.map((x) => x.replace(" %", "")).join(" · ")} %` : "", 70, 90),
+          gauge(r.ram, "mdi:memory", "RAM", this._num(r.ram), mo(ramA.used) && mo(ramA.total) ? `${mo(ramA.used)} / ${mo(ramA.total)}` : "", 80, 92),
+          ...temps,
+        ].filter(Boolean);
+        system = sec("mdi:information-outline", "Système", `${tiles.length ? `<div class="tiles srv-tiles">${tiles.join("")}</div>` : ""}${res.length ? `<div class="srv-grid pve-res">${res.join("")}</div>` : ""}`);
+      }
+
+      // --- Internet
+      let net = "";
+      if (c.show_internet !== false) {
+        const wanMax = Number(c.wan_max) || 1000;
+        const ip = this._txt(r.wan_ip) || internet?.attributes?.ip_address || null;
+        const totals = [go(this._num(r.wan_rx_total)), go(this._num(r.wan_tx_total))];
+        const rates = [
+          rate(r.wan_rx, "mdi:download", "Download", wanMax, totals[0] ? `${totals[0]} depuis le démarrage` : "", "srv-in"),
+          rate(r.wan_tx, "mdi:upload", "Upload", wanMax, totals[1] ? `${totals[1]} depuis le démarrage` : "", "srv-out"),
+        ].filter(Boolean);
+        const info = kv([["Connexion", online === null ? null : online ? "En ligne" : "Coupée", online ? "ok" : "bad"], ["IP publique", ip]]);
+        net = sec("mdi:web", "Internet", `${info ? `<div class="asus-kv" data-entity="${esc(r.internet || r.wan_ip || "")}">${info}</div>` : ""}${rates.length ? `<div class="srv-grid">${rates.join("")}</div>` : ""}`);
+      }
+
+      // --- Wi-Fi : bandes, réseaux invités, débits par bande et filaire
+      let wifi = "";
+      if (c.show_wifi !== false) {
+        const wMax = Number(c.wifi_max) || 300;
+        const bands = [["wifi24", "2,4 GHz", /^2ghz$/], ["wifi5", "5 GHz", /^5ghz$/], ["wifi52", "5 GHz (2)", /^5ghz2$/], ["wifi6", "6 GHz", /^6ghz$/]]
+          .filter(([k]) => st(r[k]))
+          .map(([k, label, re]) => {
+            const s = st(r[k]);
+            const n = count(re);
+            // seul le SSID est lu : les autres attributs du Wi-Fi (dont le mot de passe) ne sont jamais affichés
+            const ssid = s.attributes?.ssid;
+            return chip(r[k], `${label}${n ? ` · ${n}` : ""}`, s.state === "on", `${ssid ? `${ssid} · ` : ""}${s.state === "on" ? "Activé" : "Désactivé"}${n ? ` · ${n} appareil${n > 1 ? "s" : ""}` : ""}`);
+          });
+        const guestOn = m.guests.filter((id) => st(id)?.state === "on");
+        const guestName = (id) => {
+          const g = /_guest_(2_4|5|6)_ghz(?:_\d)?_(\d)$/.exec(id);
+          return g ? `Invités ${g[1].replace("_", ",")} GHz n°${g[2]}` : "Invités";
+        };
+        const guests = guestOn.map((id) => chip(id, guestName(id), true));
+        // débits par bande : une ligne par bande, barres réception et envoi
+        const mbit = (id) => { const v = this._num(id); return v === null ? null : v; };
+        const bar = (id, cls) => { const v = mbit(id); return v === null ? "<span></span>" : `<span class="asus-r ${cls}" data-entity="${esc(id)}"><b>${fmt(v, v < 10 ? 2 : v < 100 ? 1 : 0)}</b><small>${esc(this._unit(id, "Mbit/s"))}</small><i style="--w:${Math.max(0, Math.min(100, (v / wMax) * 100))}%"></i></span>`; };
+        const rows = [["2,4 GHz", r.w24_rx, r.w24_tx], ["5 GHz", r.w5_rx, r.w5_tx], ["Filaire", r.lan_rx, r.lan_tx]]
+          .filter(([, rx, tx]) => mbit(rx) !== null || mbit(tx) !== null)
+          .map(([label, rx, tx]) => `<div class="asus-row"><span class="asus-rl">${label}</span>${bar(rx, "in")}${bar(tx, "out")}</div>`);
+        const rates = rows.length ? [`<div class="asus-rates"><div class="asus-row asus-rh"><span></span><span><ha-icon icon="mdi:download"></ha-icon>Réception</span><span><ha-icon icon="mdi:upload"></ha-icon>Envoi</span></div>${rows.join("")}</div>`] : [];
+        const guestTxt = m.guests.length ? `<div class="asus-note">${guestOn.length ? "" : "Aucun réseau invité actif"}</div>` : "";
+        wifi = sec("mdi:wifi", "Wi-Fi", bands.length || rates.length
+          ? `${bands.length || guests.length ? `<div class="omv-svcs">${bands.join("")}${guests.join("")}</div>` : ""}${guestOn.length ? "" : guestTxt}${rates.join("")}`
+          : "");
+      }
+
+      // --- ports Ethernet
+      let ports = "";
+      if (c.show_ports !== false) {
+        const list = (id) => {
+          const l = st(id)?.attributes?.list;
+          return l && typeof l === "object" ? Object.entries(l).sort(([a], [b]) => Number(a) - Number(b)) : [];
+        };
+        const speed = (v) => (v >= 1000 ? `${fmt(v / 1000, v % 1000 ? 1 : 0)} G` : v > 0 ? `${v} M` : "—");
+        const port = (id, label, p) => {
+          const up = !!p?.state;
+          const sp = Number(p?.link_rate) || 0;
+          const cls = !up ? "off" : sp >= 1000 ? "g" : "m";
+          return `<div class="asus-port ${cls}" data-entity="${esc(id)}" title="${esc(`${label} : ${up ? `connecté, ${speed(sp)}bit/s` : "déconnecté"}`)}"><ha-icon icon="mdi:ethernet"></ha-icon><b>${esc(label)}</b><small>${up ? speed(sp) : "—"}</small></div>`;
+        };
+        const wan = list(r.ports_wan).map(([, p]) => port(r.ports_wan, "WAN", p));
+        const lan = list(r.ports_lan).map(([n, p]) => port(r.ports_lan, `LAN ${n}`, p));
+        const upCount = list(r.ports_lan).filter(([, p]) => p?.state).length;
+        ports = sec("mdi:ethernet", `Ports <small class="pve-n">${lan.length ? `${upCount}/${lan.length} LAN connectés` : ""}</small>`, wan.length || lan.length ? `<div class="asus-ports">${wan.join("")}${lan.join("")}</div>` : "");
+      }
+
+      // --- appareils connectés
+      let clients = "";
+      if (c.show_clients !== false && (st(r.clients) || st(r.latest))) {
+        const total = this._num(r.clients);
+        const guestsN = this._num(r.guests);
+        const tiles = [
+          ["Wi-Fi 2,4 GHz", count(/^2ghz$/), "mdi:wifi"],
+          ["Wi-Fi 5 GHz", count(/^5ghz/), "mdi:wifi"],
+          ["Filaire", count(/^wired$/), "mdi:ethernet"],
+          ["Invités", guestsN, "mdi:account-multiple-outline"],
+        ].filter(([, v], i) => v !== null && (v > 0 || i < 3) && (devices.length || i === 3));
+        const latestList = Array.isArray(st(r.latest)?.attributes?.list) ? [...st(r.latest).attributes.list] : [];
+        latestList.sort((a, b) => String(b?.connected || "").localeCompare(String(a?.connected || "")));
+        const n = Math.max(0, Math.min(20, Number(c.latest) || 0));
+        const latest = latestList.slice(0, n).map((d) => {
+          const name = String(d?.name || d?.ip || d?.mac || "Appareil").replace(/^\[\d+\]\s*/, "");
+          const when = d?.connected ? since(d.connected) : null;
+          return `<div class="asus-dev" data-entity="${esc(r.latest)}"><ha-icon icon="${/wired/.test(d?.connection_type || "") ? "mdi:ethernet" : "mdi:wifi"}"></ha-icon><span>${esc(name)}</span><small>${esc([ASUS_LINK[d?.connection_type] || null, when ? `il y a ${when}` : null].filter(Boolean).join(" · "))}</small></div>`;
+        });
+        clients = sec("mdi:devices", `Appareils connectés <small class="pve-n">${total !== null ? fmt(total, 0) : ""}</small>`,
+          `${tiles.length ? `<div class="asus-counts" data-entity="${esc(r.clients || "")}">${tiles.map(([label, v, icon]) => `<div><ha-icon icon="${icon}"></ha-icon><b>${v === null ? "—" : fmt(v, 0)}</b><small>${label}</small></div>`).join("")}</div>` : ""}
+          ${latest.length ? `<div class="asus-sub">Dernières connexions</div><div class="asus-devs">${latest.join("")}</div>` : ""}`);
+      }
+
+      // --- VPN, contrôle parental
+      let vpn = "";
+      if (c.show_vpn !== false && (m.vpns.length || st(r.parental))) {
+        const on = m.vpns.filter((id) => st(id)?.state === "on");
+        const name = (id) => {
+          const v = /_(openvpn|wireguard)_(client|server)_(\d)$/.exec(id);
+          return v ? `${v[1] === "openvpn" ? "OpenVPN" : "WireGuard"} ${v[2] === "client" ? "client" : "serveur"} ${v[3]}` : id;
+        };
+        const chips = [...on.map((id) => chip(id, name(id), true)), st(r.parental) ? chip(r.parental, "Contrôle parental", st(r.parental).state === "on") : ""].filter(Boolean);
+        vpn = sec("mdi:vpn", `VPN <small class="pve-n">${m.vpns.length ? `${on.length} actif${on.length > 1 ? "s" : ""}` : ""}</small>`,
+          `${chips.length ? `<div class="omv-svcs">${chips.join("")}</div>` : ""}${m.vpns.length && !on.length ? `<div class="asus-note">Aucun VPN actif</div>` : ""}`);
+      }
+
+      // --- actions
+      const acts = c.show_actions !== false ? [
+        btn(r.reboot, "mdi:restart", "Redémarrer", "stop"),
+        btn(r.restart_wifi, "mdi:wifi-refresh", "Redémarrer le Wi-Fi"),
+        btn(r.refresh, "mdi:refresh", "Actualiser les appareils"),
+        r.led ? btn(r.led, st(r.led)?.state === "on" ? "mdi:led-on" : "mdi:led-off", st(r.led)?.state === "on" ? "Éteindre les LED" : "Allumer les LED") : "",
+      ].filter(Boolean) : [];
+
+      body = system + net + wifi + ports + clients + vpn
+        + sec("mdi:gesture-tap-button", "Actions", acts.length ? `<div class="pve-na asus-acts">${acts.join("")}</div>` : "");
+    }
+
+    const alertCls = m.devId && online === false ? "srv-alert" : "";
+    const model = dev.model || dev.name || "Routeur ASUS";
+    // le routeur répond (ses capteurs sont là) même quand Internet est coupé : le voyant Internet le signale
+    const sub = [this._txt(r.cpu) === null && m.devId ? "Injoignable" : null, version ? `Firmware ${version}` : null].filter(Boolean).join(" · ");
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${OMV_STYLE}${ASUS_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
+      <header>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:router-wireless")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+          <div><div class="title">${esc(c.title || dev.name_by_user || model)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}${routerIp ? `<div class="sub">${esc(routerIp)}</div>` : ""}</div></div>
+        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+      </header>
+      ${body}
+    </ha-card>`;
+  }
+}
+
+const ASUS_STYLE = `<style>
+.asus-kv { padding: 8px 12px; border-radius: 12px; border: 1px solid var(--med-line); margin-bottom: 8px; cursor: pointer; }
+.asus-note { font-size: .75rem; color: var(--med-muted); margin-top: 6px; }
+.asus-rates { margin-top: 10px; display: grid; gap: 6px; }
+.asus-row { display: grid; grid-template-columns: 62px 1fr 1fr; gap: 10px; align-items: center; font-size: .8rem; }
+.asus-rh { font-size: .7rem; color: var(--med-muted); } .asus-rh span { display: inline-flex; align-items: center; gap: 4px; } .asus-rh ha-icon { --mdc-icon-size: 14px; }
+.asus-rl { color: var(--med-muted); white-space: nowrap; }
+.asus-r { position: relative; display: flex; align-items: baseline; gap: 4px; padding-bottom: 6px; cursor: pointer; }
+.asus-r small { font-size: .66rem; color: var(--med-muted); }
+.asus-r::before, .asus-r i { content: ""; position: absolute; left: 0; bottom: 0; height: 4px; border-radius: 4px; }
+.asus-r::before { right: 0; background: var(--med-line); }
+.asus-r i { width: var(--w); background: var(--med-blue); }
+.asus-r.out i { background: var(--med-green); }
+.asus-ports { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 6px; }
+.asus-port { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 4px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--med-line); background: var(--med-surface); color: var(--med-muted); }
+.asus-port ha-icon { --mdc-icon-size: 18px; }
+.asus-port b { font-size: .72rem; color: var(--med-text); white-space: nowrap; }
+.asus-port small { font-size: .66rem; }
+.asus-port.g { border-color: color-mix(in srgb, var(--med-down) 55%, transparent); } .asus-port.g ha-icon, .asus-port.g small { color: var(--med-down); }
+.asus-port.m { border-color: color-mix(in srgb, #f0a33a 55%, transparent); } .asus-port.m ha-icon, .asus-port.m small { color: #f0a33a; }
+.asus-port.off { opacity: .55; }
+.asus-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; cursor: pointer; }
+.asus-counts > div { display: grid; justify-items: center; padding: 8px 4px; border-radius: 10px; border: 1px solid var(--med-line); background: var(--med-surface); }
+.asus-counts ha-icon { --mdc-icon-size: 18px; color: var(--med-blue); }
+.asus-counts b { font-size: 1.15rem; } .asus-counts small { font-size: .68rem; color: var(--med-muted); text-align: center; }
+.asus-sub { font-size: .75rem; color: var(--med-muted); margin: 10px 0 4px; }
+.asus-devs { display: grid; gap: 2px; }
+.asus-dev { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; cursor: pointer; font-size: .8rem; }
+.asus-dev:hover { background: var(--med-surface); }
+.asus-dev ha-icon { --mdc-icon-size: 16px; color: var(--med-muted); }
+.asus-dev span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.asus-dev small { font-size: .7rem; color: var(--med-muted); white-space: nowrap; }
+.asus-acts .pve-btn span { font-size: .74rem; }
+</style>`;
+
 /* ------------------------------------------------------------ carte DNS (AdGuard Home, Pi-hole) */
 
 const DNS_DEFAULTS = {
@@ -2954,6 +3370,44 @@ const OMV_LABELS = {
   theme: "Couleurs de la carte",
 };
 const ServeurHaOmvCardEditor = makeEditor(OMV_SCHEMA, OMV_LABELS, OMV_DEFAULTS);
+const ASUS_SCHEMA = [
+  { name: "device", selector: { device: { integration: "asusrouter" } } },
+  { name: "title", selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  { name: "icon_color", selector: { text: {} } },
+  { name: "ip", selector: { text: {} } },
+  { name: "wan_max", selector: { number: { min: 1, max: 100000, mode: "box", unit_of_measurement: "Mbit/s" } } },
+  { name: "wifi_max", selector: { number: { min: 1, max: 100000, mode: "box", unit_of_measurement: "Mbit/s" } } },
+  { name: "latest", selector: { number: { min: 0, max: 20, mode: "box" } } },
+  { name: "show_system", selector: { boolean: {} } },
+  { name: "show_internet", selector: { boolean: {} } },
+  { name: "show_wifi", selector: { boolean: {} } },
+  { name: "show_ports", selector: { boolean: {} } },
+  { name: "show_clients", selector: { boolean: {} } },
+  { name: "show_vpn", selector: { boolean: {} } },
+  { name: "show_actions", selector: { boolean: {} } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const ASUS_LABELS = {
+  device: "Routeur (appareil AsusRouter, facultatif)",
+  title: "Titre (modèle du routeur par défaut)",
+  icon: "Icône",
+  icon_color: "Couleur de l'icône",
+  ip: "Adresse IP affichée (vide = adresse du routeur)",
+  wan_max: "Pleine échelle des barres Internet (débit de l'abonnement)",
+  wifi_max: "Pleine échelle des barres Wi-Fi et filaire",
+  latest: "Dernières connexions affichées (0 = aucune)",
+  show_system: "Section Système (uptime, firmware, charge, CPU, RAM, températures)",
+  show_internet: "Section Internet (connexion, IP publique, débits)",
+  show_wifi: "Section Wi-Fi (bandes, réseaux invités, débits)",
+  show_ports: "Section Ports Ethernet",
+  show_clients: "Section Appareils connectés",
+  show_vpn: "Section VPN et contrôle parental",
+  show_actions: "Boutons redémarrer, Wi-Fi, LED (deux clics)",
+  theme: "Couleurs de la carte",
+};
+const ServeurHaAsusCardEditor = makeEditor(ASUS_SCHEMA, ASUS_LABELS, ASUS_DEFAULTS);
 const DNS_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -3049,6 +3503,8 @@ if (typeof customElements !== "undefined") {
   define("serveur-ha-proxmox-card-editor", ServeurHaProxmoxCardEditor);
   define("serveur-ha-omv-card", ServeurHaOmvCard);
   define("serveur-ha-omv-card-editor", ServeurHaOmvCardEditor);
+  define("serveur-ha-asus-card", ServeurHaAsusCard);
+  define("serveur-ha-asus-card-editor", ServeurHaAsusCardEditor);
   define("serveur-ha-dns-card", ServeurHaDnsCard);
   define("serveur-ha-dns-card-editor", ServeurHaDnsCardEditor);
   define("serveur-ha-linux-card", ServeurHaLinuxCard);
@@ -3092,6 +3548,14 @@ if (typeof customElements !== "undefined") {
       type: "serveur-ha-omv-card",
       name: "Carte OpenMediaVault",
       description: "OpenMediaVault : système, systèmes de fichiers, disques (température, SMART), services, réseau, mises à jour, redémarrage et arrêt confirmés.",
+      preview: true,
+    });
+  }
+  if (!window.customCards.some((c) => c.type === "serveur-ha-asus-card")) {
+    window.customCards.push({
+      type: "serveur-ha-asus-card",
+      name: "Carte Routeur ASUS",
+      description: "Routeur ASUS (AsusRouter) : Internet, débits, Wi-Fi, ports, appareils connectés, VPN, firmware, redémarrage confirmé.",
       preview: true,
     });
   }
