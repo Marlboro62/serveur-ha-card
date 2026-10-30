@@ -335,7 +335,7 @@ Tout est ensuite détecté :
 - **Internet** : connexion, IP publique, débits download et upload, volume échangé depuis le démarrage du routeur.
 - **Wi-Fi** : bandes 2,4 et 5 GHz (activées ou non, nombre d'appareils, SSID au survol), réseaux invités actifs, débits en réception et en envoi par bande et en filaire. Seul le SSID est lu : le mot de passe du Wi-Fi, que l'intégration expose, n'est jamais affiché.
 - **Ports** : port WAN et ports LAN, connectés à 1 Gbit/s (vert), 100 Mbit/s (orange) ou déconnectés.
-- **Appareils connectés** : nombre total, en Wi-Fi 2,4 GHz, 5 GHz, filaire et sur le réseau invités, et les dernières connexions. **Voir les appareils** déplie la liste complète (nom, adresse IP, connexion, depuis quand) ; un clic sur une tuile (Wi-Fi 2,4 GHz, 5 GHz, filaire) n'affiche que ces appareils, un second clic replie la liste.
+- **Appareils connectés** : nombre total, en Wi-Fi 2,4 GHz, 5 GHz, filaire et sur le réseau invités. La liste est repliée : **Voir les appareils** déplie les dernières connexions et la liste complète (nom, adresse IP, connexion, depuis quand), **Réduire** la replie. Un clic sur une tuile (Wi-Fi 2,4 GHz, 5 GHz, filaire) n'affiche que ces appareils.
 - **VPN** : clients et serveurs OpenVPN ou WireGuard actifs, contrôle parental.
 - **Actions** : **Redémarrer**, **Redémarrer le Wi-Fi**, **Actualiser les appareils**, allumer ou éteindre les **LED**. Chaque bouton demande **un second clic dans les 5 secondes**.
 

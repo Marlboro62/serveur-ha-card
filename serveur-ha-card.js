@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.10.0-beta.2";
+const CARD_VERSION = "0.10.0-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2351,7 +2351,7 @@ class ServeurHaAsusCard extends HTMLElement {
           return `<div class="asus-dev" data-entity="${esc(r.latest)}"><ha-icon icon="${/wired/.test(d?.connection_type || "") ? "mdi:ethernet" : "mdi:wifi"}"></ha-icon><span>${esc(name)}</span><small>${esc([ASUS_LINK[d?.connection_type] || null, when ? `il y a ${when}` : null].filter(Boolean).join(" · "))}</small></div>`;
         });
         // liste complète, dépliée par « Voir tous » ou par une tuile : par type de connexion, puis par nom
-        const open = this._devs && devices.length ? this._devs : null;
+        const open = this._devs && (devices.length || latest.length) ? this._devs : null;
         const ORDER = { "2ghz": 1, "5ghz": 2, "5ghz2": 3, "6ghz": 4, wired: 5 };
         const label = (d) => String(d?.name || d?.ip || d?.mac || "Appareil").replace(/^\[\d+\]\s*/, "");
         const shown = !open ? [] : devices
@@ -2362,13 +2362,14 @@ class ServeurHaAsusCard extends HTMLElement {
           return `<div class="asus-dev"><ha-icon icon="${/wired/.test(d?.connection_type || "") ? "mdi:ethernet" : "mdi:wifi"}"></ha-icon><div class="asus-dn"><span>${esc(label(d))}</span><small>${esc([d?.ip || null, ASUS_LINK[d?.connection_type] || null, when ? `depuis ${when}` : null].filter(Boolean).join(" · "))}</small></div></div>`;
         });
         const openName = { all: "Tous les appareils", "2ghz": "Wi-Fi 2,4 GHz", "5ghz": "Wi-Fi 5 GHz", wired: "Filaire", guest: "Invités" }[open];
-        const more = devices.length
-          ? `<button class="asus-more ${open ? "on" : ""}" data-devs="${open || "all"}"><ha-icon icon="${open ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon>${open ? "Réduire" : `Voir les ${fmt(devices.length, 0)} appareils`}</button>`
+        // tout est replié par défaut : le bouton déplie les dernières connexions et la liste complète
+        const more = devices.length || latest.length
+          ? `<button class="asus-more ${open ? "on" : ""}" data-devs="${open || "all"}"><ha-icon icon="${open ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon>${open ? "Réduire" : devices.length ? `Voir les ${fmt(devices.length, 0)} appareils` : "Voir les dernières connexions"}</button>`
           : "";
         clients = sec("mdi:devices", `Appareils connectés <small class="pve-n">${total !== null ? fmt(total, 0) : ""}</small>`,
           `${tiles.length ? `<div class="asus-counts">${tiles.map(([lbl, v, icon, key]) => `<div class="${open === key ? "on" : ""}" ${devices.length && v ? `data-devs="${key}" title="Voir les appareils : ${lbl}"` : ""}><ha-icon icon="${icon}"></ha-icon><b>${v === null ? "—" : fmt(v, 0)}</b><small>${lbl}</small></div>`).join("")}</div>` : ""}
-          ${open ? `<div class="asus-sub">${openName} <b>${fmt(shown.length, 0)}</b></div><div class="asus-devs asus-all">${full.join("") || `<div class="asus-note">Aucun appareil</div>`}</div>`
-            : latest.length ? `<div class="asus-sub">Dernières connexions</div><div class="asus-devs">${latest.join("")}</div>` : ""}
+          ${open === "all" && latest.length ? `<div class="asus-sub">Dernières connexions</div><div class="asus-devs">${latest.join("")}</div>` : ""}
+          ${open ? `<div class="asus-sub">${openName} <b>${fmt(shown.length, 0)}</b></div><div class="asus-devs asus-all">${full.join("") || `<div class="asus-note">Aucun appareil</div>`}</div>` : ""}
           ${more}`);
       }
 
