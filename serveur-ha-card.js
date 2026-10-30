@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.10.0-beta.4";
+const CARD_VERSION = "0.10.0-beta.5";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2085,6 +2085,13 @@ class ServeurHaAsusCard extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     if (!this._clicks) {
       this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const fold = ev.target.closest?.("[data-fold]");
+        if (fold) {
+          // débits par bande : déplier ou replier
+          ev.stopPropagation();
+          this._fold = this._fold === fold.dataset.fold ? null : fold.dataset.fold;
+          this._sig = null; this._render(); return;
+        }
         const filter = ev.target.closest?.("[data-devs]");
         if (filter) {
           // liste des appareils : « Voir tous » ou une tuile (Wi-Fi 2,4 GHz, 5 GHz, filaire) déplie ou replie la liste
@@ -2188,7 +2195,7 @@ class ServeurHaAsusCard extends HTMLElement {
     const m = this._resolve();
     const r = m.roles;
     const ids = [...Object.values(r), ...m.guests, ...m.vpns];
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._armed}|${this._devs}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => { const s = this._st(id); return s ? `${s.state}|${s.last_updated}` : "-"; }).join("|");
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._armed}|${this._devs}|${this._fold}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => { const s = this._st(id); return s ? `${s.state}|${s.last_updated}` : "-"; }).join("|");
     if (sig === this._sig) return;
     this._sig = sig;
 
@@ -2304,10 +2311,13 @@ class ServeurHaAsusCard extends HTMLElement {
         const rows = [["2,4 GHz", r.w24_rx, r.w24_tx], ["5 GHz", r.w5_rx, r.w5_tx], ["Filaire", r.lan_rx, r.lan_tx]]
           .filter(([, rx, tx]) => mbit(rx) !== null || mbit(tx) !== null)
           .map(([label, rx, tx]) => `<div class="asus-row"><span class="asus-rl">${label}</span>${bar(rx, "in")}${bar(tx, "out")}</div>`);
-        const rates = rows.length ? [`<div class="asus-rates"><div class="asus-row asus-rh"><span></span><span><ha-icon icon="mdi:download"></ha-icon>Réception</span><span><ha-icon icon="mdi:upload"></ha-icon>Envoi</span></div>${rows.join("")}</div>`] : [];
+        // repliés par défaut : le bouton « Débits par bande » les déplie
+        const ratesOpen = this._fold === "rates";
+        const ratesBtn = rows.length ? `<button class="asus-more ${ratesOpen ? "on" : ""}" data-fold="rates"><ha-icon icon="${ratesOpen ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon>${ratesOpen ? "Réduire" : "Débits par bande"}</button>` : "";
+        const rates = rows.length && ratesOpen ? [`<div class="asus-rates"><div class="asus-row asus-rh"><span></span><span><ha-icon icon="mdi:download"></ha-icon>Réception</span><span><ha-icon icon="mdi:upload"></ha-icon>Envoi</span></div>${rows.join("")}</div>`] : [];
         const guestTxt = m.guests.length ? `<div class="asus-note">${guestOn.length ? "" : "Aucun réseau invité actif"}</div>` : "";
-        wifi = sec("mdi:wifi", "Wi-Fi", bands.length || rates.length
-          ? `${bands.length || guests.length ? `<div class="omv-svcs">${bands.join("")}${guests.join("")}</div>` : ""}${guestOn.length ? "" : guestTxt}${rates.join("")}`
+        wifi = sec("mdi:wifi", "Wi-Fi", bands.length || ratesBtn
+          ? `${bands.length || guests.length ? `<div class="omv-svcs">${bands.join("")}${guests.join("")}</div>` : ""}${guestOn.length ? "" : guestTxt}${rates.join("")}${ratesBtn}`
           : "");
       }
 

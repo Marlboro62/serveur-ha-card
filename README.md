@@ -333,7 +333,7 @@ Tout est ensuite détecté :
 - **En-tête** : modèle, version du firmware, adresse IP du routeur, voyants **Internet** (vert ou rouge), **Internet bloqué** et **Mise à jour**.
 - **Système** : uptime, firmware (à jour ou nouvelle version), charge moyenne (1, 5 et 15 min), jauges **CPU** (avec chaque cœur), **RAM** (Mo utilisés sur le total) et températures du processeur et des radios Wi-Fi (orange à 80 °C, rouge à 95 °C).
 - **Internet** : connexion, IP publique, débits download et upload, volume échangé depuis le démarrage du routeur.
-- **Wi-Fi** : bandes 2,4 et 5 GHz (activées ou non, nombre d'appareils, SSID au survol), réseaux invités actifs, débits en réception et en envoi par bande et en filaire. Seul le SSID est lu : le mot de passe du Wi-Fi, que l'intégration expose, n'est jamais affiché.
+- **Wi-Fi** : bandes 2,4 et 5 GHz (activées ou non, nombre d'appareils, SSID au survol), réseaux invités actifs. **Débits par bande** déplie les débits en réception et en envoi par bande et en filaire. Seul le SSID est lu : le mot de passe du Wi-Fi, que l'intégration expose, n'est jamais affiché.
 - **Ports** : port WAN sur sa ligne, puis les ports LAN par lignes de 4 (8 ports : 2 lignes), connectés à 1 Gbit/s (vert), 100 Mbit/s (orange) ou déconnectés.
 - **Appareils connectés** : nombre total, en Wi-Fi 2,4 GHz, 5 GHz, filaire et sur le réseau invités. La liste est repliée : **Voir les appareils** déplie les dernières connexions et la liste complète (nom, adresse IP, connexion, depuis quand), **Réduire** la replie. Un clic sur une tuile (Wi-Fi 2,4 GHz, 5 GHz, filaire) n'affiche que ces appareils.
 - **VPN** : clients et serveurs OpenVPN ou WireGuard actifs, contrôle parental.
