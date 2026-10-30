@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.14.0-beta.2";
+const CARD_VERSION = "0.14.0-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3347,6 +3347,14 @@ class ServeurHaMediaCard extends HTMLElement {
     }
     for (const s of Object.values(servers)) {
       if (!s.dev) { const d = devs[reg[s.players[0]]?.device_id]; const top = d?.via_device_id && devs[d.via_device_id]; if (top) setDev(s, top.id); }
+    }
+    // lecteurs sans appareil (sessions Jellyfin) : rattachés au serveur s'il est seul pour cette intégration
+    for (const [key, s] of Object.entries(servers)) {
+      if (s.dev || s.count || s.update || s.libs.length) continue;
+      const owners = Object.values(servers).filter((o) => o !== s && o.platform === s.platform && o.dev);
+      if (owners.length !== 1) continue;
+      owners[0].players.push(...s.players);
+      delete servers[key];
     }
     const list = Object.values(servers).sort((a, b) => a.name.localeCompare(b.name, "fr"));
     this._map = { servers: list };
