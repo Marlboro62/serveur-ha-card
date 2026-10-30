@@ -28,7 +28,7 @@
 
 # Cartes Serveur HA
 
-**Neuf cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
+**Dix cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
 
 | Type | Carte |
 | --- | --- |
@@ -40,6 +40,7 @@
 | `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
 | `custom:serveur-ha-asus-card` | **Routeur ASUS** ([AsusRouter](https://github.com/Vaskivskyi/ha-asusrouter)) : Internet et IP publique, débits, Wi-Fi et réseaux invités, ports Ethernet, appareils connectés, VPN, firmware, températures, redémarrage confirmé en deux clics |
 | `custom:serveur-ha-ping-card` | **Réseau** (intégration Ping) : appareils en ligne ou hors ligne, latence, gigue et perte de paquets, groupés par type ou par pièce, groupes dépliables |
+| `custom:serveur-ha-wireguard-card` | **VPN WireGuard** ([WGDashboard](https://github.com/donaldzou/WGDashboard)) : serveurs, pairs connectés, dernier handshake, données reçues et envoyées |
 | `custom:serveur-ha-omv-card` | **OpenMediaVault** : système (uptime, version, charge, CPU, RAM), systèmes de fichiers, disques (température, SMART), services, réseau, mises à jour, redémarrage et arrêt confirmés en deux clics |
 
 **Pare-feu OPNsense** : la carte a son propre dépôt, [Carte OPNsense](https://github.com/Marlboro62/opnsense-card) (`custom:opnsense-card`).
@@ -80,9 +81,13 @@
 | --- | --- | --- |
 | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/ping-alerte.png" alt="Réseau, appareils hors ligne" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/ping.png" alt="Réseau" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/ping-clair.png" alt="Réseau clair" width="300"> |
 
+| VPN WireGuard | Serveurs repliés | WireGuard clair, aucun pair |
+| --- | --- | --- |
+| <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/wireguard.png" alt="VPN WireGuard" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/wireguard-replie.png" alt="VPN WireGuard replié" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/wireguard-clair.png" alt="VPN WireGuard clair" width="300"> |
+
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 9 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 10 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 ## Installation
 
@@ -401,6 +406,25 @@ standby:
 ```
 
 Un appareil éteint volontairement qui se rallume redevient vert, comme les autres. S'il ne répond pas, il reste dans son groupe, en gris, et le voyant de la carte reste vert.
+
+## Carte VPN WireGuard — `custom:serveur-ha-wireguard-card`
+
+```yaml
+type: custom:serveur-ha-wireguard-card
+```
+
+La carte lit les capteurs de l'intégration **WGDashboard Monitor** (HACS), qui suit un ou plusieurs serveurs [WGDashboard](https://github.com/donaldzou/WGDashboard). Tout est détecté :
+
+- **En-tête** : interfaces WireGuard suivies, voyant du nombre de pairs connectés.
+- **Résumé** : pairs connectés sur le total, nombre de serveurs, données reçues et envoyées par tous les pairs.
+- **Serveurs** : un bloc par interface (ex. `wg0`), **replié** : un point par pair (vert s'il est connecté), le compte connectés / total et les pairs connectés. Un clic déplie tous les pairs : nom, dernier handshake (ou « vu il y a… »), adresse IP dans le VPN, données reçues et envoyées. L'adresse publique du pair (point d'accès) est donnée au survol ; un clic ouvre la fiche du pair.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title`, `icon`, `icon_color` | En-tête | `VPN WireGuard`, `mdi:vpn` |
+| `expanded` | Serveurs dépliés à l'ouverture | `false` |
+| `show_endpoint` | Afficher l'adresse publique des pairs sous leur nom | `false` |
+| `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ## Carte Filtrage DNS — `custom:serveur-ha-dns-card`
 

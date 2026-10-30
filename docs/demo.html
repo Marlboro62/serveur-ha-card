@@ -95,7 +95,7 @@
     <aside class="panel" aria-label="Réglages de la démo">
       <h2>Carte</h2>
       <div class="ctl"><div class="seg" data-key="card">
-        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="ping">Réseau</button><button data-v="all">Les 9</button></div></div>
+        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="ping">Réseau</button><button data-v="wg">WireGuard</button><button data-v="all">Les 10</button></div></div>
 
       <h2>Affichage</h2>
       <div class="ctl"><div class="ctl-l">Page</div><div class="seg" data-key="page">
@@ -126,6 +126,8 @@
         <button data-v="ok"><i class="sw green"></i>Tout à jour</button><button data-v="upd"><i class="sw orange"></i>Mises à jour</button><button data-v="sec"><i class="sw red"></i>Sécurité, redémarrage</button></div></div>
       <div class="ctl" data-for="omv all"><div class="ctl-l">OpenMediaVault</div><div class="seg" data-key="omv">
         <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="hot"><i class="sw orange"></i>Disque chaud, mises à jour</button><button data-v="bad"><i class="sw red"></i>Disque en alerte</button><button data-v="off"><i class="sw"></i>Éteint</button></div></div>
+      <div class="ctl" data-for="wg all"><div class="ctl-l">VPN WireGuard</div><div class="seg" data-key="wg">
+        <button data-v="some"><i class="sw green"></i>Pairs connectés</button><button data-v="none"><i class="sw"></i>Aucun pair</button></div></div>
       <div class="ctl" data-for="ping all"><div class="ctl-l">Réseau (Ping)</div><div class="seg" data-key="ping">
         <button data-v="ok"><i class="sw green"></i>Tout en ligne</button><button data-v="slow"><i class="sw orange"></i>Lent, pertes</button><button data-v="down"><i class="sw red"></i>Appareils hors ligne</button></div></div>
       <div class="ctl" data-for="asus all"><div class="ctl-l">Routeur ASUS</div><div class="seg" data-key="asus">
@@ -175,8 +177,8 @@
     });
   }
 
-  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card", ping: "serveur-ha-ping-card" };
-  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok", ping: "ok" };
+  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card", ping: "serveur-ha-ping-card", wg: "serveur-ha-wireguard-card" };
+  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok", ping: "ok", wg: "some" };
   let state = { ...defaults };
   try { state = { ...defaults, ...JSON.parse(localStorage.getItem("serveur-ha-demo") || "{}") }; } catch (e) { /* ignoré */ }
 
@@ -484,6 +486,23 @@
       add(`sensor.${k}_gigue`, off ? "unavailable" : (r * 0.3).toFixed(2), { unit_of_measurement: "ms" }, "ping", "jitter", dev);
       add(`sensor.${k}_perte_de_paquets`, off ? "unavailable" : ps && i % 4 === 0 ? "20" : "0", { unit_of_measurement: "%" }, "ping", "packet_loss", dev);
     });
+    // --- VPN WireGuard (noms fictifs, entités au format de l'intégration WGDashboard Monitor)
+    const wgOn = state.wg === "some";
+    [["maison", "WGDashboard (maison)", "10.0.0", [["Téléphone 1", true, 0.05, 1.36, 14.02], ["Téléphone 2", false, 26, 0.42, 3.9], ["Tablette", false, 140, 0.08, 0.61], ["Portable", true, 0.2, 2.75, 31.4]]],
+     ["secours", "WGDashboard (secours)", "10.0.1", [["Téléphone 1", false, 72, 0.01, 0.12], ["Box 4G", wgOn, 0.1, 0.6, 0.2]]]].forEach(([k, name, net, peers]) => {
+      const dev = `wg_${k}`;
+      devices[dev] = { id: dev, name, manufacturer: "WGDashboard", model: "WireGuard VPN" };
+      const on = peers.filter((p) => wgOn && p[1]).length;
+      add(`sensor.wgdashboard_${k}_connected_peers`, on, { total_peers: peers.length }, "wgdashboard_monitor", null, dev);
+      peers.forEach(([pn, up, hAgo, rx, tx], i) => {
+        const pk = pn.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+        const fn = (x) => ({ friendly_name: `${name} ${pn} ${x}` });
+        add(`binary_sensor.wgdashboard_${k}_${pk}_connected`, wgOn && up ? "on" : "off", { device_class: "connectivity", ...fn("connected") }, "wgdashboard_monitor", null, dev);
+        add(`sensor.wgdashboard_${k}_${pk}_last_handshake`, iso(-(wgOn ? hAgo : hAgo + 3) * H), { device_class: "timestamp", allowed_ips: `${net}.${i + 2}/32`, endpoint: up ? `203.0.113.${20 + i}:51820` : "(none)", ...fn("last handshake") }, "wgdashboard_monitor", null, dev);
+        add(`sensor.wgdashboard_${k}_${pk}_data_received`, rx, { unit_of_measurement: "GB", ...fn("data received") }, "wgdashboard_monitor", null, dev);
+        add(`sensor.wgdashboard_${k}_${pk}_data_sent`, tx, { unit_of_measurement: "GB", ...fn("data sent") }, "wgdashboard_monitor", null, dev);
+      });
+    });
     return { st, ent, devices };
   }
 
@@ -501,6 +520,7 @@
       omv: { type: "custom:serveur-ha-omv-card", title: "NAS maison", power_on: "button.wake_on_lan_00_11_22_33_44_66", ups_name: "Green Cell 600VA", theme: t },
       asus: { type: "custom:serveur-ha-asus-card", theme: t },
       ping: { type: "custom:serveur-ha-ping-card", theme: t },
+      wg: { type: "custom:serveur-ha-wireguard-card", theme: t },
     };
     return state.card === "all" ? Object.values(c) : [c[state.card]];
   }

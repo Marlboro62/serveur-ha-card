@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.11.0";
+const CARD_VERSION = "0.12.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2757,6 +2757,216 @@ const PING_STYLE = `<style>
 ha-card > .srv-sec:last-child { margin-bottom: 12px; }
 </style>`;
 
+/* ------------------------------------------------------------ carte VPN WireGuard (WGDashboard) */
+
+const WG_DEFAULTS = {
+  title: "VPN WireGuard",
+  icon: "mdi:vpn",
+  icon_color: "",
+  expanded: false, // serveurs dépliés à l'ouverture
+  show_endpoint: false, // adresse publique des pairs (au survol sinon)
+  theme: "v2",
+};
+
+/** Capteurs d'un pair WGDashboard : fin de l'identifiant. */
+const WG_ROLES = [
+  ["up", "binary_sensor", /_connected$/],
+  ["hs", "sensor", /_last_handshake$/],
+  ["rx", "sensor", /_data_received$/],
+  ["tx", "sensor", /_data_sent$/],
+];
+
+class ServeurHaWireguardCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("serveur-ha-wireguard-card-editor");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { ...WG_DEFAULTS, ...(config || {}) };
+    this._map = null;
+    this._sig = null;
+    this._open = new Set(this._config.expanded ? ["*"] : []);
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    if (!this._clicks) {
+      this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const fold = ev.target.closest?.("[data-fold]");
+        if (fold) {
+          // serveur : déplier ou replier la liste de ses pairs
+          ev.stopPropagation();
+          const k = fold.dataset.fold;
+          if (this._open.has("*")) { this._open = new Set(this._keys || []); this._open.delete(k); }
+          else if (this._open.has(k)) this._open.delete(k);
+          else this._open.add(k);
+          this._sig = null; this._render(); return;
+        }
+        const el = ev.target.closest?.("[data-entity]");
+        if (el?.dataset.entity) {
+          const e = new Event("hass-more-info", { bubbles: true, composed: true });
+          e.detail = { entityId: el.dataset.entity };
+          this.dispatchEvent(e);
+        }
+      }));
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    if (this._hass?.entities !== hass.entities || this._hass?.devices !== hass.devices) this._map = null;
+    this._hass = hass;
+    this._render();
+  }
+
+  connectedCallback() {
+    clearInterval(this._tick);
+    this._tick = setInterval(() => { this._sig = null; this._render(); }, 60000);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._tick);
+  }
+
+  getCardSize() {
+    return 5;
+  }
+
+  _st(id) {
+    return id ? this._hass?.states?.[id] : undefined;
+  }
+
+  _num(id) {
+    const s = this._st(id);
+    if (!s || s.state === "unavailable" || s.state === "unknown") return null;
+    const v = Number(s.state);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  /** Serveurs WGDashboard (un appareil par interface) et leurs pairs. */
+  _resolve() {
+    if (this._map) return this._map;
+    const hass = this._hass;
+    const reg = hass.entities || {}, devs = hass.devices || {};
+    const servers = {};
+    for (const [id, e] of Object.entries(reg)) {
+      if (e.platform !== "wgdashboard_monitor" || !hass.states[id] || e.hidden) continue;
+      const key = e.device_id || "wg";
+      const dev = devs[e.device_id];
+      const srv = (servers[key] ||= { key, dev, name: dev?.name_by_user || dev?.name || "WireGuard", peers: {}, count: null });
+      if (/_connected_peers$/.test(id)) { srv.count = id; continue; }
+      const domain = id.split(".")[0];
+      const role = WG_ROLES.find(([, d, re]) => d === domain && re.test(id));
+      if (!role) continue;
+      const pk = id.split(".")[1].replace(role[2], "");
+      const p = (srv.peers[pk] ||= { key: pk, roles: {} });
+      p.roles[role[0]] = id;
+    }
+    // nom du pair : nom affiché sans le nom du serveur ni la fin (« connected », « last handshake »…)
+    const list = Object.values(servers).map((s) => {
+      const peers = Object.values(s.peers).map((p) => {
+        const anyId = p.roles.up || p.roles.hs || p.roles.rx || p.roles.tx;
+        const fn = String(this._st(anyId)?.attributes?.friendly_name || p.key);
+        const name = fn.replace(s.dev?.name || "", "").replace(/\s+(connected|last handshake|data received|data sent|connecté|dernier handshake|données reçues|données envoyées)\s*$/i, "").trim() || p.key;
+        return { ...p, name };
+      }).sort((a, b) => a.name.localeCompare(b.name, "fr", { numeric: true }));
+      // nom court du serveur : « WGDashboard (wg0) » → « wg0 »
+      const short = (/\(([^)]+)\)/.exec(s.name) || [, s.name])[1];
+      return { ...s, short, peers };
+    }).sort((a, b) => a.short.localeCompare(b.short, "fr", { numeric: true }));
+    this._map = { servers: list };
+    return this._map;
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const m = this._resolve();
+    this._keys = m.servers.map((s) => s.key);
+    const ids = m.servers.flatMap((s) => [s.count, ...s.peers.flatMap((p) => Object.values(p.roles))]);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${[...this._open].join(",")}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const open = (k) => this._open.has("*") || this._open.has(k);
+    const go = (v) => (v === null ? "—" : v >= 1000 ? `${fmt(v / 1000, 2)} To` : v >= 1 ? `${fmt(v, v < 10 ? 2 : 1)} Go` : `${fmt(v * 1000, 0)} Mo`);
+    const gb = (id) => {
+      const v = this._num(id);
+      if (v === null) return null;
+      const u = String(this._st(id)?.attributes?.unit_of_measurement || "GB").toUpperCase();
+      return u === "TB" ? v * 1000 : u === "MB" ? v / 1000 : u === "KB" ? v / 1e6 : u === "B" ? v / 1e9 : v;
+    };
+    const isUp = (p) => this._st(p.roles.up)?.state === "on";
+    const hsAgo = (p) => { const s = this._st(p.roles.hs)?.state; return s && s !== "unknown" && s !== "unavailable" ? since(s) : null; };
+
+    const peerTile = (p) => {
+      const up = isUp(p);
+      const rx = gb(p.roles.rx), tx = gb(p.roles.tx);
+      const a = this._st(p.roles.hs)?.attributes || {};
+      const ep = a.endpoint && a.endpoint !== "(none)" ? a.endpoint : null;
+      const hs = hsAgo(p);
+      const line1 = up ? (hs ? `Handshake il y a ${hs}` : "Connecté") : hs ? `Vu il y a ${hs}` : "Jamais connecté";
+      const title = [p.name, up ? "Connecté" : "Déconnecté", a.allowed_ips ? `IP VPN ${a.allowed_ips}` : null, ep ? `Point d'accès ${ep}` : null, hs ? `Dernier handshake il y a ${hs}` : null].filter(Boolean).join(" · ");
+      return `<div class="wg-p ${up ? "up" : ""}" data-entity="${esc(p.roles.up || p.roles.hs || "")}" title="${esc(title)}">
+          <i></i><div class="wg-pn"><span>${esc(p.name)}</span><small>${esc(line1)}${a.allowed_ips ? ` · ${esc(String(a.allowed_ips).replace(/\/32$/, ""))}` : ""}${c.show_endpoint && ep ? ` · ${esc(ep)}` : ""}</small></div>
+          <div class="wg-pd"><span title="Reçu par le serveur"><ha-icon icon="mdi:arrow-down"></ha-icon>${go(rx)}</span><span title="Envoyé par le serveur"><ha-icon icon="mdi:arrow-up"></ha-icon>${go(tx)}</span></div>
+        </div>`;
+    };
+
+    const all = m.servers.flatMap((s) => s.peers);
+    const upN = all.filter(isUp).length;
+    const rxT = all.reduce((a, p) => a + (gb(p.roles.rx) || 0), 0), txT = all.reduce((a, p) => a + (gb(p.roles.tx) || 0), 0);
+
+    const serversHtml = m.servers.map((s) => {
+      const on = s.peers.filter(isUp);
+      const total = this._st(s.count)?.attributes?.total_peers ?? s.peers.length;
+      const isOpen = open(s.key);
+      const dots = s.peers.map((p) => `<i class="${isUp(p) ? "ok" : "na"}"></i>`).join("");
+      return `<div class="ping-g ${isOpen ? "open" : ""}">
+        <button class="ping-gh" data-fold="${esc(s.key)}" aria-expanded="${isOpen}"><ha-icon icon="mdi:server-network"></ha-icon><span class="ping-gl">${esc(s.short)}</span>
+          <span class="ping-dots">${dots}</span><b class="${on.length ? "ok" : "off"}">${on.length}/${total}</b><ha-icon class="ping-chev" icon="${isOpen ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
+        ${isOpen ? `<div class="wg-list">${s.peers.map(peerTile).join("")}</div>`
+          : on.length ? `<div class="wg-on">${on.map((p) => `<span class="omv-svc on" data-entity="${esc(p.roles.up)}"><i></i>${esc(p.name)}</span>`).join("")}</div>` : ""}
+      </div>`;
+    }).join("");
+
+    const body = !m.servers.length
+      ? `<div class="empty">Aucun serveur WireGuard trouvé<span>Installez l'intégration WGDashboard Monitor (HACS) et ajoutez votre WGDashboard dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`
+      : `<div class="ping-sum">
+          <div class="${upN ? "ok" : ""}"><b>${upN}<small>/${all.length}</small></b><span>pairs connectés</span></div>
+          <div><b>${m.servers.length}</b><span>serveur${m.servers.length > 1 ? "s" : ""}</span></div>
+          <div><b>${go(rxT)}</b><span>reçu</span></div>
+          <div><b>${go(txT)}</b><span>envoyé</span></div>
+        </div><div class="srv-sec ping-groups">${serversHtml}</div>`;
+    const leds = m.servers.length ? `<span class="srv-led ${upN ? "ok" : "na"}"><i></i>${upN ? `${upN} connecté${upN > 1 ? "s" : ""}` : "Aucun pair connecté"}</span>` : "";
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${PVE_STYLE}${OMV_STYLE}${PING_STYLE}${WG_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
+      <header>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:vpn")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+          <div><div class="title">${esc(c.title || "VPN WireGuard")}</div><div class="sub">${m.servers.length ? m.servers.map((s) => esc(s.short)).join(" · ") : "WGDashboard"}</div></div></div>
+        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+      </header>
+      ${body}
+    </ha-card>`;
+  }
+}
+
+const WG_STYLE = `<style>
+.ping-gh b.off { color: var(--med-muted); }
+.wg-on { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 10px; }
+.wg-list { display: grid; gap: 6px; padding: 0 8px 8px; }
+.wg-p { display: grid; grid-template-columns: 9px 1fr auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--med-line); background: var(--med-surface); min-width: 0; }
+.wg-p > i { width: 9px; height: 9px; border-radius: 50%; background: var(--med-muted); }
+.wg-p.up { border-color: color-mix(in srgb, var(--med-down) 45%, transparent); } .wg-p.up > i { background: var(--med-down); }
+.wg-p:not(.up) .wg-pn span { color: var(--med-muted); }
+.wg-pn { display: grid; min-width: 0; }
+.wg-pn span { font-size: .8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wg-pn small { font-size: .68rem; color: var(--med-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wg-pd { display: grid; gap: 1px; justify-items: end; font-size: .72rem; color: var(--med-muted); white-space: nowrap; }
+.wg-pd span { display: inline-flex; align-items: center; gap: 2px; } .wg-pd ha-icon { --mdc-icon-size: 13px; }
+</style>`;
+
 /* ------------------------------------------------------------ carte DNS (AdGuard Home, Pi-hole) */
 
 const DNS_DEFAULTS = {
@@ -3781,6 +3991,24 @@ const PING_LABELS = {
   theme: "Couleurs de la carte",
 };
 const ServeurHaPingCardEditor = makeEditor(PING_SCHEMA, PING_LABELS, PING_DEFAULTS);
+const WG_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  { name: "icon_color", selector: { text: {} } },
+  { name: "expanded", selector: { boolean: {} } },
+  { name: "show_endpoint", selector: { boolean: {} } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const WG_LABELS = {
+  title: "Titre",
+  icon: "Icône",
+  icon_color: "Couleur de l'icône",
+  expanded: "Serveurs dépliés à l'ouverture",
+  show_endpoint: "Afficher l'adresse publique des pairs (sinon au survol)",
+  theme: "Couleurs de la carte",
+};
+const ServeurHaWireguardCardEditor = makeEditor(WG_SCHEMA, WG_LABELS, WG_DEFAULTS);
 const DNS_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -3880,6 +4108,8 @@ if (typeof customElements !== "undefined") {
   define("serveur-ha-asus-card-editor", ServeurHaAsusCardEditor);
   define("serveur-ha-ping-card", ServeurHaPingCard);
   define("serveur-ha-ping-card-editor", ServeurHaPingCardEditor);
+  define("serveur-ha-wireguard-card", ServeurHaWireguardCard);
+  define("serveur-ha-wireguard-card-editor", ServeurHaWireguardCardEditor);
   define("serveur-ha-dns-card", ServeurHaDnsCard);
   define("serveur-ha-dns-card-editor", ServeurHaDnsCardEditor);
   define("serveur-ha-linux-card", ServeurHaLinuxCard);
@@ -3939,6 +4169,14 @@ if (typeof customElements !== "undefined") {
       type: "serveur-ha-ping-card",
       name: "Carte Réseau (Ping)",
       description: "Appareils suivis par Ping : en ligne ou hors ligne, latence, gigue et perte de paquets, groupés par type ou par pièce.",
+      preview: true,
+    });
+  }
+  if (!window.customCards.some((c) => c.type === "serveur-ha-wireguard-card")) {
+    window.customCards.push({
+      type: "serveur-ha-wireguard-card",
+      name: "Carte VPN WireGuard",
+      description: "Serveurs WireGuard (WGDashboard) : pairs connectés, dernier handshake, données reçues et envoyées.",
       preview: true,
     });
   }
