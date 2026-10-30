@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.14.0-beta.1";
+const CARD_VERSION = "0.14.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3322,20 +3322,31 @@ class ServeurHaMediaCard extends HTMLElement {
     const hass = this._hass;
     const reg = hass.entities || {}, devs = hass.devices || {};
     const servers = {};
+    // un serveur = une entrée d'intégration ; les appareils des sessions n'ont pas toujours de lien vers le serveur
     const srvOf = (platform, devId) => {
       const dev = devs[devId];
       const top = dev?.via_device_id && devs[dev.via_device_id] ? dev.via_device_id : devId;
-      const key = `${platform}:${top || "x"}`;
-      return (servers[key] ||= { key, platform, dev: devs[top], name: devs[top]?.name_by_user || devs[top]?.name || MEDIA_APPS[platform][0], count: null, update: null, libs: [], players: [] });
+      const entry = dev?.primary_config_entry || dev?.config_entries?.[0] || devs[top]?.primary_config_entry || top || "x";
+      const key = `${platform}:${entry}`;
+      return (servers[key] ||= { key, platform, dev: null, name: MEDIA_APPS[platform][0], count: null, update: null, libs: [], players: [] });
+    };
+    const setDev = (s, devId) => {
+      if (s.dev || !devs[devId]) return;
+      s.dev = devs[devId];
+      s.name = s.dev.name_by_user || s.dev.name || s.name;
     };
     for (const [id, e] of Object.entries(reg)) {
       if (!MEDIA_APPS[e.platform] || !hass.states[id] || e.hidden) continue;
       const s = srvOf(e.platform, e.device_id);
       const domain = id.split(".")[0];
-      if (domain === "media_player") s.players.push(id);
-      else if (domain === "update") s.update ||= id;
+      if (domain === "media_player") { s.players.push(id); continue; }
+      setDev(s, e.device_id); // l'appareil qui porte les capteurs est le serveur
+      if (domain === "update") s.update ||= id;
       else if (domain === "sensor" && /_library_|bibliotheque/.test(id)) s.libs.push(id);
       else if (domain === "sensor") s.count ||= id;
+    }
+    for (const s of Object.values(servers)) {
+      if (!s.dev) { const d = devs[reg[s.players[0]]?.device_id]; const top = d?.via_device_id && devs[d.via_device_id]; if (top) setDev(s, top.id); }
     }
     const list = Object.values(servers).sort((a, b) => a.name.localeCompare(b.name, "fr"));
     this._map = { servers: list };
