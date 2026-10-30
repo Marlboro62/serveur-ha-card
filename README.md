@@ -48,27 +48,27 @@
 
 | Serveur | Home Assistant | NAS Synology |
 | --- | --- | --- |
-| ![Serveur](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/serveur-sombre.png) | ![Home Assistant](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/home-assistant.png) | ![NAS](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/nas.png) |
+| <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/serveur-sombre.png" alt="Serveur" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/home-assistant.png" alt="Home Assistant" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/nas.png" alt="NAS" width="300"> |
 
 | Serveur en alerte | Clair | NAS en alerte |
 | --- | --- | --- |
-| ![Serveur en alerte](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/serveur-alerte.png) | ![Serveur clair](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/serveur-clair.png) | ![NAS en alerte](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/nas-alerte.png) |
+| <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/serveur-alerte.png" alt="Serveur en alerte" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/serveur-clair.png" alt="Serveur clair" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/nas-alerte.png" alt="NAS en alerte" width="300"> |
 
 | Proxmox VE | Proxmox chargé, mise à jour | Proxmox clair |
 | --- | --- | --- |
-| ![Proxmox](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/proxmox.png) | ![Proxmox chargé](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/proxmox-alerte.png) | ![Proxmox clair](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/proxmox-clair.png) |
+| <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/proxmox.png" alt="Proxmox" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/proxmox-alerte.png" alt="Proxmox chargé" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/proxmox-clair.png" alt="Proxmox clair" width="300"> |
 
 | Filtrage DNS | Protection coupée | Filtrage DNS clair |
 | --- | --- | --- |
-| ![Filtrage DNS](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/dns.png) | ![Protection coupée](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/dns-coupe.png) | ![Filtrage DNS clair](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/dns-clair.png) |
+| <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/dns.png" alt="Filtrage DNS" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/dns-coupe.png" alt="Protection coupée" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/dns-clair.png" alt="Filtrage DNS clair" width="300"> |
 
 | Serveurs Linux | Sécurité, redémarrage, paquets | Serveurs Linux clair |
 | --- | --- | --- |
-| ![Serveurs Linux](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/linux.png) | ![Serveurs Linux en alerte](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/linux-alerte.png) | ![Serveurs Linux clair](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/linux-clair.png) |
+| <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/linux.png" alt="Serveurs Linux" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/linux-alerte.png" alt="Serveurs Linux en alerte" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/linux-clair.png" alt="Serveurs Linux clair" width="300"> |
 
 | OpenMediaVault | Disque en alerte | OpenMediaVault clair |
 | --- | --- | --- |
-| ![OpenMediaVault](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/omv.png) | ![OpenMediaVault, disque en alerte](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/omv-alerte.png) | ![OpenMediaVault clair](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/omv-clair.png) |
+| <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/omv.png" alt="OpenMediaVault" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/omv-alerte.png" alt="OpenMediaVault, disque en alerte" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/omv-clair.png" alt="OpenMediaVault clair" width="300"> |
 
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
