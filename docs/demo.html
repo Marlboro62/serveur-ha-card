@@ -452,7 +452,7 @@
     aa("binary_sensor", "wan", ad ? "off" : "on", { device_class: "connectivity" });
     aa("binary_sensor", "dual_wan", "off", { device_class: "connectivity" });
     aa("binary_sensor", "port_status_wan", "on", { list: { 0: { state: true, link_rate: 1000 } } });
-    aa("binary_sensor", "port_status_lan", "on", { list: { 1: { state: true, link_rate: 1000 }, 2: { state: true, link_rate: 1000 }, 3: { state: false, link_rate: 0 }, 4: { state: true, link_rate: 100 } } });
+    aa("binary_sensor", "port_status_lan", "on", { list: { 1: { state: true, link_rate: 1000 }, 2: { state: true, link_rate: 1000 }, 3: { state: false, link_rate: 0 }, 4: { state: true, link_rate: 100 }, 5: { state: true, link_rate: 1000 }, 6: { state: false, link_rate: 0 }, 7: { state: true, link_rate: 1000 }, 8: { state: true, link_rate: 100 } } });
     aa("switch", "wireless_2_4_ghz", "on", { ssid: "Maison", device_class: "wlan" });
     aa("switch", "wireless_5_ghz", "on", { ssid: "Maison-5G", device_class: "wlan" });
     aa("switch", "guest_2_4_ghz_1", ab ? "on" : "off", { ssid: "Invités" });

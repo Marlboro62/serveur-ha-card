@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.10.0-beta.3";
+const CARD_VERSION = "0.10.0-beta.4";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2051,7 +2051,7 @@ const ASUS_ROLES = [
   ["latest", "sensor", /_latest_connected$/],
   ["mesh", "sensor", /_aimesh$/],
   ["internet", "binary_sensor", /_internet$/],
-  ["wan", "binary_sensor", /(?<!_dual)_wan$/],
+  ["wan", "binary_sensor", /(?<!_dual|_port_status)_wan$/],
   ["ports_lan", "binary_sensor", /_port_status_lan$/],
   ["ports_wan", "binary_sensor", /_port_status_wan$/],
   ["wifi24", "switch", /_wireless_2_4_ghz$/],
@@ -2325,7 +2325,7 @@ class ServeurHaAsusCard extends HTMLElement {
           const cls = !up ? "off" : sp >= 1000 ? "g" : "m";
           return `<div class="asus-port ${cls}" data-entity="${esc(id)}" title="${esc(`${label} : ${up ? `connecté, ${speed(sp)}bit/s` : "déconnecté"}`)}"><ha-icon icon="mdi:ethernet"></ha-icon><b>${esc(label)}</b><small>${up ? speed(sp) : "—"}</small></div>`;
         };
-        const wan = list(r.ports_wan).map(([, p]) => port(r.ports_wan, "WAN", p));
+        const wan = list(r.ports_wan).map(([, p]) => port(r.ports_wan, "WAN", p).replace('class="asus-port ', 'class="asus-port wan '));
         const lan = list(r.ports_lan).map(([n, p]) => port(r.ports_lan, `LAN ${n}`, p));
         const upCount = list(r.ports_lan).filter(([, p]) => p?.state).length;
         ports = sec("mdi:ethernet", `Ports <small class="pve-n">${lan.length ? `${upCount}/${lan.length} LAN connectés` : ""}</small>`, wan.length || lan.length ? `<div class="asus-ports">${wan.join("")}${lan.join("")}</div>` : "");
@@ -2426,7 +2426,9 @@ const ASUS_STYLE = `<style>
 .asus-r::before { right: 0; background: var(--med-line); }
 .asus-r i { width: var(--w); background: var(--med-blue); }
 .asus-r.out i { background: var(--med-green); }
-.asus-ports { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 6px; }
+/* 4 ports par ligne (8 ports LAN : 2 lignes de 4, 16 ports : 4 lignes) ; le port WAN seul sur la première ligne */
+.asus-ports { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.asus-port.wan + .asus-port { grid-column-start: 1; }
 .asus-port { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 4px; border-radius: 10px; cursor: pointer;
   border: 1px solid var(--med-line); background: var(--med-surface); color: var(--med-muted); }
 .asus-port ha-icon { --mdc-icon-size: 18px; }
