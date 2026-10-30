@@ -383,6 +383,8 @@ La carte reprend tous les appareils suivis par l'intégration **Ping (ICMP)** de
 | `expanded` | Groupes dépliés à l'ouverture | `false` |
 | `warn_ms`, `alert_ms` | Latence moyenne orange, rouge (ms) | `20`, `100` |
 | `exclude` | Appareils à ignorer (noms, entités ou adresses IP) | — |
+| `standby` | Appareils **éteints volontairement** (entités, noms ou adresses IP) : quand ils ne répondent pas, ils sont gris « Éteint » au lieu de rouge, et ne comptent pas dans les hors ligne | — |
+| `standby_groups` | Groupes entiers éteints volontairement : `net`, `srv`, `print`, `media`, `mobile`, `home` | — |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ```yaml
@@ -391,7 +393,14 @@ group_by: area
 exclude:
   - Téléphone invité
   - 192.168.1.150
+standby_groups:
+  - print
+standby:
+  - binary_sensor.192_168_1_30
+  - PC portable
 ```
+
+Un appareil éteint volontairement qui se rallume redevient vert, comme les autres. S'il ne répond pas, il reste dans son groupe, en gris, et le voyant de la carte reste vert.
 
 ## Carte Filtrage DNS — `custom:serveur-ha-dns-card`
 

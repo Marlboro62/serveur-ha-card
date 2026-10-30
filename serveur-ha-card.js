@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.11.0-beta.2";
+const CARD_VERSION = "0.11.0-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2481,6 +2481,8 @@ const PING_DEFAULTS = {
   expanded: false, // groupes dépliés à l'ouverture
   warn_ms: 20, alert_ms: 100, // latence moyenne : orange, rouge
   exclude: [], // noms ou entités à ignorer
+  standby: [], // appareils éteints volontairement (entités, noms ou adresses IP) : gris « Éteint » au lieu de rouge
+  standby_groups: [], // groupes entiers éteints volontairement (print, mobile, media…)
   theme: "v2",
 };
 
@@ -2598,6 +2600,8 @@ class ServeurHaPingCard extends HTMLElement {
       const ip = this._st(d.roles.tracker)?.attributes?.ip || (/(\d+_\d+_\d+_\d+)/.exec(d.roles.up || "") || [, ""])[1].replace(/_/g, ".") || null;
       return { ...d, name, ip };
     }).filter((h) => !ex.some((x) => h.name.toLowerCase() === x || Object.values(h.roles).includes(x) || h.ip === x));
+    const list = (v) => (Array.isArray(v) ? v : String(v || "").split(",")).map((x) => String(x).trim().toLowerCase()).filter(Boolean);
+    const sb = list(c.standby), sbGroups = list(c.standby_groups);
     // groupes : par pièce, par type d'appareil (nom), ou un seul
     const groupOf = (h) => {
       if (c.group_by === "none") return ["all", "Appareils", "mdi:lan"];
@@ -2612,17 +2616,19 @@ class ServeurHaPingCard extends HTMLElement {
     const groups = new Map();
     for (const h of hosts) {
       const [k, label, icon] = groupOf(h);
+      // éteint volontairement : appareil listé, ou son groupe
+      h.standby = sbGroups.includes(k) || sb.some((x) => h.name.toLowerCase() === x || Object.values(h.roles).includes(x) || h.ip === x);
       if (!groups.has(k)) groups.set(k, { key: k, label, icon, hosts: [] });
       groups.get(k).hosts.push(h);
     }
     const order = PING_GROUPS.map((g) => g[0]);
-    const list = [...groups.values()].sort((a, b) => {
+    const sorted = [...groups.values()].sort((a, b) => {
       const ia = order.indexOf(a.key), ib = order.indexOf(b.key);
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.label.localeCompare(b.label, "fr");
     });
     const ipNum = (ip) => (ip || "").split(".").reduce((n, x) => n * 256 + (Number(x) || 0), 0);
-    for (const g of list) g.hosts.sort((a, b) => ipNum(a.ip) - ipNum(b.ip) || a.name.localeCompare(b.name, "fr", { numeric: true }));
-    this._map = { hosts, groups: list };
+    for (const g of sorted) g.hosts.sort((a, b) => ipNum(a.ip) - ipNum(b.ip) || a.name.localeCompare(b.name, "fr", { numeric: true }));
+    this._map = { hosts, groups: sorted };
     return this._map;
   }
 
@@ -2631,6 +2637,12 @@ class ServeurHaPingCard extends HTMLElement {
     const s = this._st(h.roles.up) || this._st(h.roles.tracker);
     if (!s || s.state === "unavailable" || s.state === "unknown") return null;
     return s.state === "on" || s.state === "home";
+  }
+
+  /** État affiché : up, down (hors ligne), off (éteint volontairement), na (inconnu). */
+  _state(h) {
+    const u = this._isUp(h);
+    return u === true ? "up" : u === false ? (h.standby ? "off" : "down") : "na";
   }
 
   _render() {
@@ -2650,7 +2662,8 @@ class ServeurHaPingCard extends HTMLElement {
     const open = (k) => this._open.has("*") || this._open.has(k);
 
     const hosts = m.hosts;
-    const down = hosts.filter((h) => this._isUp(h) === false);
+    const down = hosts.filter((h) => this._state(h) === "down");
+    const offN = hosts.filter((h) => this._state(h) === "off").length;
     const upN = hosts.filter((h) => this._isUp(h) === true).length;
     const lossy = hosts.filter((h) => this._isUp(h) && (this._num(h.roles.loss) || 0) > 0);
     const avgs = hosts.map((h) => (this._isUp(h) ? this._num(h.roles.avg) : null)).filter((v) => v !== null);
@@ -2658,13 +2671,14 @@ class ServeurHaPingCard extends HTMLElement {
 
     const tile = (h) => {
       const up = this._isUp(h);
+      const off = this._state(h) === "off";
       const avg = up ? this._num(h.roles.avg) : null;
       const loss = up ? this._num(h.roles.loss) : null;
       const jit = up ? this._num(h.roles.jitter) : null;
-      const cls = up === false ? "down" : up === null ? "na" : loss > 0 ? "warn" : lat(avg);
-      const detail = up === false ? (downSince(h) ? `depuis ${downSince(h)}` : "hors ligne")
+      const cls = off ? "off" : up === false ? "down" : up === null ? "na" : loss > 0 ? "warn" : lat(avg);
+      const detail = off ? "Éteint" : up === false ? (downSince(h) ? `depuis ${downSince(h)}` : "hors ligne")
         : [avg !== null ? ms(avg) : null, loss > 0 ? `${fmt(loss, 0)} % perdus` : null].filter(Boolean).join(" · ");
-      const title = [h.name, h.ip, up === false ? "Hors ligne" : up ? "En ligne" : "Inconnu",
+      const title = [h.name, h.ip, off ? "Éteint (volontairement)" : up === false ? "Hors ligne" : up ? "En ligne" : "Inconnu",
         avg !== null ? `Moyenne ${ms(avg)}` : null, this._num(h.roles.max) !== null && up ? `Max ${ms(this._num(h.roles.max))}` : null,
         jit !== null ? `Gigue ${ms(jit)}` : null, loss !== null ? `Perte ${fmt(loss, 0)} %` : null].filter(Boolean).join(" · ");
       return `<div class="ping-h s-${cls || "ok"}" data-entity="${esc(h.roles.up || h.roles.tracker)}" title="${esc(title)}"><i></i><div class="ping-n"><span>${esc(h.name)}</span><small>${esc(detail || h.ip || "")}</small></div></div>`;
@@ -2675,9 +2689,9 @@ class ServeurHaPingCard extends HTMLElement {
 
     // --- groupes, repliés par défaut : un point par appareil, la liste au clic
     const groupsHtml = m.groups.map((g) => {
-      const n = g.hosts.length, ok = g.hosts.filter((h) => this._isUp(h) === true).length, bad = g.hosts.filter((h) => this._isUp(h) === false).length;
+      const n = g.hosts.length, ok = g.hosts.filter((h) => this._isUp(h) === true).length, bad = g.hosts.filter((h) => this._state(h) === "down").length;
       const isOpen = open(g.key);
-      const dots = g.hosts.map((h) => { const u = this._isUp(h); return `<i class="${u === false ? "down" : u === null ? "na" : "ok"}"></i>`; }).join("");
+      const dots = g.hosts.map((h) => { const st = this._state(h); return `<i class="${st === "up" ? "ok" : st}"></i>`; }).join("");
       return `<div class="ping-g ${isOpen ? "open" : ""}">
         <button class="ping-gh" data-fold="${esc(g.key)}" aria-expanded="${isOpen}"><ha-icon icon="${esc(g.icon)}"></ha-icon><span class="ping-gl">${esc(g.label)}</span>
           <span class="ping-dots">${dots}</span><b class="${bad ? "bad" : "ok"}">${ok}/${n}</b><ha-icon class="ping-chev" icon="${isOpen ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
@@ -2689,7 +2703,7 @@ class ServeurHaPingCard extends HTMLElement {
       ? `<div class="empty">Aucun appareil suivi par Ping<span>Ajoutez l'intégration Ping (ICMP) pour chaque appareil dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`
       : `<div class="ping-sum">
           <div class="${down.length ? "bad" : "ok"}"><b>${upN}<small>/${hosts.length}</small></b><span>en ligne</span></div>
-          <div class="${down.length ? "bad" : ""}"><b>${down.length}</b><span>hors ligne</span></div>
+          <div class="${down.length ? "bad" : ""}"><b>${down.length}</b><span>hors ligne${offN ? ` · ${offN} éteint${offN > 1 ? "s" : ""}` : ""}</span></div>
           <div class="${lat(mean)}"><b>${mean === null ? "—" : fmt(mean, mean < 10 ? 1 : 0)}<small> ms</small></b><span>latence moyenne</span></div>
           <div class="${lossy.length ? "warn" : ""}"><b>${lossy.length}</b><span>perte de paquets</span></div>
         </div>${downHtml}<div class="srv-sec ping-groups">${groupsHtml}</div>`;
@@ -2725,7 +2739,8 @@ const PING_STYLE = `<style>
 .ping-gl { font-weight: 600; white-space: nowrap; }
 .ping-dots { flex: 1; display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; min-width: 0; }
 .ping-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--med-down); }
-.ping-dots i.down { background: var(--t-red); } .ping-dots i.na { background: var(--med-muted); }
+.ping-dots i.down { background: var(--t-red); } .ping-dots i.na, .ping-dots i.off { background: var(--med-muted); }
+.ping-dots i.off { opacity: .55; }
 .ping-gh b { font-size: .8rem; white-space: nowrap; } .ping-gh b.ok { color: var(--med-down); } .ping-gh b.bad { color: var(--t-red); }
 .ping-chev { --mdc-icon-size: 18px; color: var(--med-muted); flex: none; }
 .ping-g.open .ping-grid { padding: 0 8px 8px; }
@@ -2738,6 +2753,7 @@ const PING_STYLE = `<style>
 .ping-n span { font-size: .78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ping-n small { font-size: .68rem; color: var(--med-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ping-h.s-down small { color: var(--t-red); white-space: normal; }
+.ping-h.s-off { opacity: .6; } .ping-h.s-off > i { background: var(--med-muted); }
 ha-card > .srv-sec:last-child { margin-bottom: 12px; }
 </style>`;
 
@@ -3739,6 +3755,14 @@ const PING_SCHEMA = [
     ] } },
   },
   { name: "expanded", selector: { boolean: {} } },
+  { name: "standby", selector: { entity: { multiple: true, filter: { integration: "ping", domain: ["binary_sensor", "device_tracker"] } } } },
+  {
+    name: "standby_groups",
+    selector: { select: { multiple: true, mode: "list", options: [
+      { value: "net", label: "Réseau" }, { value: "srv", label: "Serveurs" }, { value: "print", label: "Imprimantes" },
+      { value: "media", label: "Multimédia" }, { value: "mobile", label: "Téléphones et ordinateurs" }, { value: "home", label: "Domotique" },
+    ] } },
+  },
   { name: "warn_ms", selector: { number: { min: 1, max: 1000, mode: "box", unit_of_measurement: "ms" } } },
   { name: "alert_ms", selector: { number: { min: 1, max: 5000, mode: "box", unit_of_measurement: "ms" } } },
   THEME_SELECT,
@@ -3750,6 +3774,8 @@ const PING_LABELS = {
   icon_color: "Couleur de l'icône",
   group_by: "Regroupement des appareils",
   expanded: "Groupes dépliés à l'ouverture",
+  standby: "Appareils éteints volontairement (gris « Éteint » au lieu de rouge)",
+  standby_groups: "Groupes entiers éteints volontairement",
   warn_ms: "Latence orange à partir de",
   alert_ms: "Latence rouge à partir de",
   theme: "Couleurs de la carte",
