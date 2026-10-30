@@ -28,7 +28,7 @@
 
 # Cartes Serveur HA
 
-**Dix cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
+**Onze cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
 
 | Type | Carte |
 | --- | --- |
@@ -41,6 +41,7 @@
 | `custom:serveur-ha-asus-card` | **Routeur ASUS** ([AsusRouter](https://github.com/Vaskivskyi/ha-asusrouter)) : Internet et IP publique, débits, Wi-Fi et réseaux invités, ports Ethernet, appareils connectés, VPN, firmware, températures, redémarrage confirmé en deux clics |
 | `custom:serveur-ha-ping-card` | **Réseau** (intégration Ping) : appareils en ligne ou hors ligne, latence, gigue et perte de paquets, groupés par type ou par pièce, groupes dépliables |
 | `custom:serveur-ha-wireguard-card` | **VPN WireGuard** ([WGDashboard](https://github.com/donaldzou/WGDashboard)) : serveurs, pairs connectés, dernier handshake, données reçues et envoyées |
+| `custom:serveur-ha-glances-card` | **Serveurs Glances** : CPU, RAM, disques par point de montage, températures, ventilateurs, réseau et processus de chaque serveur, repliés en une ligne |
 | `custom:serveur-ha-omv-card` | **OpenMediaVault** : système (uptime, version, charge, CPU, RAM), systèmes de fichiers, disques (température, SMART), services, réseau, mises à jour, redémarrage et arrêt confirmés en deux clics |
 
 **Pare-feu OPNsense** : la carte a son propre dépôt, [Carte OPNsense](https://github.com/Marlboro62/opnsense-card) (`custom:opnsense-card`).
@@ -85,9 +86,13 @@
 | --- | --- | --- |
 | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/wireguard.png" alt="VPN WireGuard" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/wireguard-replie.png" alt="VPN WireGuard replié" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/wireguard-clair.png" alt="VPN WireGuard clair" width="300"> |
 
+| Serveurs Glances | Serveur chaud, disque plein | Glances clair |
+| --- | --- | --- |
+| <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/glances.png" alt="Serveurs Glances" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/glances-alerte.png" alt="Serveurs Glances en alerte" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/glances-clair.png" alt="Serveurs Glances clair" width="300"> |
+
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 10 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 11 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 ## Installation
 
@@ -435,6 +440,26 @@ names:
 ```
 
 Les pairs sans nom dans WGDashboard apparaissent sous leur identifiant (ex. `PL7aEobg`) : `names` les renomme dans la carte, sans rien changer à WGDashboard ni aux entités. Le nom d'origine reste visible au survol.
+
+## Carte Serveurs Glances — `custom:serveur-ha-glances-card`
+
+```yaml
+type: custom:serveur-ha-glances-card
+```
+
+La carte reprend tous les serveurs suivis par l'intégration **Glances** de Home Assistant ([Glances](https://github.com/nicolargo/glances) lancé en mode web, `glances -w`, sur chaque machine). Tout est détecté, en français comme en anglais :
+
+- **En-tête** : serveurs suivis, voyant **Tout va bien** ou **N à surveiller** (CPU à 90 %, RAM à 92 %, disque à 90 %, température rouge ou serveur injoignable).
+- **Une ligne par serveur**, repliée : nom, durée depuis le démarrage, et pastilles **CPU**, **RAM**, **Disque** (le plus rempli) et **Température** du processeur, en vert, orange ou rouge.
+- **Un clic déplie le serveur** : uptime, charge, processus et threads (conteneurs Docker si Glances les suit), jauges CPU, RAM (Go utilisés sur le total), swap et GPU, chaque **disque** par point de montage (`/`, `/mnt/data`…), toutes les **températures** du plus chaud au plus froid, les **ventilateurs** qui tournent et les **débits réseau** de chaque interface.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title`, `icon`, `icon_color` | En-tête | `Serveurs Glances`, `mdi:monitor-dashboard` |
+| `expanded` | Serveurs dépliés à l'ouverture | `false` |
+| `temp_warn`, `temp_alert` | Température orange, rouge (°C) | `70`, `85` |
+| `net_max` | Pleine échelle des barres réseau (Mbit/s) | `1000` |
+| `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ## Carte Filtrage DNS — `custom:serveur-ha-dns-card`
 

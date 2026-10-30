@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.12.0";
+const CARD_VERSION = "0.13.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2972,6 +2972,273 @@ const WG_STYLE = `<style>
 .wg-pd span { display: inline-flex; align-items: center; gap: 2px; } .wg-pd ha-icon { --mdc-icon-size: 13px; }
 </style>`;
 
+/* ------------------------------------------------------------ carte Serveurs Glances */
+
+const GL_DEFAULTS = {
+  title: "Serveurs Glances",
+  icon: "mdi:monitor-dashboard",
+  icon_color: "",
+  expanded: false, // hôtes dépliés à l'ouverture
+  temp_warn: 70, temp_alert: 85, // °C
+  net_max: 1000, // Mbit/s, pleine échelle des barres réseau
+  theme: "v2",
+};
+
+/** Capteurs d'un hôte Glances : clé de traduction, sinon fin de l'identifiant (français ou anglais). */
+const GL_ROLES = [
+  ["cpu", /^cpu_use_percent$/, /_(utilisation_du_processeur|cpu_used|cpu_usage)(_\d+)?$/],
+  ["load", /^processor_load$/, /_(charge_du_processeur|cpu_load)(_\d+)?$/],
+  ["mem", /^memory_use_percent$/, /_(utilisation_de_la_memoire|ram_used_percent|memory_usage)(_\d+)?$/],
+  ["mem_used", /^memory_use$/, /_(memoire_utilisee|ram_used|memory_use)(_\d+)?$/],
+  ["mem_free", /^memory_free$/, /_(memoire_libre|ram_free|memory_free)(_\d+)?$/],
+  ["swap", /^swap_use_percent$/, /_(utilisation_de_l_espace_d_echange|swap_used_percent|swap_usage)(_\d+)?$/],
+  ["uptime", /^uptime$/, /_(temps_de_fonctionnement|uptime)(_\d+)?$/],
+  ["procs", /^process_total$/, /_(total|processes_total)(_\d+)?$/],
+  ["threads", /^process_thread$/, /_threads(_\d+)?$/],
+  ["running", /^process_running$/, /_(en_cours_d_execution|running)(_\d+)?$/],
+  ["containers", /^container_active$/, /_(conteneurs_actifs|containers_active)(_\d+)?$/],
+];
+
+class ServeurHaGlancesCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("serveur-ha-glances-card-editor");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { ...GL_DEFAULTS, ...(config || {}) };
+    this._map = null;
+    this._sig = null;
+    this._open = new Set(this._config.expanded ? ["*"] : []);
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    if (!this._clicks) {
+      this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const fold = ev.target.closest?.("[data-fold]");
+        if (fold) {
+          // hôte : déplier ou replier le détail
+          ev.stopPropagation();
+          const k = fold.dataset.fold;
+          if (this._open.has("*")) { this._open = new Set(this._keys || []); this._open.delete(k); }
+          else if (this._open.has(k)) this._open.delete(k);
+          else this._open.add(k);
+          this._sig = null; this._render(); return;
+        }
+        const el = ev.target.closest?.("[data-entity]");
+        if (el?.dataset.entity) {
+          const e = new Event("hass-more-info", { bubbles: true, composed: true });
+          e.detail = { entityId: el.dataset.entity };
+          this.dispatchEvent(e);
+        }
+      }));
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    if (this._hass?.entities !== hass.entities || this._hass?.devices !== hass.devices) this._map = null;
+    this._hass = hass;
+    this._render();
+  }
+
+  connectedCallback() {
+    clearInterval(this._tick);
+    this._tick = setInterval(() => { this._sig = null; this._render(); }, 60000);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._tick);
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  _st(id) {
+    return id ? this._hass?.states?.[id] : undefined;
+  }
+
+  _num(id) {
+    const s = this._st(id);
+    if (!s || s.state === "unavailable" || s.state === "unknown") return null;
+    const v = Number(s.state);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  _unit(id, d = "") {
+    return this._st(id)?.attributes?.unit_of_measurement ?? d;
+  }
+
+  /** Hôtes Glances (un appareil par serveur) : rôles, disques par point de montage, températures, ventilateurs, réseau, GPU. */
+  _resolve() {
+    if (this._map) return this._map;
+    const hass = this._hass;
+    const reg = hass.entities || {}, devs = hass.devices || {};
+    const hosts = {};
+    for (const [id, e] of Object.entries(reg)) {
+      if (e.platform !== "glances" || !hass.states[id] || e.hidden || !id.startsWith("sensor.")) continue;
+      const key = e.device_id || "glances";
+      const dev = devs[e.device_id];
+      const h = (hosts[key] ||= { key, dev, name: dev?.name_by_user || dev?.name || "Glances", roles: {}, fs: {}, temps: [], fans: [], net: {}, gpu: {} });
+      const st = hass.states[id], a = st.attributes || {}, tk = e.translation_key || "";
+      const fname = String(a.friendly_name || id).replace(h.name, "").trim();
+      const unit = String(a.unit_of_measurement || "");
+      // GPU avant la mémoire et le processeur : ses capteurs finissent aussi par « utilisation de la mémoire »
+      if (/gpu/i.test(tk) || /_gpu_/.test(id)) {
+        if (/temp/i.test(tk) || a.device_class === "temperature") h.temps.push({ id, label: "GPU" });
+        else if (/memory|memoire/i.test(tk + id)) h.gpu.mem ||= id;
+        else if (/processor|processeur/i.test(tk + id)) h.gpu.cpu ||= id;
+        continue;
+      }
+      if (/^disk_use_percent$/.test(tk) || /_(utilisation_disque|disk_used_percent|disk_usage)(_|$)/.test(id)) { const m = (/(\/\S*)\s*$/.exec(fname) || [, "/"])[1]; (h.fs[m] ||= {}).pct = id; continue; }
+      if (/^disk_use$/.test(tk) || /_(espace_utilise|disk_used)(_|$)/.test(id)) { const m = (/(\/\S*)\s*$/.exec(fname) || [, "/"])[1]; (h.fs[m] ||= {}).used = id; continue; }
+      if (/^disk_size$/.test(tk) || /_(taille_du_disque|disk_size)(_|$)/.test(id)) { const m = (/(\/\S*)\s*$/.exec(fname) || [, "/"])[1]; (h.fs[m] ||= {}).size = id; continue; }
+      if (/^disk_free$/.test(tk) || /_(espace_libre|disk_free)(_|$)/.test(id)) continue;
+      if (a.device_class === "temperature" || /^temperature/.test(tk)) { h.temps.push({ id, label: fname.replace(/^(température|temperature)\s*/i, "") || "Température" }); continue; }
+      if (/rpm/i.test(unit) || /^fan_speed$/.test(tk)) { h.fans.push({ id, label: fname.replace(/^(vitesse ventilateur|fan speed)\s*/i, "") || "Ventilateur" }); continue; }
+      const net = /_([a-z0-9]+)_(rx|tx)$/.exec(id);
+      if (net && /bit\/s|B\/s/i.test(unit)) { (h.net[net[1]] ||= {})[net[2]] = id; continue; }
+      if (/diskio|lecture_disque|ecriture_disque|disk_read|disk_write/.test(tk + id)) continue;
+      const role = GL_ROLES.find(([, tre, re]) => (tk && tre.test(tk)) || (!tk && re.test(id)) || re.test(id));
+      if (role && !h.roles[role[0]]) h.roles[role[0]] = id;
+    }
+    const list = Object.values(hosts).sort((a, b) => a.name.localeCompare(b.name, "fr", { numeric: true }));
+    this._map = { hosts: list };
+    return this._map;
+  }
+
+  /** Température principale : processeur (Package, Tctl, Tdie, CPU), sinon la plus haute. */
+  _mainTemp(h) {
+    const vals = h.temps.map((t) => ({ ...t, v: this._num(t.id) })).filter((t) => t.v !== null && t.v > 0);
+    if (!vals.length) return null;
+    const cpu = vals.find((t) => /package id 0|tctl|tdie|^cpu$|cputin|coretemp|cpu_thermal|soc/i.test(t.label));
+    return cpu || vals.reduce((a, b) => (b.v > a.v ? b : a));
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const m = this._resolve();
+    this._keys = m.hosts.map((h) => h.key);
+    const ids = m.hosts.flatMap((h) => [...Object.values(h.roles), ...Object.values(h.fs).flatMap((f) => Object.values(f)), ...h.temps.map((t) => t.id), ...h.fans.map((f) => f.id), ...Object.values(h.net).flatMap((n) => Object.values(n)), ...Object.values(h.gpu)]);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${[...this._open].join(",")}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const tw = Number(c.temp_warn) || 70, ta = Number(c.temp_alert) || 85;
+    const open = (k) => this._open.has("*") || this._open.has(k);
+    const sec = (icon, t, body) => (body ? `<div class="gl-sub"><div class="gl-subh"><ha-icon icon="${icon}"></ha-icon>${t}</div>${body}</div>` : "");
+    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
+        <div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
+        <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
+    const go = (id) => { const v = this._num(id); if (v === null) return null; const u = this._unit(id, "GiB"); const g = /^TiB|^TB/i.test(u) ? v * 1024 : /^MiB|^MB/i.test(u) ? v / 1024 : v; return g >= 1024 ? `${fmt(g / 1024, 2)} To` : `${fmt(g, g < 10 ? 1 : 0)} Go`; };
+    const tcls = (v) => (v === null ? "" : v >= ta ? "bad" : v >= tw ? "warn" : "ok");
+    const pcls = (v, w, a) => (v === null ? "" : v >= a ? "bad" : v >= w ? "warn" : "ok");
+
+    let alerts = 0;
+    const hostsHtml = m.hosts.map((h) => {
+      const r = h.roles;
+      const online = this._num(r.cpu) !== null || this._num(r.mem) !== null;
+      const cpu = this._num(r.cpu), mem = this._num(r.mem);
+      const fsList = Object.entries(h.fs).filter(([, f]) => f.pct).sort(([a], [b]) => a.localeCompare(b));
+      const diskMax = fsList.reduce((mx, [, f]) => Math.max(mx, this._num(f.pct) ?? -1), -1);
+      const t = this._mainTemp(h);
+      const bad = !online || (t && t.v >= ta) || (cpu !== null && cpu >= 90) || (mem !== null && mem >= 92) || diskMax >= 90;
+      if (bad) alerts++;
+      const up = this._st(r.uptime)?.state;
+      const upTxt = up && !/unknown|unavailable/.test(up) ? since(up) : null;
+      const isOpen = open(h.key);
+      const chip = (label, v, cls, unit = "%") => (v === null || v < 0 ? "" : `<span class="gl-c ${cls}"><small>${label}</small>${fmt(v, 0)}${unit === "%" ? "<small>%</small>" : `<small>${unit}</small>`}</span>`);
+      const chips = online
+        ? [chip("CPU", cpu, pcls(cpu, 70, 90)), chip("RAM", mem, pcls(mem, 80, 92)), chip("Disque", diskMax, pcls(diskMax, 80, 90)), t ? chip("Temp.", t.v, tcls(t.v), "°C") : ""].join("")
+        : `<span class="gl-c bad">Injoignable</span>`;
+
+      let detail = "";
+      if (isOpen && online) {
+        const memUsed = go(r.mem_used), memTot = (() => { const u = this._num(r.mem_used), f = this._num(r.mem_free); return u !== null && f !== null ? `${fmt(u + f, 1)} Go` : null; })();
+        const swap = this._num(r.swap);
+        const tiles = [
+          upTxt ? `<div class="tile srv-t" data-entity="${esc(r.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(upTxt)}</div></div>` : "",
+          this._num(r.load) !== null ? `<div class="tile srv-t" data-entity="${esc(r.load)}"><div class="tile-l"><ha-icon icon="mdi:chart-line-variant"></ha-icon>Charge</div><div class="nas-up">${fmt(this._num(r.load), 2)}</div></div>` : "",
+          this._num(r.procs) !== null ? `<div class="tile srv-t" data-entity="${esc(r.procs)}"><div class="tile-l"><ha-icon icon="mdi:format-list-bulleted"></ha-icon>Processus</div><div class="nas-up">${fmt(this._num(r.procs), 0)}</div>${this._num(r.threads) !== null ? `<div class="tile-n">${fmt(this._num(r.threads), 0)} threads</div>` : ""}</div>` : "",
+          this._num(r.containers) !== null ? `<div class="tile srv-t" data-entity="${esc(r.containers)}"><div class="tile-l"><ha-icon icon="mdi:docker"></ha-icon>Conteneurs</div><div class="nas-up">${fmt(this._num(r.containers), 0)}</div></div>` : "",
+        ].filter(Boolean);
+        const res = [
+          gauge(r.cpu, "mdi:cpu-64-bit", "CPU", cpu, "", 70, 90),
+          gauge(r.mem, "mdi:memory", "RAM", mem, memUsed && memTot ? `${memUsed} / ${memTot}` : "", 80, 92),
+          swap !== null && swap > 0 ? gauge(r.swap, "mdi:swap-horizontal", "Swap", swap, "", 50, 80) : "",
+          gauge(h.gpu.cpu, "mdi:expansion-card", "GPU", this._num(h.gpu.cpu), this._num(h.gpu.mem) !== null ? `Mémoire ${fmt(this._num(h.gpu.mem), 0)} %` : "", 80, 95),
+        ].filter(Boolean);
+        const disks = fsList.map(([mount, f]) => gauge(f.pct, "mdi:harddisk", esc(mount), this._num(f.pct), go(f.used) && go(f.size) ? `${go(f.used)} / ${go(f.size)}` : "", 80, 90));
+        const temps = h.temps.map((x) => ({ ...x, v: this._num(x.id) })).filter((x) => x.v !== null && x.v > 0).sort((a, b) => b.v - a.v)
+          .map((x) => `<span class="gl-t ${tcls(x.v)}" data-entity="${esc(x.id)}" title="${esc(x.label)}"><span>${esc(x.label.length > 22 ? `${x.label.slice(0, 21)}…` : x.label)}</span><b>${fmt(x.v, 0)} °C</b></span>`);
+        const fans = h.fans.map((x) => ({ ...x, v: this._num(x.id) })).filter((x) => x.v !== null && x.v > 0)
+          .map((x) => `<span class="gl-t" data-entity="${esc(x.id)}" title="${esc(x.label)}"><span>${esc(x.label.length > 22 ? `${x.label.slice(0, 21)}…` : x.label)}</span><b>${fmt(x.v, 0)} tr/min</b></span>`);
+        const netMax = Number(c.net_max) || 1000;
+        const nets = Object.entries(h.net).flatMap(([n, x]) => [
+          x.rx ? gauge(x.rx, "mdi:download", `${esc(n)}`, this._num(x.rx), "Réception", 101, 101, ` ${esc(this._unit(x.rx, "Mbit/s"))}`, netMax, (this._num(x.rx) ?? 0) < 10 ? 2 : 0).replace('class="srv-g"', 'class="srv-g srv-in"') : "",
+          x.tx ? gauge(x.tx, "mdi:upload", `${esc(n)}`, this._num(x.tx), "Envoi", 101, 101, ` ${esc(this._unit(x.tx, "Mbit/s"))}`, netMax, (this._num(x.tx) ?? 0) < 10 ? 2 : 0).replace('class="srv-g"', 'class="srv-g srv-out"') : "",
+        ]).filter(Boolean);
+        detail = `<div class="gl-d">
+          ${tiles.length ? `<div class="tiles srv-tiles">${tiles.join("")}</div>` : ""}
+          ${res.length ? `<div class="srv-grid pve-res">${res.join("")}</div>` : ""}
+          ${sec("mdi:harddisk", "Disques", disks.length ? `<div class="srv-grid pve-res">${disks.join("")}</div>` : "")}
+          ${sec("mdi:thermometer", "Températures", temps.length ? `<div class="gl-ts">${temps.join("")}</div>` : "")}
+          ${sec("mdi:fan", "Ventilateurs", fans.length ? `<div class="gl-ts">${fans.join("")}</div>` : "")}
+          ${sec("mdi:swap-vertical", "Réseau", nets.length ? `<div class="srv-grid">${nets.join("")}</div>` : "")}
+        </div>`;
+      }
+      return `<div class="ping-g gl-h ${isOpen ? "open" : ""} ${bad ? "alert" : ""}">
+        <button class="ping-gh" data-fold="${esc(h.key)}" aria-expanded="${isOpen}"><ha-icon icon="mdi:server"></ha-icon>
+          <span class="gl-hn"><span class="ping-gl">${esc(h.name)}</span>${upTxt && online ? `<small>depuis ${esc(upTxt)}</small>` : ""}</span>
+          <span class="gl-cs">${chips}</span><ha-icon class="ping-chev" icon="${isOpen ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
+        ${detail}
+      </div>`;
+    }).join("");
+
+    const body = !m.hosts.length
+      ? `<div class="empty">Aucun serveur Glances trouvé<span>Installez Glances (mode web, glances -w) sur vos serveurs, puis ajoutez l'intégration Glances dans Paramètres › Appareils et services.</span></div>`
+      : `<div class="srv-sec ping-groups">${hostsHtml}</div>`;
+    const leds = m.hosts.length ? `<span class="srv-led ${alerts ? "bad" : "ok"}"><i></i>${alerts ? `${alerts} à surveiller` : "Tout va bien"}</span>` : "";
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${PING_STYLE}${GL_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alerts ? "srv-alert" : ""}">
+      <header>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:monitor-dashboard")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+          <div><div class="title">${esc(c.title || "Serveurs Glances")}</div><div class="sub">${m.hosts.length} serveur${m.hosts.length > 1 ? "s" : ""} · ${m.hosts.map((h) => esc(h.name)).join(" · ")}</div></div></div>
+        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+      </header>
+      ${body}
+    </ha-card>`;
+  }
+}
+
+const GL_STYLE = `<style>
+.gl-h.alert { border-color: color-mix(in srgb, var(--t-red) 55%, transparent); }
+.gl-hn { display: grid; min-width: 0; } .gl-hn small { font-size: .68rem; color: var(--med-muted); font-weight: 400; }
+.gl-cs { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.gl-c { display: inline-flex; align-items: baseline; gap: 3px; padding: 3px 8px; border-radius: 999px; font-size: .78rem; font-weight: 700;
+  border: 1px solid var(--med-line); background: var(--med-surface); white-space: nowrap; }
+.gl-c small { font-size: .62rem; color: var(--med-muted); font-weight: 500; }
+@container (max-width: 480px) {
+  .gl-h .ping-gh { flex-wrap: wrap; }
+  .gl-h .gl-hn { flex: 1; }
+  .gl-cs { order: 3; flex-basis: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); justify-content: stretch; }
+  .gl-c { justify-content: center; padding: 3px 4px; }
+}
+.gl-c.ok { color: var(--med-down); } .gl-c.warn { color: #f0a33a; } .gl-c.bad { color: var(--t-red); border-color: color-mix(in srgb, var(--t-red) 55%, transparent); }
+.gl-d { padding: 0 10px 10px; display: grid; gap: 8px; }
+.gl-d .srv-tiles { margin: 0; }
+.gl-sub { display: grid; gap: 6px; }
+.gl-subh { display: flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 600; color: var(--med-muted); }
+.gl-subh ha-icon { --mdc-icon-size: 16px; color: var(--med-blue); }
+.gl-ts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 5px; }
+.gl-t { display: flex; justify-content: space-between; gap: 6px; padding: 5px 9px; border-radius: 8px; cursor: pointer; font-size: .74rem;
+  border: 1px solid var(--med-line); background: var(--med-surface); min-width: 0; }
+.gl-t span { color: var(--med-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-t b { white-space: nowrap; } .gl-t.warn b { color: #f0a33a; } .gl-t.bad b { color: var(--t-red); } .gl-t.ok b { color: var(--med-down); }
+</style>`;
+
 /* ------------------------------------------------------------ carte DNS (AdGuard Home, Pi-hole) */
 
 const DNS_DEFAULTS = {
@@ -4016,6 +4283,28 @@ const WG_LABELS = {
   theme: "Couleurs de la carte",
 };
 const ServeurHaWireguardCardEditor = makeEditor(WG_SCHEMA, WG_LABELS, WG_DEFAULTS);
+const GL_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  { name: "icon_color", selector: { text: {} } },
+  { name: "expanded", selector: { boolean: {} } },
+  { name: "temp_warn", selector: { number: { min: 30, max: 120, mode: "box", unit_of_measurement: "°C" } } },
+  { name: "temp_alert", selector: { number: { min: 30, max: 120, mode: "box", unit_of_measurement: "°C" } } },
+  { name: "net_max", selector: { number: { min: 1, max: 100000, mode: "box", unit_of_measurement: "Mbit/s" } } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const GL_LABELS = {
+  title: "Titre",
+  icon: "Icône",
+  icon_color: "Couleur de l'icône",
+  expanded: "Serveurs dépliés à l'ouverture",
+  temp_warn: "Température orange à partir de",
+  temp_alert: "Température rouge à partir de",
+  net_max: "Pleine échelle des barres réseau",
+  theme: "Couleurs de la carte",
+};
+const ServeurHaGlancesCardEditor = makeEditor(GL_SCHEMA, GL_LABELS, GL_DEFAULTS);
 const DNS_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -4117,6 +4406,8 @@ if (typeof customElements !== "undefined") {
   define("serveur-ha-ping-card-editor", ServeurHaPingCardEditor);
   define("serveur-ha-wireguard-card", ServeurHaWireguardCard);
   define("serveur-ha-wireguard-card-editor", ServeurHaWireguardCardEditor);
+  define("serveur-ha-glances-card", ServeurHaGlancesCard);
+  define("serveur-ha-glances-card-editor", ServeurHaGlancesCardEditor);
   define("serveur-ha-dns-card", ServeurHaDnsCard);
   define("serveur-ha-dns-card-editor", ServeurHaDnsCardEditor);
   define("serveur-ha-linux-card", ServeurHaLinuxCard);
@@ -4184,6 +4475,14 @@ if (typeof customElements !== "undefined") {
       type: "serveur-ha-wireguard-card",
       name: "Carte VPN WireGuard",
       description: "Serveurs WireGuard (WGDashboard) : pairs connectés, dernier handshake, données reçues et envoyées.",
+      preview: true,
+    });
+  }
+  if (!window.customCards.some((c) => c.type === "serveur-ha-glances-card")) {
+    window.customCards.push({
+      type: "serveur-ha-glances-card",
+      name: "Carte Serveurs Glances",
+      description: "Serveurs suivis par Glances : CPU, RAM, disques, températures, ventilateurs, réseau, processus.",
       preview: true,
     });
   }

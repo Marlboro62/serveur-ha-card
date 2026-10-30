@@ -95,7 +95,7 @@
     <aside class="panel" aria-label="Réglages de la démo">
       <h2>Carte</h2>
       <div class="ctl"><div class="seg" data-key="card">
-        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="ping">Réseau</button><button data-v="wg">WireGuard</button><button data-v="all">Les 10</button></div></div>
+        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="ping">Réseau</button><button data-v="wg">WireGuard</button><button data-v="gl">Glances</button><button data-v="all">Les 11</button></div></div>
 
       <h2>Affichage</h2>
       <div class="ctl"><div class="ctl-l">Page</div><div class="seg" data-key="page">
@@ -126,6 +126,8 @@
         <button data-v="ok"><i class="sw green"></i>Tout à jour</button><button data-v="upd"><i class="sw orange"></i>Mises à jour</button><button data-v="sec"><i class="sw red"></i>Sécurité, redémarrage</button></div></div>
       <div class="ctl" data-for="omv all"><div class="ctl-l">OpenMediaVault</div><div class="seg" data-key="omv">
         <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="hot"><i class="sw orange"></i>Disque chaud, mises à jour</button><button data-v="bad"><i class="sw red"></i>Disque en alerte</button><button data-v="off"><i class="sw"></i>Éteint</button></div></div>
+      <div class="ctl" data-for="gl all"><div class="ctl-l">Serveurs Glances</div><div class="seg" data-key="gl">
+        <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="hot"><i class="sw red"></i>Chaud, disque plein</button></div></div>
       <div class="ctl" data-for="wg all"><div class="ctl-l">VPN WireGuard</div><div class="seg" data-key="wg">
         <button data-v="some"><i class="sw green"></i>Pairs connectés</button><button data-v="none"><i class="sw"></i>Aucun pair</button></div></div>
       <div class="ctl" data-for="ping all"><div class="ctl-l">Réseau (Ping)</div><div class="seg" data-key="ping">
@@ -177,8 +179,8 @@
     });
   }
 
-  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card", ping: "serveur-ha-ping-card", wg: "serveur-ha-wireguard-card" };
-  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok", ping: "ok", wg: "some" };
+  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card", ping: "serveur-ha-ping-card", wg: "serveur-ha-wireguard-card", gl: "serveur-ha-glances-card" };
+  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok", ping: "ok", wg: "some", gl: "ok" };
   let state = { ...defaults };
   try { state = { ...defaults, ...JSON.parse(localStorage.getItem("serveur-ha-demo") || "{}") }; } catch (e) { /* ignoré */ }
 
@@ -503,6 +505,37 @@
         add(`sensor.wgdashboard_${k}_${pk}_data_sent`, tx, { unit_of_measurement: "GB", ...fn("data sent") }, "wgdashboard_monitor", null, dev);
       });
     });
+    // --- serveurs Glances (noms fictifs, entités au format de l'intégration Glances)
+    const gh = state.gl === "hot";
+    [["srv1", "Serveur 1", 4.8, 50.8, 48.1, 52, 1.2], ["srv2", "Serveur 2", gh ? 93 : 12.4, gh ? 88 : 38.2, gh ? 94 : 61.0, gh ? 91 : 47, 6.5], ["pi", "Raspberry Pi", 7.1, 41.6, 22.3, 49, 0.4]].forEach(([k, name, cpu, mem, disk, temp, net], i) => {
+      const dev = `gl_${k}`, G = "glances";
+      devices[dev] = { id: dev, name, manufacturer: "Glances" };
+      const g = (id, v, attrs = {}, tk) => add(`sensor.${k}_${id}`, v, { friendly_name: `${name} ${attrs.fn || id}`, ...attrs }, G, tk, dev);
+      g("utilisation_du_processeur", cpu, { unit_of_measurement: "%", fn: "Utilisation du processeur" }, "cpu_use_percent");
+      g("charge_du_processeur", (cpu / 40).toFixed(2), { fn: "Charge du processeur" }, "processor_load");
+      g("utilisation_de_la_memoire", mem, { unit_of_measurement: "%", fn: "Utilisation de la mémoire" }, "memory_use_percent");
+      g("memoire_utilisee", (mem / 100 * 16).toFixed(2), { unit_of_measurement: "GiB", fn: "Mémoire utilisée" }, "memory_use");
+      g("memoire_libre", ((100 - mem) / 100 * 16).toFixed(2), { unit_of_measurement: "GiB", fn: "Mémoire libre" }, "memory_free");
+      g("utilisation_de_l_espace_d_echange", gh && i === 1 ? 34 : 0, { unit_of_measurement: "%", fn: "Utilisation de l'espace d'échange" }, "swap_use_percent");
+      g("utilisation_disque", disk, { unit_of_measurement: "%", fn: "Utilisation disque /" }, "disk_use_percent");
+      g("espace_utilise", (disk / 100 * 234).toFixed(1), { unit_of_measurement: "GiB", fn: "Espace utilisé /" }, "disk_use");
+      g("taille_du_disque", 234, { unit_of_measurement: "GiB", fn: "Taille du disque /" }, "disk_size");
+      if (i < 2) {
+        g("utilisation_disque_mnt_data", 71.4, { unit_of_measurement: "%", fn: "Utilisation disque /mnt/data" }, "disk_use_percent");
+        g("espace_utilise_mnt_data", 1306, { unit_of_measurement: "GiB", fn: "Espace utilisé /mnt/data" }, "disk_use");
+        g("taille_du_disque_mnt_data", 1829, { unit_of_measurement: "GiB", fn: "Taille du disque /mnt/data" }, "disk_size");
+      }
+      g("temperature_package_id_0", temp, { unit_of_measurement: "°C", device_class: "temperature", fn: "Température Package id 0" }, "temperature_core");
+      g("temperature_core_0", temp - 1, { unit_of_measurement: "°C", device_class: "temperature", fn: "Température Core 0" }, "temperature_core");
+      g("temperature_core_1", temp - 3, { unit_of_measurement: "°C", device_class: "temperature", fn: "Température Core 1" }, "temperature_core");
+      g("temperature_nvme_composite", 38 + i, { unit_of_measurement: "°C", device_class: "temperature", fn: "Température nvme Composite" }, "temperature_hdd");
+      if (i < 2) g("vitesse_ventilateur_cpu", gh && i === 1 ? 3150 : 1240, { unit_of_measurement: "rpm", fn: "Vitesse ventilateur cpu" }, "fan_speed");
+      g("eth0_rx", net, { unit_of_measurement: "Mbit/s", device_class: "data_rate", fn: "eth0 RX" }, "network_rx");
+      g("eth0_tx", (net / 3).toFixed(2), { unit_of_measurement: "Mbit/s", device_class: "data_rate", fn: "eth0 TX" }, "network_tx");
+      g("temps_de_fonctionnement", iso(-(3 + i * 9) * D), { device_class: "timestamp", fn: "Temps de fonctionnement" }, "uptime");
+      g("total", 220 + i * 140, { fn: "Total" }, "process_total");
+      g("threads", 410 + i * 260, { fn: "Threads" }, "process_thread");
+    });
     return { st, ent, devices };
   }
 
@@ -521,6 +554,7 @@
       asus: { type: "custom:serveur-ha-asus-card", theme: t },
       ping: { type: "custom:serveur-ha-ping-card", theme: t },
       wg: { type: "custom:serveur-ha-wireguard-card", theme: t },
+      gl: { type: "custom:serveur-ha-glances-card", theme: t },
     };
     return state.card === "all" ? Object.values(c) : [c[state.card]];
   }
