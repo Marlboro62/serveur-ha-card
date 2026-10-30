@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.12.0-beta.1";
+const CARD_VERSION = "0.12.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2765,6 +2765,7 @@ const WG_DEFAULTS = {
   icon_color: "",
   expanded: false, // serveurs dépliés à l'ouverture
   show_endpoint: false, // adresse publique des pairs (au survol sinon)
+  names: {}, // noms des pairs dans la carte : { "PL7aEobg": "Téléphone de secours" }
   theme: "v2",
 };
 
@@ -2868,8 +2869,12 @@ class ServeurHaWireguardCard extends HTMLElement {
       const peers = Object.values(s.peers).map((p) => {
         const anyId = p.roles.up || p.roles.hs || p.roles.rx || p.roles.tx;
         const fn = String(this._st(anyId)?.attributes?.friendly_name || p.key);
-        const name = fn.replace(s.dev?.name || "", "").replace(/\s+(connected|last handshake|data received|data sent|connecté|dernier handshake|données reçues|données envoyées)\s*$/i, "").trim() || p.key;
-        return { ...p, name };
+        const raw = fn.replace(s.dev?.name || "", "").replace(/\s+(connected|last handshake|data received|data sent|connecté|dernier handshake|données reçues|données envoyées)\s*$/i, "").trim() || p.key;
+        // option names : nom d'origine, identifiant du pair ou entité → nom affiché (« serveur/nom » pour un seul serveur)
+        const names = this._config.names && typeof this._config.names === "object" ? this._config.names : {};
+        const keys = [`${(/\(([^)]+)\)/.exec(s.name) || [, s.name])[1]}/${raw}`, raw, p.key, ...Object.values(p.roles)].map((x) => String(x).toLowerCase());
+        const hit = Object.entries(names).find(([k]) => keys.includes(String(k).trim().toLowerCase()));
+        return { ...p, name: hit ? String(hit[1]) : raw, raw };
       }).sort((a, b) => a.name.localeCompare(b.name, "fr", { numeric: true }));
       // nom court du serveur : « WGDashboard (wg0) » → « wg0 »
       const short = (/\(([^)]+)\)/.exec(s.name) || [, s.name])[1];
@@ -2907,7 +2912,7 @@ class ServeurHaWireguardCard extends HTMLElement {
       const ep = a.endpoint && a.endpoint !== "(none)" ? a.endpoint : null;
       const hs = hsAgo(p);
       const line1 = up ? (hs ? `Handshake il y a ${hs}` : "Connecté") : hs ? `Vu il y a ${hs}` : "Jamais connecté";
-      const title = [p.name, up ? "Connecté" : "Déconnecté", a.allowed_ips ? `IP VPN ${a.allowed_ips}` : null, ep ? `Point d'accès ${ep}` : null, hs ? `Dernier handshake il y a ${hs}` : null].filter(Boolean).join(" · ");
+      const title = [p.name, p.raw !== p.name ? `(${p.raw})` : null, up ? "Connecté" : "Déconnecté", a.allowed_ips ? `IP VPN ${a.allowed_ips}` : null, ep ? `Point d'accès ${ep}` : null, hs ? `Dernier handshake il y a ${hs}` : null].filter(Boolean).join(" · ");
       return `<div class="wg-p ${up ? "up" : ""}" data-entity="${esc(p.roles.up || p.roles.hs || "")}" title="${esc(title)}">
           <i></i><div class="wg-pn"><span>${esc(p.name)}</span><small>${esc(line1)}${a.allowed_ips ? ` · ${esc(String(a.allowed_ips).replace(/\/32$/, ""))}` : ""}${c.show_endpoint && ep ? ` · ${esc(ep)}` : ""}</small></div>
           <div class="wg-pd"><span title="Reçu par le serveur"><ha-icon icon="mdi:arrow-down"></ha-icon>${go(rx)}</span><span title="Envoyé par le serveur"><ha-icon icon="mdi:arrow-up"></ha-icon>${go(tx)}</span></div>
@@ -3997,6 +4002,7 @@ const WG_SCHEMA = [
   { name: "icon_color", selector: { text: {} } },
   { name: "expanded", selector: { boolean: {} } },
   { name: "show_endpoint", selector: { boolean: {} } },
+  { name: "names", selector: { object: {} } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -4006,6 +4012,7 @@ const WG_LABELS = {
   icon_color: "Couleur de l'icône",
   expanded: "Serveurs dépliés à l'ouverture",
   show_endpoint: "Afficher l'adresse publique des pairs (sinon au survol)",
+  names: "Noms des pairs dans la carte (YAML : nom d'origine: nouveau nom)",
   theme: "Couleurs de la carte",
 };
 const ServeurHaWireguardCardEditor = makeEditor(WG_SCHEMA, WG_LABELS, WG_DEFAULTS);

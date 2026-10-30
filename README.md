@@ -424,7 +424,17 @@ La carte lit les capteurs de l'intégration **WGDashboard Monitor** (HACS), qui 
 | `title`, `icon`, `icon_color` | En-tête | `VPN WireGuard`, `mdi:vpn` |
 | `expanded` | Serveurs dépliés à l'ouverture | `false` |
 | `show_endpoint` | Afficher l'adresse publique des pairs sous leur nom | `false` |
+| `names` | Noms des pairs dans la carte : `nom d'origine: nouveau nom` (ou `serveur/nom d'origine` pour un seul serveur) | — |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
+
+```yaml
+type: custom:serveur-ha-wireguard-card
+names:
+  PL7aEobg: Téléphone de secours     # sur tous les serveurs
+  wg0/Nothing Phone: Mon téléphone   # seulement sur wg0
+```
+
+Les pairs sans nom dans WGDashboard apparaissent sous leur identifiant (ex. `PL7aEobg`) : `names` les renomme dans la carte, sans rien changer à WGDashboard ni aux entités. Le nom d'origine reste visible au survol.
 
 ## Carte Filtrage DNS — `custom:serveur-ha-dns-card`
 
