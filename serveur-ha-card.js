@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.14.0";
+const CARD_VERSION = "0.15.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -465,11 +465,11 @@ ha-card.srv-alert { border-color: var(--t-red); }
 .srv-led.ok i { background: var(--med-down); } .srv-led.bad i { background: var(--t-red); } .srv-led.bad { border-color: var(--t-red); }
 .srv-sec { margin: 12px 12px 0; }
 .srv-h { display: flex; align-items: center; gap: 6px; font-size: .86rem; font-weight: 600; margin: 0 2px 8px; }
-.srv-h ha-icon { --mdc-icon-size: 18px; color: var(--med-blue); }
+.srv-h ha-icon { --mdc-icon-size: 18px; color: var(--med-accent, var(--med-blue)); }
 .srv-tiles { margin: 0 !important; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)) !important; }
 .srv-t { cursor: pointer; }
 .srv-t .tile-l { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--med-text); margin-bottom: 4px; }
-.srv-t .tile-l ha-icon, .srv-b ha-icon { --mdc-icon-size: 18px; color: var(--med-blue); }
+.srv-t .tile-l ha-icon, .srv-b ha-icon { --mdc-icon-size: 18px; color: var(--med-accent, var(--med-blue)); }
 .srv-t .tile-v { font-size: 1.2rem; }
 .srv-kv { display: flex; justify-content: space-between; gap: 8px; font-size: .78rem; color: var(--med-muted); }
 .srv-kv b { color: var(--med-text); font-weight: 600; text-align: right; }
@@ -481,8 +481,8 @@ ha-card.srv-alert { border-color: var(--t-red); }
 .srv-gt b { font-size: 1.15rem; white-space: nowrap; flex: none; }
 .srv-gt small { font-size: .74rem; font-weight: 500; color: var(--med-muted); }
 .g-bar { position: relative; height: 8px; border-radius: 6px; background: var(--med-line); margin: 8px 0 2px; overflow: hidden; }
-.g-bar i { display: block; height: 100%; border-radius: 6px; background: var(--med-blue); }
-.g-bar.b-ok i { background: linear-gradient(90deg, var(--med-blue), var(--med-green)); }
+.g-bar i { display: block; height: 100%; border-radius: 6px; background: var(--med-accent, var(--med-blue)); }
+.g-bar.b-ok i { background: linear-gradient(90deg, var(--med-accent, var(--med-blue)), var(--med-green)); }
 .g-bar.b-warn i { background: #f0a33a; } .g-bar.b-alert i { background: var(--t-red); }
 .srv-in .g-bar i { background: var(--med-down); } .srv-out .g-bar i { background: var(--med-up); }
 .srv-wide { grid-column: 1 / -1; }
@@ -727,7 +727,7 @@ const MAJ_STYLE = `<style>
 .maj-sys .tile-n b { color: #f0a33a; }
 .maj-sys.upd { border-color: #f0a33a; background: color-mix(in srgb, #f0a33a 10%, transparent); }
 .maj-info { cursor: pointer; display: flex; gap: 10px; align-items: center; }
-.maj-info ha-icon { --mdc-icon-size: 26px; color: var(--med-blue); flex: none; }
+.maj-info ha-icon { --mdc-icon-size: 26px; color: var(--med-accent, var(--med-blue)); flex: none; }
 .maj-info .tile-l { font-weight: 600; color: var(--med-text); }
 .maj-iv { font-weight: 700; font-size: .95rem; }
 .maj-info.ok ha-icon, .maj-info.ok .maj-iv { color: var(--med-down); }
@@ -741,7 +741,7 @@ const MAJ_STYLE = `<style>
 .maj-app.upd { border-color: #f0a33a; background: color-mix(in srgb, #f0a33a 10%, transparent); }
 .maj-ico { position: relative; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; }
 .maj-ico img { width: 38px; height: 38px; object-fit: contain; border-radius: 8px; }
-.maj-ico ha-icon { --mdc-icon-size: 30px; color: var(--med-blue); }
+.maj-ico ha-icon { --mdc-icon-size: 30px; color: var(--med-accent, var(--med-blue)); }
 .maj-badge { position: absolute; right: -6px; bottom: -4px; width: 16px; height: 16px; border-radius: 50%; font-size: 10px; font-weight: 700;
   display: flex; align-items: center; justify-content: center; background: var(--med-down); color: #fff; box-shadow: 0 0 0 2px var(--med-bg); }
 .maj-app.upd .maj-badge { background: #f0a33a; }
@@ -1219,7 +1219,7 @@ class ServeurHaNasCard extends HTMLElement {
     this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
         <div class="brand" ${c.navigation_path ? `data-nav="${esc(c.navigation_path)}"` : `data-entity="${esc(m.tracker || m.cpu || "")}"`} style="cursor:pointer">
-          <ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:nas")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+          <ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:nas")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
           <div><div class="title">${esc(title)}</div><div class="sub">${online === false ? "NAS indisponible" : "NAS disponible"}</div>${sub2 ? `<div class="sub srv-head">${esc(sub2)}</div>` : ""}</div>
         </div>
         ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
@@ -1241,7 +1241,7 @@ const NAS_STYLE = `<style>
 .nas-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin-top: 8px; }
 .nas-drv { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--med-line); background: var(--med-surface); cursor: pointer; }
 .nas-drv-h { display: flex; align-items: center; gap: 6px; font-weight: 700; margin-bottom: 6px; }
-.nas-drv-h ha-icon { --mdc-icon-size: 18px; color: var(--med-blue); }
+.nas-drv-h ha-icon { --mdc-icon-size: 18px; color: var(--med-accent, var(--med-blue)); }
 .nas-res { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 .nas-res .srv-gt b { font-size: 1.05rem; }
 .nas-th { border-color: color-mix(in srgb, #f0a33a 35%, transparent); }
@@ -1256,7 +1256,7 @@ const NAS_STYLE = `<style>
 .nas-act.armed .tile-l { color: #f0a33a; font-weight: 700; }
 .nas-ups { margin-bottom: 8px; }
 .nas-ups-g { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-.nas-in .g-bar i { background: var(--med-blue); }
+.nas-in .g-bar i { background: var(--med-accent, var(--med-blue)); }
 .nas-load .g-bar i { background: #f0a33a; }
 </style>`;
 
@@ -1618,7 +1618,7 @@ class ServeurHaProxmoxCard extends HTMLElement {
     const alertCls = down.length || ups.ok === false ? "srv-alert" : "";
     this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
-        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:server-network")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:server-network")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
           <div><div class="title">${esc(c.title || "Proxmox")}</div><div class="sub">${m.nodes.length ? `${m.nodes.filter((n) => !n.other).length} nœud${m.nodes.filter((n) => !n.other).length > 1 ? "s" : ""} · ${up}/${allGuests.length} invités en marche` : "Proxmox VE"}</div></div></div>
         ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
       </header>
@@ -1632,8 +1632,8 @@ const PVE_STYLE = `<style>
 .pve-tab { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; white-space: nowrap;
   border: 1px solid var(--med-line); background: var(--med-surface); font-size: .82rem; font-weight: 600; }
 .pve-tab small { color: var(--med-muted); font-weight: 500; }
-.pve-tab.on { border-color: var(--med-blue); box-shadow: inset 0 -2px 0 var(--med-blue); }
-.pve-tab:focus-visible { outline: 2px solid var(--med-blue); }
+.pve-tab.on { border-color: var(--med-accent, var(--med-blue)); box-shadow: inset 0 -2px 0 var(--med-accent, var(--med-blue)); }
+.pve-tab:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
 .pve-up { --mdc-icon-size: 15px; color: #f0a33a; }
 .pve-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; background: var(--med-muted); }
 .pve-dot.ok { background: var(--med-down); } .pve-dot.bad { background: var(--t-red); } .pve-dot.warn { background: #f0a33a; }
@@ -1649,7 +1649,7 @@ const PVE_STYLE = `<style>
 .pve-g { padding: 8px 10px; border-radius: 12px; border: 1px solid var(--med-line); background: var(--med-surface); cursor: pointer; }
 .pve-gh { padding: 0 10px; font-size: .7rem; color: var(--med-muted); }
 .pve-g.off { opacity: .55; }
-.pve-gi { --mdc-icon-size: 20px; color: var(--med-blue); }
+.pve-gi { --mdc-icon-size: 20px; color: var(--med-accent, var(--med-blue)); }
 .pve-gn { min-width: 0; display: grid; }
 .pve-gn b { font-size: .86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pve-gn span { display: flex; align-items: center; gap: 5px; font-size: .72rem; color: var(--med-muted); white-space: nowrap; overflow: hidden; }
@@ -1659,8 +1659,8 @@ const PVE_STYLE = `<style>
 .pve-btn { all: unset; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 30px; height: 30px; padding: 0 6px; box-sizing: border-box;
   border-radius: 9px; border: 1px solid var(--med-line); color: var(--med-muted); font-size: .74rem; font-weight: 700; }
 .pve-btn ha-icon { --mdc-icon-size: 17px; }
-.pve-btn:hover { border-color: var(--med-blue); color: var(--med-text); }
-.pve-btn:focus-visible { outline: 2px solid var(--med-blue); }
+.pve-btn:hover { border-color: var(--med-accent, var(--med-blue)); color: var(--med-text); }
+.pve-btn:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
 .pve-btn.go { color: var(--med-down); border-color: color-mix(in srgb, var(--med-down) 45%, transparent); }
 .pve-btn.stop { color: var(--t-red); border-color: color-mix(in srgb, var(--t-red) 40%, transparent); }
 .pve-btn.armed { color: #f0a33a; border-color: #f0a33a; background: color-mix(in srgb, #f0a33a 18%, transparent); animation: pve-pulse 1s ease-in-out infinite; }
@@ -1981,7 +1981,7 @@ class ServeurHaOmvCard extends HTMLElement {
     const sub2 = [ip, host && host !== ip ? host : null].filter(Boolean).join(" · ");
     this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${OMV_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
-        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:nas")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:nas")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
           <div><div class="title">${esc(c.title || "OpenMediaVault")}</div><div class="sub">${esc(sub)}</div>${sub2 ? `<div class="sub">${esc(sub2)}</div>` : ""}</div></div>
         ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
       </header>
@@ -2414,7 +2414,7 @@ class ServeurHaAsusCard extends HTMLElement {
     const sub = [this._txt(r.cpu) === null && m.devId ? "Injoignable" : null, version ? `Firmware ${version}` : null].filter(Boolean).join(" · ");
     this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${OMV_STYLE}${ASUS_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
-        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:router-wireless")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:router-wireless")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
           <div><div class="title">${esc(c.title || dev.name_by_user || model)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}${routerIp ? `<div class="sub">${esc(routerIp)}</div>` : ""}</div></div>
         ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
       </header>
@@ -2434,7 +2434,7 @@ const ASUS_STYLE = `<style>
 .asus-r small { font-size: .66rem; color: var(--med-muted); }
 .asus-r::before, .asus-r i { content: ""; position: absolute; left: 0; bottom: 0; height: 4px; border-radius: 4px; }
 .asus-r::before { right: 0; background: var(--med-line); }
-.asus-r i { width: var(--w); background: var(--med-blue); }
+.asus-r i { width: var(--w); background: var(--med-accent, var(--med-blue)); }
 .asus-r.out i { background: var(--med-green); }
 /* 4 ports par ligne (8 ports LAN : 2 lignes de 4, 16 ports : 4 lignes) ; le port WAN seul sur la première ligne */
 .asus-ports { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
@@ -2448,18 +2448,18 @@ const ASUS_STYLE = `<style>
 .asus-port.m { border-color: color-mix(in srgb, #f0a33a 55%, transparent); } .asus-port.m ha-icon, .asus-port.m small { color: #f0a33a; }
 .asus-port.off { opacity: .55; }
 .asus-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; }
-.asus-counts > [data-devs] { cursor: pointer; } .asus-counts > [data-devs]:hover { border-color: var(--med-blue); }
-.asus-counts > .on { border-color: var(--med-blue); }
+.asus-counts > [data-devs] { cursor: pointer; } .asus-counts > [data-devs]:hover { border-color: var(--med-accent, var(--med-blue)); }
+.asus-counts > .on { border-color: var(--med-accent, var(--med-blue)); }
 .asus-more { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 8px;
   padding: 7px; border-radius: 10px; border: 1px solid var(--med-line); font-size: .78rem; font-weight: 600; color: var(--med-muted); }
-.asus-more:hover, .asus-more.on { color: var(--med-text); border-color: var(--med-blue); }
+.asus-more:hover, .asus-more.on { color: var(--med-text); border-color: var(--med-accent, var(--med-blue)); }
 .asus-more ha-icon { --mdc-icon-size: 18px; }
 .asus-sub b { color: var(--med-text); margin-left: 4px; }
 .asus-all { max-height: 420px; overflow-y: auto; }
 .asus-all .asus-dev { cursor: default; grid-template-columns: 20px 1fr; }
 .asus-dn { display: grid; min-width: 0; } .asus-dn small { white-space: normal; }
 .asus-counts > div { display: grid; justify-items: center; padding: 8px 4px; border-radius: 10px; border: 1px solid var(--med-line); background: var(--med-surface); }
-.asus-counts ha-icon { --mdc-icon-size: 18px; color: var(--med-blue); }
+.asus-counts ha-icon { --mdc-icon-size: 18px; color: var(--med-accent, var(--med-blue)); }
 .asus-counts b { font-size: 1.15rem; } .asus-counts small { font-size: .68rem; color: var(--med-muted); text-align: center; }
 .asus-sub { font-size: .75rem; color: var(--med-muted); margin: 10px 0 4px; }
 .asus-devs { display: grid; gap: 2px; }
@@ -2713,7 +2713,7 @@ class ServeurHaPingCard extends HTMLElement {
       : `<span class="srv-led ok"><i></i>Tout en ligne</span>`) : "";
     this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${PVE_STYLE}${PING_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${down.length ? "srv-alert" : ""}">
       <header>
-        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:lan")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:lan")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
           <div><div class="title">${esc(c.title || "Réseau")}</div><div class="sub">${hosts.length} appareil${hosts.length > 1 ? "s" : ""} suivi${hosts.length > 1 ? "s" : ""} par Ping</div></div></div>
         ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
       </header>
@@ -2735,7 +2735,7 @@ const PING_STYLE = `<style>
 .ping-g { border: 1px solid var(--med-line); border-radius: 12px; overflow: hidden; }
 .ping-gh { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 12px; font-size: .84rem; }
 .ping-gh:hover { background: var(--med-surface); }
-.ping-gh > ha-icon { --mdc-icon-size: 18px; color: var(--med-blue); flex: none; }
+.ping-gh > ha-icon { --mdc-icon-size: 18px; color: var(--med-accent, var(--med-blue)); flex: none; }
 .ping-gl { font-weight: 600; white-space: nowrap; }
 .ping-dots { flex: 1; display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; min-width: 0; }
 .ping-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--med-down); }
@@ -2947,7 +2947,7 @@ class ServeurHaWireguardCard extends HTMLElement {
     const leds = m.servers.length ? `<span class="srv-led ${upN ? "ok" : "na"}"><i></i>${upN ? `${upN} connecté${upN > 1 ? "s" : ""}` : "Aucun pair connecté"}</span>` : "";
     this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${PVE_STYLE}${OMV_STYLE}${PING_STYLE}${WG_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
       <header>
-        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:vpn")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:vpn")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
           <div><div class="title">${esc(c.title || "VPN WireGuard")}</div><div class="sub">${m.servers.length ? m.servers.map((s) => esc(s.short)).join(" · ") : "WGDashboard"}</div></div></div>
         ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
       </header>
@@ -3204,7 +3204,7 @@ class ServeurHaGlancesCard extends HTMLElement {
     const leds = m.hosts.length ? `<span class="srv-led ${alerts ? "bad" : "ok"}"><i></i>${alerts ? `${alerts} à surveiller` : "Tout va bien"}</span>` : "";
     this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${PING_STYLE}${GL_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alerts ? "srv-alert" : ""}">
       <header>
-        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:monitor-dashboard")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:monitor-dashboard")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
           <div><div class="title">${esc(c.title || "Serveurs Glances")}</div><div class="sub">${m.hosts.length} serveur${m.hosts.length > 1 ? "s" : ""} · ${m.hosts.map((h) => esc(h.name)).join(" · ")}</div></div></div>
         ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
       </header>
@@ -3231,7 +3231,7 @@ const GL_STYLE = `<style>
 .gl-d .srv-tiles { margin: 0; }
 .gl-sub { display: grid; gap: 6px; }
 .gl-subh { display: flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 600; color: var(--med-muted); }
-.gl-subh ha-icon { --mdc-icon-size: 16px; color: var(--med-blue); }
+.gl-subh ha-icon { --mdc-icon-size: 16px; color: var(--med-accent, var(--med-blue)); }
 .gl-ts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 5px; }
 .gl-t { display: flex; justify-content: space-between; gap: 6px; padding: 5px 9px; border-radius: 8px; cursor: pointer; font-size: .74rem;
   border: 1px solid var(--med-line); background: var(--med-surface); min-width: 0; }
@@ -3432,7 +3432,7 @@ class ServeurHaMediaCard extends HTMLElement {
     const leds = m.servers.length ? `<span class="srv-led ${totalPlaying ? "ok" : "na"}"><i></i>${totalPlaying ? `${totalPlaying} en lecture` : "Aucune lecture"}</span>` : "";
     this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${OMV_STYLE}${MEDIA_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
       <header>
-        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:play-box-multiple")}" style="color:${esc(c.icon_color || "var(--med-blue)")}"></ha-icon>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:play-box-multiple")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
           <div><div class="title">${esc(c.title || "Serveurs multimédia")}</div><div class="sub">${m.servers.map((s) => esc(MEDIA_APPS[s.platform][0])).filter((v, i, a) => a.indexOf(v) === i).join(" · ") || "Plex, Jellyfin, Emby"}</div></div></div>
         ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
       </header>
@@ -3461,14 +3461,14 @@ const MEDIA_STYLE = `<style>
 .md-w { display: flex; align-items: center; gap: 4px; font-size: .74rem; color: var(--med-text); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .md-w ha-icon { --mdc-icon-size: 15px; color: var(--med-down); } .md-s.paused .md-w ha-icon { color: #f0a33a; }
 .md-p { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; margin-top: 4px; }
-.md-p .bar { height: 5px; } .md-p .bar i { background: var(--med-blue); }
+.md-p .bar { height: 5px; } .md-p .bar i { background: var(--med-accent, var(--med-blue)); }
 .md-p small { font-size: .68rem; color: var(--med-muted); white-space: nowrap; }
 .md-libs { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; }
 .md-lib { display: grid; justify-items: center; padding: 6px 4px; border-radius: 10px; background: var(--med-surface); font-size: .7rem; color: var(--med-muted); cursor: pointer; text-align: center; }
 .md-lib b { font-size: 1rem; color: var(--med-text); }
 .md-more { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
   padding: 6px; border-radius: 10px; border: 1px solid var(--med-line); font-size: .76rem; font-weight: 600; color: var(--med-muted); }
-.md-more:hover { color: var(--med-text); border-color: var(--med-blue); } .md-more ha-icon { --mdc-icon-size: 17px; }
+.md-more:hover { color: var(--med-text); border-color: var(--med-accent, var(--med-blue)); } .md-more ha-icon { --mdc-icon-size: 17px; }
 .md-cl { display: flex; flex-wrap: wrap; gap: 6px; }
 </style>`;
 
@@ -3781,7 +3781,7 @@ const DNS_STYLE = `<style>
 .dns-sws { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
 .dns-sw { all: unset; box-sizing: border-box; cursor: pointer; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px;
   border-radius: 12px; border: 1px solid var(--med-line); color: inherit; font: inherit; }
-.dns-sw:focus-visible { outline: 2px solid var(--med-blue); }
+.dns-sw:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
 .dns-sw .tile-l { font-size: .74rem; }
 .dns-sw.bad { border-color: var(--med-line); } .dns-sw.bad ha-icon { color: var(--med-muted) !important; }
 .dns-sw.main.bad { border-color: var(--t-red); } .dns-sw.main.bad ha-icon, .dns-sw.main.bad .tile-n { color: var(--t-red) !important; }
@@ -4015,7 +4015,7 @@ const LNX_STYLE = `<style>
 .lnx-b.ok { color: var(--med-down); border-color: color-mix(in srgb, var(--med-down) 45%, transparent); }
 .lnx-b.upd { color: #f0a33a; border-color: color-mix(in srgb, #f0a33a 50%, transparent); }
 .lnx-b.bad { color: #fff; background: var(--t-red); border-color: var(--t-red); }
-.lnx-b.run { color: var(--med-blue); border-color: color-mix(in srgb, var(--med-blue) 50%, transparent); }
+.lnx-b.run { color: var(--med-accent, var(--med-blue)); border-color: color-mix(in srgb, var(--med-accent, var(--med-blue)) 50%, transparent); }
 .lnx-pk { margin: 8px 0 2px 32px; display: grid; gap: 2px; max-height: 260px; overflow-y: auto; }
 .lnx-p { display: flex; align-items: center; gap: 6px; font-size: .74rem; min-width: 0; }
 .lnx-p ha-icon { --mdc-icon-size: 14px; color: var(--med-muted); flex: none; }
@@ -4046,7 +4046,7 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand svg { width: 34px; height: 34px; fill: none; }
 .brand .house { stroke: var(--med-green); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
-.brand .bolt { fill: var(--med-blue); }
+.brand .bolt { fill: var(--med-accent, var(--med-blue)); }
 .title { font-size: 1.15rem; font-weight: 700; letter-spacing: .2px; }
 .sub { font-size: .78rem; color: var(--med-muted); }
 .tempo { display: flex; gap: 8px; }
@@ -4107,7 +4107,7 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 .day b { color: var(--med-text); font-size: .78rem; }
 .day .dot { width: 6px; height: 6px; margin-top: 2px; }
 .day.on { background: var(--med-surface); }
-.day:focus-visible { outline: 2px solid var(--med-blue); }
+.day:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
 
 .detail { margin: 8px 12px 0; padding: 10px 12px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); }
 .detail-h { display: flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--med-muted); }
@@ -4122,7 +4122,7 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 .power.is-over { border-color: var(--t-red); }
 .power-t { display: flex; justify-content: space-between; font-size: .85rem; }
 .gauge { height: 6px; border-radius: 6px; background: var(--med-line); margin: 8px 0 6px; overflow: hidden; }
-.gauge i { display: block; height: 100%; background: linear-gradient(90deg, var(--med-green), var(--med-blue)); }
+.gauge i { display: block; height: 100%; background: linear-gradient(90deg, var(--med-green), var(--med-accent, var(--med-blue))); }
 .is-over .gauge i { background: var(--t-red); }
 .power-n { font-size: .75rem; color: var(--med-muted); }
 
@@ -4136,6 +4136,9 @@ footer { padding: 10px 18px 14px; font-size: .7rem; color: var(--med-muted); }
 .empty span { color: var(--med-muted); }
 /* Thème Home Assistant : fond, textes et bordures suivent le thème clair ou sombre */
 ha-card.th-ha {
+  /* accent (icônes, onglets, sélections, contours) : couleur principale du thème ; les bleus porteurs de sens restent bleus */
+  --med-accent: var(--primary-color, #1d93e3);
+  --med-on-accent: var(--text-primary-color, #fff);
   --med-bg: var(--ha-card-background, var(--card-background-color, #fff));
   --med-surface: color-mix(in srgb, var(--primary-text-color, #000) 5%, transparent);
   --med-line: var(--divider-color, rgba(127, 127, 127, .25));
