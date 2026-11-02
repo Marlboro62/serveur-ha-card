@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.15.0";
+const CARD_VERSION = "0.15.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -415,7 +415,7 @@ class ServeurHaCard extends HTMLElement {
 
     const power = m.power
       ? `<div class="srv-state srv-pw ${powerOk === null ? "" : powerOk ? "ok" : "bad"}" data-entity="${esc(m.power)}">
-          <div class="srv-pwh"><ha-icon icon="${powerOk === false ? "mdi:flash-alert" : c.icon || "mdi:power-plug-outline"}"></ha-icon><span>${powerOk === false ? "Sous-tension détectée : vérifiez l'alimentation" : "État de l'alimentation sur 24 h"}</span><b>${powerOk === null ? "—" : powerOk ? "OK" : "Danger"}</b></div>
+          <div class="srv-pwh"><ha-icon icon="${esc(powerOk === false ? "mdi:flash-alert" : c.icon || "mdi:power-plug-outline")}"></ha-icon><span>${powerOk === false ? "Sous-tension détectée : vérifiez l'alimentation" : "État de l'alimentation sur 24 h"}</span><b>${powerOk === null ? "—" : powerOk ? "OK" : "Danger"}</b></div>
           ${this._timeline(m.power)}</div>`
       : "";
 
