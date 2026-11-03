@@ -103,9 +103,10 @@
 
 ### Avec HACS (recommandé)
 
-1. Dans HACS, menu **⋮** → **Dépôts personnalisés**.
-2. Ajoutez `https://github.com/Marlboro62/serveur-ha-card` avec le type **Tableau de bord** (Dashboard).
-3. Cherchez **Cartes Serveur HA**, installez, puis rechargez la page (Ctrl+F5).
+1. Dans HACS, cherchez **Cartes Serveur HA** et installez-les.
+2. Rechargez la page (Ctrl+F5).
+
+Si la carte n'apparaît pas encore dans la recherche de HACS, ajoutez le dépôt à la main : menu **⋮** → **Dépôts personnalisés**, adresse `https://github.com/Marlboro62/serveur-ha-card`, type **Tableau de bord** (Dashboard), puis cherchez **Cartes Serveur HA**.
 
 > Tant qu'il n'existe qu'une version bêta, activez **Afficher les versions bêta** dans la fenêtre de téléchargement de HACS.
 
