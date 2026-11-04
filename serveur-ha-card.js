@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.15.2";
+const CARD_VERSION = "0.15.3-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -28,6 +28,8 @@ const fmt = (n, digits = 1) =>
     ? "—"
     : Number(n).toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
+/** Unité d'un capteur : texte sans caractère HTML (elle est insérée telle quelle dans les cadrans). */
+const cleanUnit = (u) => String(u ?? "").replace(/[&<>"'`]/g, "");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 /** Classe de thème de la carte :
@@ -257,7 +259,7 @@ class ServeurHaCard extends HTMLElement {
   }
 
   _unit(id, d = "") {
-    return this._st(id)?.attributes?.unit_of_measurement ?? d;
+    return cleanUnit(this._st(id)?.attributes?.unit_of_measurement ?? d);
   }
 
   /** Historique 24 h de l'alimentation (API history/period de Home Assistant), en 24 tranches d'une heure. */
@@ -375,7 +377,7 @@ class ServeurHaCard extends HTMLElement {
     const leds = [dot(powerOk, "Alimentation", m.power), dot(fanOk, "Ventilateur", m.fan), dot(bOk, "Backup", m.backup_event || m.backup_last || m.backup_state)].join("");
 
     // --- sections
-    const sec = (icon, title, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${icon}"></ha-icon>${title}</div>${body}</div>` : "");
+    const sec = (icon, title, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${title}</div>${body}</div>` : "");
     const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => `<div class="srv-kv"><span>${k}</span><b>${esc(v)}</b></div>`).join("");
 
     const infoTiles = [
@@ -388,7 +390,7 @@ class ServeurHaCard extends HTMLElement {
     ].filter(Boolean);
 
     const gauge = (id, icon, label, v, unit, lvl, pct, sub, wide) => (v === null ? "" : `<div class="srv-g${wide ? " srv-wide" : ""}" data-entity="${esc(id)}">
-        <div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${v}<small>${unit}</small></b></div>
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${v}<small>${unit}</small></b></div>
         <div class="g-bar ${lvl}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const tempPct = temp === null ? 0 : (temp / Math.max(c.temp_alert + 10, 1)) * 100;
     const ramFreeUnit = this._unit(m.ram_free, "MiB");
@@ -408,7 +410,7 @@ class ServeurHaCard extends HTMLElement {
       const unit = this._unit(id, "");
       const mb = v === null ? null : toMbit(v, unit);
       return `<div class="srv-g ${cls}" data-entity="${esc(id)}">
-        <div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${v !== null ? fmt(v, v < 10 ? 2 : 1) : "—"}<small> ${esc(unit)}</small></b></div>
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${v !== null ? fmt(v, v < 10 ? 2 : 1) : "—"}<small> ${esc(unit)}</small></b></div>
         <div class="g-bar"><i style="width:${mb === null ? 0 : Math.min(100, (mb / netMax) * 100)}%"></i></div></div>`;
     };
     const nets = [net(m.net_in, "mdi:download", "Download", netIn, "srv-in"), net(m.net_out, "mdi:upload", "Upload", netOut, "srv-out")].filter(Boolean);
@@ -419,7 +421,7 @@ class ServeurHaCard extends HTMLElement {
           ${this._timeline(m.power)}</div>`
       : "";
 
-    const bTile = (id, icon, label, v, n, cls = "") => (v === null ? "" : `<div class="tile srv-b ${cls}" data-entity="${esc(id || "")}"><ha-icon icon="${icon}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${esc(v)}</div>${n ? `<div class="tile-n">${esc(n)}</div>` : ""}</div>`);
+    const bTile = (id, icon, label, v, n, cls = "") => (v === null ? "" : `<div class="tile srv-b ${cls}" data-entity="${esc(id || "")}"><ha-icon icon="${esc(icon)}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${esc(v)}</div>${n ? `<div class="tile-n">${esc(n)}</div>` : ""}</div>`);
     const stateFr = bState ? ({ idle: "Inactif", create_backup: "Sauvegarde…", receive_backup: "Réception…", restore_backup: "Restauration…", blocked: "Bloqué" }[bState] || bState) : null;
     const backups = [
       bTile(m.drive_size || m.drive_count, "mdi:folder-google-drive", "Sauvegardes", drSize !== null ? `${fmt(drSize, drSize < 10 ? 1 : 0)} ${this._unit(m.drive_size, "")}` : drCount !== null ? fmt(drCount, 0) : null, drSize !== null && drCount !== null ? `${fmt(drCount, 0)} fichiers` : ""),
@@ -438,7 +440,7 @@ class ServeurHaCard extends HTMLElement {
         c.show_resources !== false ? sec("mdi:speedometer", "Ressources", gauges.length ? `<div class="srv-grid">${gauges.join("")}</div>` : "") : "",
         c.show_network !== false ? sec("mdi:swap-vertical", "Débits réseau", nets.length ? `<div class="srv-grid">${nets.join("")}</div>` : "") : "",
         c.show_power !== false ? sec("mdi:power-plug-outline", "Alimentation", power) : "",
-        c.show_backup !== false ? sec(m.drive_used || m.drive_size ? "mdi:google-drive" : "mdi:cloud-upload-outline", c.backup_title || (m.drive_used || m.drive_size ? "Google Drive Backup" : "Sauvegardes"), backups.length ? `<div class="srv-bk">${backups.join("")}</div>` : "") : "",
+        c.show_backup !== false ? sec(m.drive_used || m.drive_size ? "mdi:google-drive" : "mdi:cloud-upload-outline", esc(c.backup_title || (m.drive_used || m.drive_size ? "Google Drive Backup" : "Sauvegardes")), backups.length ? `<div class="srv-bk">${backups.join("")}</div>` : "") : "",
       ].join("");
 
     const alertCls = powerOk === false || (temp !== null && temp >= c.temp_alert) ? "srv-alert" : "";
@@ -693,7 +695,7 @@ class ServeurHaMajCard extends HTMLElement {
       </div>`;
     });
 
-    const sec = (icon, title, right, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${icon}"></ha-icon>${title}${right ? `<span class="maj-r">${right}</span>` : ""}</div>${body}</div>` : "");
+    const sec = (icon, title, right, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${title}${right ? `<span class="maj-r">${right}</span>` : ""}</div>${body}</div>` : "");
     const body = [
       c.show_system !== false ? sec("mdi:update", "Mises à jour système", "", sysTiles.length ? `<div class="maj-grid3">${sysTiles.join("")}</div>` : "") : "",
       c.show_info !== false ? sec("mdi:information-outline", "Informations", "", info.length ? `<div class="maj-grid2">${info.join("")}</div>` : "") : "",
@@ -841,7 +843,7 @@ const upsBlock = (card, u, c) => {
   const ok = !u.status && !u.status_raw ? null : (raw ? /\bOL\b/.test(raw) && !/\b(OB|LB|RB|OVER)\b/.test(raw) : /online|en ligne/i.test(st || ""));
   const bar = (id, icon, label, max, cls) => {
     const v = card._num(id);
-    return v === null ? "" : `<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> ${esc(card._unit(id, ""))}</small></b></div>
+    return v === null ? "" : `<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> ${esc(card._unit(id, ""))}</small></b></div>
       <div class="g-bar"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div></div>`;
   };
   const batt = card._num(u.battery);
@@ -967,7 +969,7 @@ class ServeurHaNasCard extends HTMLElement {
   }
 
   _unit(id, d = "") {
-    return this._st(id)?.attributes?.unit_of_measurement ?? d;
+    return cleanUnit(this._st(id)?.attributes?.unit_of_measurement ?? d);
   }
 
   /** Entités du NAS (intégration Synology DSM), de l'onduleur (NUT) et options de la configuration. */
@@ -1087,7 +1089,7 @@ class ServeurHaNasCard extends HTMLElement {
     const title = c.title || dev?.name_by_user || dev?.name || "NAS";
     const sub2 = [ip, vol1State ? `Volume ${fr(vol1State).toLowerCase()}` : null].filter(Boolean).join(" · ");
 
-    const sec = (icon, t, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${icon}"></ha-icon>${t}</div>${body}</div>` : "");
+    const sec = (icon, t, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
     const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => `<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
 
     // --- informations
@@ -1096,12 +1098,12 @@ class ServeurHaNasCard extends HTMLElement {
     const upd = this._st(m.dsm_update);
     const short = (v) => (/\d+(?:\.\d+)+/.exec(v || "") || [v || null])[0]; // « DSM 7.2.2-72806 Update 3 » → « 7.2.2 »
     const inst = upd?.attributes?.installed_version, last = upd?.attributes?.latest_version;
-    const dsmTile = upd && upd.state !== "unavailable" ? `<div class="tile srv-t nas-dsm ${upd.state === "on" ? "up" : ""}" data-entity="${esc(m.dsm_update)}" title="${esc([inst, upd.state === "on" ? `→ ${last}` : ""].filter(Boolean).join(" "))}"><div class="tile-l"><ha-icon icon="${upd.state === "on" ? "mdi:package-up" : "mdi:package-check"}"></ha-icon>DSM</div>
+    const dsmTile = upd && upd.state !== "unavailable" ? `<div class="tile srv-t nas-dsm ${upd.state === "on" ? "up" : ""}" data-entity="${esc(m.dsm_update)}" title="${esc([inst, upd.state === "on" ? `→ ${last}` : ""].filter(Boolean).join(" "))}"><div class="tile-l"><ha-icon icon="${esc(upd.state === "on" ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>DSM</div>
         ${kv([["Version", short(inst)], upd.state === "on" ? ["Dispo", short(last) || "Oui", "bad"] : ["État", "À jour", "ok"]])}</div>` : "";
     const info = [
       ip || ipExt ? `<div class="tile srv-t" data-entity="${esc(m.tracker || "")}"><div class="tile-l"><ha-icon icon="mdi:ip-network-outline"></ha-icon>Réseau</div>${kv([["Interne", ip || "—"], ["Externe", ipExt || null]])}</div>` : "",
       m.volumes.length || m.security ? `<div class="tile srv-t nas-health ${hddOk === false || secOk === false ? "bad" : ""}" data-panel="1" title="Afficher l'état des disques">
-        <div class="tile-l"><ha-icon icon="${hddOk === false ? "mdi:shield-alert-outline" : "mdi:shield-check-outline"}"></ha-icon>Santé<ha-icon class="nas-chev" icon="mdi:chevron-${this._open ? "up" : "down"}"></ha-icon></div>
+        <div class="tile-l"><ha-icon icon="${esc(hddOk === false ? "mdi:shield-alert-outline" : "mdi:shield-check-outline")}"></ha-icon>Santé<ha-icon class="nas-chev" icon="mdi:chevron-${this._open ? "up" : "down"}"></ha-icon></div>
         ${kv([["Volume", fr(vol1State), okWord(vol1State) ? "ok" : "bad"], ["Sécurité", secSt === undefined ? null : secOk ? "Sécurisé" : "Alerte", secOk ? "ok" : "bad"]])}</div>` : "",
       boot ? `<div class="tile srv-t" data-entity="${esc(m.last_boot)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
       dsmTile,
@@ -1121,7 +1123,7 @@ class ServeurHaNasCard extends HTMLElement {
 
     // --- ressources
     const gauge = (id, icon, label, v, digits, unit, lvl, sub) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
-        <div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
         <div class="g-bar ${lvl}"><i style="width:${Math.max(0, Math.min(100, v))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const res = [
       gauge(m.cpu, "mdi:cpu-64-bit", "CPU", this._num(m.cpu), 0, " %", level(this._num(m.cpu), 70, 90)),
@@ -1135,14 +1137,14 @@ class ServeurHaNasCard extends HTMLElement {
       const v = this._num(id);
       if (v === null) return "";
       const cls = v >= c.temp_alert ? "bad" : v >= c.temp_warn ? "warn" : "";
-      return `<div class="tile srv-b nas-th ${cls}" data-entity="${esc(id)}"><ha-icon icon="${icon}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${fmt(v, 0)} ${esc(this._unit(id, "°C"))}</div></div>`;
+      return `<div class="tile srv-b nas-th ${cls}" data-entity="${esc(id)}"><ha-icon icon="${esc(icon)}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${fmt(v, 0)} ${esc(this._unit(id, "°C"))}</div></div>`;
     };
     const fanSt = this._txt(m.fan);
     const fanFr = fanSt ? ({ quiet: "Silencieux", cool: "Frais", full_speed: "Vitesse max", full: "Vitesse max", low_power: "Économie" }[fanSt] || fanSt) : null;
     const thermal = [
       tTile(m.temperature, "mdi:nas", "NAS"),
       ...m.drives.map((d) => tTile(d.drv_temp, "mdi:harddisk", `Disque ${d.n}`)),
-      m.fan ? `<div class="tile srv-b" data-entity="${esc(m.fan)}" data-hold="${esc(m.fan)}" title="Appui long : mode suivant"><ha-icon icon="${fanSt === "quiet" ? "mdi:fan-speed-1" : fanSt === "cool" ? "mdi:fan-speed-2" : "mdi:fan-speed-3"}"></ha-icon><div class="tile-l">Ventilateur</div><div class="srv-bv nas-sm">${esc(fanFr || "—")}</div></div>` : "",
+      m.fan ? `<div class="tile srv-b" data-entity="${esc(m.fan)}" data-hold="${esc(m.fan)}" title="Appui long : mode suivant"><ha-icon icon="${esc(fanSt === "quiet" ? "mdi:fan-speed-1" : fanSt === "cool" ? "mdi:fan-speed-2" : "mdi:fan-speed-3")}"></ha-icon><div class="tile-l">Ventilateur</div><div class="srv-bv nas-sm">${esc(fanFr || "—")}</div></div>` : "",
     ].filter(Boolean);
 
     // --- actions : redémarrage (2 clics) et interrupteurs (appui long)
@@ -1179,7 +1181,7 @@ class ServeurHaNasCard extends HTMLElement {
       const v = this._num(id);
       const unit = this._unit(id, "");
       const mb = v === null ? null : toMbit(v, unit);
-      return `<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${v !== null ? fmt(v, v < 10 ? 1 : 0) : "—"}<small> ${esc(unit)}</small></b></div>
+      return `<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${v !== null ? fmt(v, v < 10 ? 1 : 0) : "—"}<small> ${esc(unit)}</small></b></div>
         <div class="g-bar"><i style="width:${mb === null ? 0 : Math.min(100, (mb / netMax) * 100)}%"></i></div></div>`;
     };
     const nets = [net(m.net_down, "mdi:download", "Download", "srv-in"), net(m.net_up, "mdi:upload", "Upload", "srv-out")].filter(Boolean);
@@ -1189,7 +1191,7 @@ class ServeurHaNasCard extends HTMLElement {
     if (Object.keys(m.ups).length) {
       const bar = (id, icon, label, max, cls) => {
         const v = this._num(id);
-        return v === null ? "" : `<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> ${esc(this._unit(id, ""))}</small></b></div>
+        return v === null ? "" : `<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> ${esc(this._unit(id, ""))}</small></b></div>
           <div class="g-bar"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div></div>`;
       };
       const batt = this._num(m.ups.battery);
@@ -1398,7 +1400,7 @@ class ServeurHaProxmoxCard extends HTMLElement {
   }
 
   _unit(id, d = "") {
-    return this._st(id)?.attributes?.unit_of_measurement ?? d;
+    return cleanUnit(this._st(id)?.attributes?.unit_of_measurement ?? d);
   }
 
   _tabKey() {
@@ -1529,15 +1531,15 @@ class ServeurHaProxmoxCard extends HTMLElement {
       ups.ok === null ? "" : led(ups.ok, "UPS", m.ups.status || m.ups.status_raw),
     ].join("") : "";
 
-    const sec = (icon, t, body, extra = "") => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${icon}"></ha-icon>${t}${extra}</div>${body}</div>` : "");
+    const sec = (icon, t, body, extra = "") => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}${extra}</div>${body}</div>` : "");
     const gauge = (id, icon, label, v, sub, warn = 75, alert = 90) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
-        <div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> %</small></b></div>
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> %</small></b></div>
         <div class="g-bar ${level(v, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, v))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const btn = (id, icon, label, cls = "") => {
       if (!id || !this._st(id)) return "";
       const armed = this._armed === id;
       // armé : coche orange (petits boutons), « Confirmer » sur les grands boutons du nœud
-      return `<button class="pve-btn ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${armed ? "mdi:check-bold" : icon}"></ha-icon>${armed && /wide/.test(cls) ? "<span>Confirmer</span>" : ""}</button>`;
+      return `<button class="pve-btn ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${esc(armed ? "mdi:check-bold" : icon)}"></ha-icon>${armed && /wide/.test(cls) ? "<span>Confirmer</span>" : ""}</button>`;
     };
 
     let body = "";
@@ -1558,7 +1560,7 @@ class ServeurHaProxmoxCard extends HTMLElement {
         const tiles = [
           `<div class="tile srv-t" data-entity="${esc(node.roles.status || node.roles.running || "")}"><div class="tile-l"><ha-icon icon="mdi:server"></ha-icon>${esc(node.name)}</div><div class="pve-st ${stCls}"><i></i>${esc(stTxt)}</div></div>`,
           boot && since(boot) ? `<div class="tile srv-t" data-entity="${esc(node.roles.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
-          upd ? `<div class="tile srv-t nas-dsm ${upd.state === "on" ? "up" : ""}" data-entity="${esc(node.roles.update)}" title="${esc([inst, upd.state === "on" ? `→ ${last}` : ""].filter(Boolean).join(" "))}"><div class="tile-l"><ha-icon icon="${upd.state === "on" ? "mdi:package-up" : "mdi:package-check"}"></ha-icon>Proxmox</div>
+          upd ? `<div class="tile srv-t nas-dsm ${upd.state === "on" ? "up" : ""}" data-entity="${esc(node.roles.update)}" title="${esc([inst, upd.state === "on" ? `→ ${last}` : ""].filter(Boolean).join(" "))}"><div class="tile-l"><ha-icon icon="${esc(upd.state === "on" ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>Proxmox</div>
             <div class="srv-kv"><span>${upd.state === "on" ? "Dispo" : "Version"}</span><b class="${upd.state === "on" ? "bad" : ""}">${esc((upd.state === "on" ? last : inst) || "—")}</b></div>
             <div class="srv-kv"><span>État</span><b class="${upd.state === "on" ? "bad" : "ok"}">${upd.state === "on" ? "À installer" : "À jour"}</b></div></div>` : "",
         ].filter(Boolean);
@@ -1593,7 +1595,7 @@ class ServeurHaProxmoxCard extends HTMLElement {
             : btn(g.roles.reboot, "mdi:restart", `Redémarrer ${g.name}`) + btn(g.roles.shutdown || g.roles.stop, "mdi:stop", `Arrêter ${g.name}`, "stop"))
           : btn(g.roles.start, "mdi:play", `Démarrer ${g.name}`, "go");
         return `<div class="pve-g ${on ? "" : "off"}" data-entity="${esc(g.roles.status || g.roles.running || g.roles.cpu || "")}">
-          <ha-icon class="pve-gi" icon="${g.vm ? "mdi:monitor" : "mdi:cube-outline"}" title="${g.vm ? "Machine virtuelle" : "Conteneur LXC"}"></ha-icon>
+          <ha-icon class="pve-gi" icon="${esc(g.vm ? "mdi:monitor" : "mdi:cube-outline")}" title="${g.vm ? "Machine virtuelle" : "Conteneur LXC"}"></ha-icon>
           <div class="pve-gn"><b>${esc(g.name)}</b><span><i class="pve-dot ${stCls}"></i>${esc(meta)}</span></div>
           ${on ? `<div class="pve-gm"><span title="CPU">${cpu === null ? "—" : `${fmt(cpu, cpu < 10 ? 1 : 0)} %`}</span><span title="RAM${memMax !== null ? ` sur ${gib(memMax)}` : ""}">${mem === null ? "—" : `${fmt(Math.min(mem, 999), 0)} %`}</span></div>` : `<div class="pve-gm"></div>`}
           <div class="pve-ga">${acts}</div></div>`;
@@ -1793,7 +1795,7 @@ class ServeurHaOmvCard extends HTMLElement {
   }
 
   _unit(id, d = "") {
-    return this._st(id)?.attributes?.unit_of_measurement ?? d;
+    return cleanUnit(this._st(id)?.attributes?.unit_of_measurement ?? d);
   }
 
   /** Appareil OpenMediaVault (choisi ou le premier), ses disques et systèmes de fichiers, services et interfaces réseau. */
@@ -1860,15 +1862,15 @@ class ServeurHaOmvCard extends HTMLElement {
     if (sig === this._sig) return;
     this._sig = sig;
 
-    const sec = (icon, t, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${icon}"></ha-icon>${t}</div>${body}</div>` : "");
+    const sec = (icon, t, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
     const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => `<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
     const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
-        <div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
         <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const btn = (id, icon, label, cls = "") => {
       if (!id || !this._st(id)) return "";
       const armed = this._armed === id;
-      return `<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${armed ? "mdi:check-bold" : icon}"></ha-icon>${armed ? "<span>Confirmer</span>" : ""}</button>`;
+      return `<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${esc(armed ? "mdi:check-bold" : icon)}"></ha-icon>${armed ? "<span>Confirmer</span>" : ""}</button>`;
     };
     const size = (id) => { const v = this._num(id); if (v === null) return null; const u = this._unit(id, "GB"); return v >= 1000 && /^GB$/i.test(u) ? `${fmt(v / 1000, 2)} To` : `${fmt(v, v < 10 ? 1 : 0)} ${u.replace(/^GB$/i, "Go").replace(/^TB$/i, "To").replace(/^MB$/i, "Mo")}`; };
 
@@ -1909,7 +1911,7 @@ class ServeurHaOmvCard extends HTMLElement {
         const loads = [r.load1, r.load5, r.load15].map((id) => this._num(id));
         const tiles = [
           boot && since(boot) ? `<div class="tile srv-t" data-entity="${esc(r.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
-          upd || pkg !== null ? `<div class="tile srv-t nas-dsm ${needUpd ? "up" : ""}" data-entity="${esc(r.update || r.pkg)}" title="${esc(inst || "")}"><div class="tile-l"><ha-icon icon="${needUpd ? "mdi:package-up" : "mdi:package-check"}"></ha-icon>OMV</div>
+          upd || pkg !== null ? `<div class="tile srv-t nas-dsm ${needUpd ? "up" : ""}" data-entity="${esc(r.update || r.pkg)}" title="${esc(inst || "")}"><div class="tile-l"><ha-icon icon="${esc(needUpd ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>OMV</div>
             ${kv([["Version", short(inst)], needUpd ? ["Paquets", pkg !== null && pkg > 0 ? fmt(pkg, 0) : "Oui", "bad"] : ["État", "À jour", "ok"]])}</div>` : "",
           loads.some((v) => v !== null) ? `<div class="tile srv-t" data-entity="${esc(r.load1 || r.load5)}"><div class="tile-l"><ha-icon icon="mdi:chart-line-variant"></ha-icon>Charge</div>
             <div class="omv-load">${loads.map((v, i) => `<span><b>${v === null ? "—" : fmt(v, 2)}</b><small>${[1, 5, 15][i]} min</small></span>`).join("")}</div></div>` : "",
@@ -2164,7 +2166,7 @@ class ServeurHaAsusCard extends HTMLElement {
   }
 
   _unit(id, d = "") {
-    return this._st(id)?.attributes?.unit_of_measurement ?? d;
+    return cleanUnit(this._st(id)?.attributes?.unit_of_measurement ?? d);
   }
 
   /** Routeur (choisi ou le premier) : rôles de ses entités, réseaux invités et VPN. */
@@ -2199,10 +2201,10 @@ class ServeurHaAsusCard extends HTMLElement {
     if (sig === this._sig) return;
     this._sig = sig;
 
-    const sec = (icon, t, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${icon}"></ha-icon>${t}</div>${body}</div>` : "");
+    const sec = (icon, t, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
     const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => `<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
     const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
-        <div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
         <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const rate = (id, icon, label, max, sub, cls) => {
       const v = this._num(id);
@@ -2211,7 +2213,7 @@ class ServeurHaAsusCard extends HTMLElement {
     const btn = (id, icon, label, cls = "") => {
       if (!id || !this._st(id)) return "";
       const armed = this._armed === id;
-      return `<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${armed ? "mdi:check-bold" : icon}"></ha-icon>${armed ? "<span>Confirmer</span>" : ""}</button>`;
+      return `<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${esc(armed ? "mdi:check-bold" : icon)}"></ha-icon>${armed ? "<span>Confirmer</span>" : ""}</button>`;
     };
     const chip = (id, label, on, title = "") => `<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}" title="${esc(title || (on ? "Activé" : "Désactivé"))}"><i></i>${esc(label)}</span>`;
     const go = (v) => (v === null ? null : v >= 1000 ? `${fmt(v / 1000, 2)} To` : `${fmt(v, v < 10 ? 2 : 1)} Go`);
@@ -2253,7 +2255,7 @@ class ServeurHaAsusCard extends HTMLElement {
         const fw = (v) => (v ? String(v).replace(/^3\.0\.0\.\d+\./, "") : v);
         const tiles = [
           boot && since(boot) ? `<div class="tile srv-t" data-entity="${esc(r.boot || r.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
-          upd || version ? `<div class="tile srv-t nas-dsm ${needUpd ? "up" : ""}" data-entity="${esc(r.update || "")}" title="${esc(version || "")}"><div class="tile-l"><ha-icon icon="${needUpd ? "mdi:package-up" : "mdi:package-check"}"></ha-icon>Firmware</div>
+          upd || version ? `<div class="tile srv-t nas-dsm ${needUpd ? "up" : ""}" data-entity="${esc(r.update || "")}" title="${esc(version || "")}"><div class="tile-l"><ha-icon icon="${esc(needUpd ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>Firmware</div>
             ${kv([["Version", fw(version)], needUpd ? ["Nouvelle", fw(latest) || "Oui", "bad"] : upd ? ["État", "À jour", "ok"] : [null, null]])}</div>` : "",
           loads.some((v) => v !== null) ? `<div class="tile srv-t" data-entity="${esc(r.load1 || r.load5)}"><div class="tile-l"><ha-icon icon="mdi:chart-line-variant"></ha-icon>Charge</div>
             <div class="omv-load">${loads.map((v, i) => `<span><b>${v === null ? "—" : fmt(v, 2)}</b><small>${[1, 5, 15][i]} min</small></span>`).join("")}</div></div>` : "",
@@ -2313,7 +2315,7 @@ class ServeurHaAsusCard extends HTMLElement {
           .map(([label, rx, tx]) => `<div class="asus-row"><span class="asus-rl">${label}</span>${bar(rx, "in")}${bar(tx, "out")}</div>`);
         // repliés par défaut : le bouton « Débits par bande » les déplie
         const ratesOpen = this._fold === "rates";
-        const ratesBtn = rows.length ? `<button class="asus-more ${ratesOpen ? "on" : ""}" data-fold="rates"><ha-icon icon="${ratesOpen ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon>${ratesOpen ? "Réduire" : "Débits par bande"}</button>` : "";
+        const ratesBtn = rows.length ? `<button class="asus-more ${ratesOpen ? "on" : ""}" data-fold="rates"><ha-icon icon="${esc(ratesOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${ratesOpen ? "Réduire" : "Débits par bande"}</button>` : "";
         const rates = rows.length && ratesOpen ? [`<div class="asus-rates"><div class="asus-row asus-rh"><span></span><span><ha-icon icon="mdi:download"></ha-icon>Réception</span><span><ha-icon icon="mdi:upload"></ha-icon>Envoi</span></div>${rows.join("")}</div>`] : [];
         const guestTxt = m.guests.length ? `<div class="asus-note">${guestOn.length ? "" : "Aucun réseau invité actif"}</div>` : "";
         wifi = sec("mdi:wifi", "Wi-Fi", bands.length || ratesBtn
@@ -2358,7 +2360,7 @@ class ServeurHaAsusCard extends HTMLElement {
         const latest = latestList.slice(0, n).map((d) => {
           const name = String(d?.name || d?.ip || d?.mac || "Appareil").replace(/^\[\d+\]\s*/, "");
           const when = d?.connected ? since(d.connected) : null;
-          return `<div class="asus-dev" data-entity="${esc(r.latest)}"><ha-icon icon="${/wired/.test(d?.connection_type || "") ? "mdi:ethernet" : "mdi:wifi"}"></ha-icon><span>${esc(name)}</span><small>${esc([ASUS_LINK[d?.connection_type] || null, when ? `il y a ${when}` : null].filter(Boolean).join(" · "))}</small></div>`;
+          return `<div class="asus-dev" data-entity="${esc(r.latest)}"><ha-icon icon="${esc(/wired/.test(d?.connection_type || "") ? "mdi:ethernet" : "mdi:wifi")}"></ha-icon><span>${esc(name)}</span><small>${esc([ASUS_LINK[d?.connection_type] || null, when ? `il y a ${when}` : null].filter(Boolean).join(" · "))}</small></div>`;
         });
         // liste complète, dépliée par « Voir tous » ou par une tuile : par type de connexion, puis par nom
         const open = this._devs && (devices.length || latest.length) ? this._devs : null;
@@ -2369,15 +2371,15 @@ class ServeurHaAsusCard extends HTMLElement {
           .sort((a, b) => (ORDER[a?.connection_type] || 9) - (ORDER[b?.connection_type] || 9) || label(a).localeCompare(label(b), "fr", { numeric: true }));
         const full = shown.map((d) => {
           const when = d?.connected ? since(d.connected) : null;
-          return `<div class="asus-dev"><ha-icon icon="${/wired/.test(d?.connection_type || "") ? "mdi:ethernet" : "mdi:wifi"}"></ha-icon><div class="asus-dn"><span>${esc(label(d))}</span><small>${esc([d?.ip || null, ASUS_LINK[d?.connection_type] || null, when ? `depuis ${when}` : null].filter(Boolean).join(" · "))}</small></div></div>`;
+          return `<div class="asus-dev"><ha-icon icon="${esc(/wired/.test(d?.connection_type || "") ? "mdi:ethernet" : "mdi:wifi")}"></ha-icon><div class="asus-dn"><span>${esc(label(d))}</span><small>${esc([d?.ip || null, ASUS_LINK[d?.connection_type] || null, when ? `depuis ${when}` : null].filter(Boolean).join(" · "))}</small></div></div>`;
         });
         const openName = { all: "Tous les appareils", "2ghz": "Wi-Fi 2,4 GHz", "5ghz": "Wi-Fi 5 GHz", wired: "Filaire", guest: "Invités" }[open];
         // tout est replié par défaut : le bouton déplie les dernières connexions et la liste complète
         const more = devices.length || latest.length
-          ? `<button class="asus-more ${open ? "on" : ""}" data-devs="${open || "all"}"><ha-icon icon="${open ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon>${open ? "Réduire" : devices.length ? `Voir les ${fmt(devices.length, 0)} appareils` : "Voir les dernières connexions"}</button>`
+          ? `<button class="asus-more ${open ? "on" : ""}" data-devs="${open || "all"}"><ha-icon icon="${esc(open ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${open ? "Réduire" : devices.length ? `Voir les ${fmt(devices.length, 0)} appareils` : "Voir les dernières connexions"}</button>`
           : "";
         clients = sec("mdi:devices", `Appareils connectés <small class="pve-n">${total !== null ? fmt(total, 0) : ""}</small>`,
-          `${tiles.length ? `<div class="asus-counts">${tiles.map(([lbl, v, icon, key]) => `<div class="${open === key ? "on" : ""}" ${devices.length && v ? `data-devs="${key}" title="Voir les appareils : ${lbl}"` : ""}><ha-icon icon="${icon}"></ha-icon><b>${v === null ? "—" : fmt(v, 0)}</b><small>${lbl}</small></div>`).join("")}</div>` : ""}
+          `${tiles.length ? `<div class="asus-counts">${tiles.map(([lbl, v, icon, key]) => `<div class="${open === key ? "on" : ""}" ${devices.length && v ? `data-devs="${key}" title="Voir les appareils : ${lbl}"` : ""}><ha-icon icon="${esc(icon)}"></ha-icon><b>${v === null ? "—" : fmt(v, 0)}</b><small>${lbl}</small></div>`).join("")}</div>` : ""}
           ${open === "all" && latest.length ? `<div class="asus-sub">Dernières connexions</div><div class="asus-devs">${latest.join("")}</div>` : ""}
           ${open ? `<div class="asus-sub">${openName} <b>${fmt(shown.length, 0)}</b></div><div class="asus-devs asus-all">${full.join("") || `<div class="asus-note">Aucun appareil</div>`}</div>` : ""}
           ${more}`);
@@ -2694,7 +2696,7 @@ class ServeurHaPingCard extends HTMLElement {
       const dots = g.hosts.map((h) => { const st = this._state(h); return `<i class="${st === "up" ? "ok" : st}"></i>`; }).join("");
       return `<div class="ping-g ${isOpen ? "open" : ""}">
         <button class="ping-gh" data-fold="${esc(g.key)}" aria-expanded="${isOpen}"><ha-icon icon="${esc(g.icon)}"></ha-icon><span class="ping-gl">${esc(g.label)}</span>
-          <span class="ping-dots">${dots}</span><b class="${bad ? "bad" : "ok"}">${ok}/${n}</b><ha-icon class="ping-chev" icon="${isOpen ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
+          <span class="ping-dots">${dots}</span><b class="${bad ? "bad" : "ok"}">${ok}/${n}</b><ha-icon class="ping-chev" icon="${esc(isOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon></button>
         ${isOpen ? `<div class="ping-grid">${g.hosts.map(tile).join("")}</div>` : ""}
       </div>`;
     }).join("");
@@ -2931,7 +2933,7 @@ class ServeurHaWireguardCard extends HTMLElement {
       const dots = s.peers.map((p) => `<i class="${isUp(p) ? "ok" : "na"}"></i>`).join("");
       return `<div class="ping-g ${isOpen ? "open" : ""}">
         <button class="ping-gh" data-fold="${esc(s.key)}" aria-expanded="${isOpen}"><ha-icon icon="mdi:server-network"></ha-icon><span class="ping-gl">${esc(s.short)}</span>
-          <span class="ping-dots">${dots}</span><b class="${on.length ? "ok" : "off"}">${on.length}/${total}</b><ha-icon class="ping-chev" icon="${isOpen ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
+          <span class="ping-dots">${dots}</span><b class="${on.length ? "ok" : "off"}">${on.length}/${total}</b><ha-icon class="ping-chev" icon="${esc(isOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon></button>
         ${isOpen ? `<div class="wg-list">${s.peers.map(peerTile).join("")}</div>`
           : on.length ? `<div class="wg-on">${on.map((p) => `<span class="omv-svc on" data-entity="${esc(p.roles.up)}"><i></i>${esc(p.name)}</span>`).join("")}</div>` : ""}
       </div>`;
@@ -3069,7 +3071,7 @@ class ServeurHaGlancesCard extends HTMLElement {
   }
 
   _unit(id, d = "") {
-    return this._st(id)?.attributes?.unit_of_measurement ?? d;
+    return cleanUnit(this._st(id)?.attributes?.unit_of_measurement ?? d);
   }
 
   /** Hôtes Glances (un appareil par serveur) : rôles, disques par point de montage, températures, ventilateurs, réseau, GPU. */
@@ -3085,7 +3087,7 @@ class ServeurHaGlancesCard extends HTMLElement {
       const h = (hosts[key] ||= { key, dev, name: dev?.name_by_user || dev?.name || "Glances", roles: {}, fs: {}, temps: [], fans: [], net: {}, gpu: {} });
       const st = hass.states[id], a = st.attributes || {}, tk = e.translation_key || "";
       const fname = String(a.friendly_name || id).replace(h.name, "").trim();
-      const unit = String(a.unit_of_measurement || "");
+      const unit = cleanUnit(a.unit_of_measurement);
       // GPU avant la mémoire et le processeur : ses capteurs finissent aussi par « utilisation de la mémoire »
       if (/gpu/i.test(tk) || /_gpu_/.test(id)) {
         if (/temp/i.test(tk) || a.device_class === "temperature") h.temps.push({ id, label: "GPU" });
@@ -3130,9 +3132,9 @@ class ServeurHaGlancesCard extends HTMLElement {
 
     const tw = Number(c.temp_warn) || 70, ta = Number(c.temp_alert) || 85;
     const open = (k) => this._open.has("*") || this._open.has(k);
-    const sec = (icon, t, body) => (body ? `<div class="gl-sub"><div class="gl-subh"><ha-icon icon="${icon}"></ha-icon>${t}</div>${body}</div>` : "");
+    const sec = (icon, t, body) => (body ? `<div class="gl-sub"><div class="gl-subh"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
     const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
-        <div class="srv-gt"><span><ha-icon icon="${icon}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
         <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const go = (id) => { const v = this._num(id); if (v === null) return null; const u = this._unit(id, "GiB"); const g = /^TiB|^TB/i.test(u) ? v * 1024 : /^MiB|^MB/i.test(u) ? v / 1024 : v; return g >= 1024 ? `${fmt(g / 1024, 2)} To` : `${fmt(g, g < 10 ? 1 : 0)} Go`; };
     const tcls = (v) => (v === null ? "" : v >= ta ? "bad" : v >= tw ? "warn" : "ok");
@@ -3194,7 +3196,7 @@ class ServeurHaGlancesCard extends HTMLElement {
       return `<div class="ping-g gl-h ${isOpen ? "open" : ""} ${bad ? "alert" : ""}">
         <button class="ping-gh" data-fold="${esc(h.key)}" aria-expanded="${isOpen}"><ha-icon icon="mdi:server"></ha-icon>
           <span class="gl-hn"><span class="ping-gl">${esc(h.name)}</span>${upTxt && online ? `<small>depuis ${esc(upTxt)}</small>` : ""}</span>
-          <span class="gl-cs">${chips}</span><ha-icon class="ping-chev" icon="${isOpen ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
+          <span class="gl-cs">${chips}</span><ha-icon class="ping-chev" icon="${esc(isOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon></button>
         ${detail}
       </div>`;
     }).join("");
@@ -3388,11 +3390,11 @@ class ServeurHaMediaCard extends HTMLElement {
       if (o.state === "playing" && Number.isFinite(pos) && Number.isFinite(posAt)) pos += (Date.now() - posAt) / 1000;
       const pct = Number.isFinite(dur) && dur > 0 && Number.isFinite(pos) ? Math.min(100, (pos / dur) * 100) : null;
       const who = [a.username || a.user, mediaPlayerName(a.friendly_name)].filter(Boolean).join(" · ");
-      const pic = a.entity_picture ? `<img src="${esc(a.entity_picture)}" alt="" loading="lazy">` : `<ha-icon icon="${a.media_content_type === "music" || a.media_artist ? "mdi:music" : "mdi:movie-open-outline"}"></ha-icon>`;
+      const pic = a.entity_picture ? `<img src="${esc(a.entity_picture)}" alt="" loading="lazy">` : `<ha-icon icon="${esc(a.media_content_type === "music" || a.media_artist ? "mdi:music" : "mdi:movie-open-outline")}"></ha-icon>`;
       return `<div class="md-s ${o.state}" data-entity="${esc(id)}">
           <div class="md-art">${pic}</div>
           <div class="md-i"><div class="md-t">${esc(t1)}</div>${t2 ? `<div class="md-t2">${esc(t2)}</div>` : ""}
-            <div class="md-w"><ha-icon icon="${o.state === "paused" ? "mdi:pause" : "mdi:play"}"></ha-icon>${esc(who || "Lecteur")}${MEDIA_TYPES[a.media_content_type] ? ` · ${MEDIA_TYPES[a.media_content_type]}` : ""}</div>
+            <div class="md-w"><ha-icon icon="${esc(o.state === "paused" ? "mdi:pause" : "mdi:play")}"></ha-icon>${esc(who || "Lecteur")}${MEDIA_TYPES[a.media_content_type] ? ` · ${MEDIA_TYPES[a.media_content_type]}` : ""}</div>
             ${pct !== null ? `<div class="md-p"><div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div><small>${clock(pos)} / ${clock(dur)}</small></div>` : ""}</div>
         </div>`;
     };
@@ -3412,11 +3414,11 @@ class ServeurHaMediaCard extends HTMLElement {
       }).filter(Boolean) : [];
       const isOpen = this._open.has(s.key);
       const known = s.players.filter((id) => this._st(id)?.state !== "unavailable");
-      const clients = c.show_clients !== false && s.players.length ? `<button class="md-more" data-fold="${esc(s.key)}"><ha-icon icon="${isOpen ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon>${isOpen ? "Réduire" : `Lecteurs (${known.length} disponible${known.length > 1 ? "s" : ""} sur ${s.players.length})`}</button>
+      const clients = c.show_clients !== false && s.players.length ? `<button class="md-more" data-fold="${esc(s.key)}"><ha-icon icon="${esc(isOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${isOpen ? "Réduire" : `Lecteurs (${known.length} disponible${known.length > 1 ? "s" : ""} sur ${s.players.length})`}</button>
           ${isOpen ? `<div class="md-cl">${s.players.map((id) => { const o = this._st(id); const on = o?.state !== "unavailable"; return `<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}"><i></i>${esc(mediaPlayerName(o?.attributes?.friendly_name) || id)}</span>`; }).join("")}</div>` : ""}` : "";
       return `<div class="md-srv">
           <div class="md-h" data-entity="${esc(s.count || s.update || "")}">
-            <span class="md-app" style="--app:${appColor}"><ha-icon icon="${appIcon}"></ha-icon></span>
+            <span class="md-app" style="--app:${appColor}"><ha-icon icon="${esc(appIcon)}"></ha-icon></span>
             <div class="md-hn"><b>${esc(s.name)}</b><small>${esc([app, version ? `v${String(version).split("-")[0]}` : null].filter(Boolean).join(" · "))}</small></div>
             ${needUpd ? `<span class="srv-led upd" data-entity="${esc(s.update)}"><i></i>Mise à jour</span>` : ""}
             <span class="md-n ${now.length ? "on" : ""}">${now.length ? `${now.length} en lecture` : "Rien en lecture"}</span>
@@ -3704,7 +3706,7 @@ class ServeurHaDnsCard extends HTMLElement {
           </div></div>`;
 
       // détails : ce que chaque application fournit
-      const tile = (id, ic, label, v) => (v === null ? "" : `<div class="tile srv-b" data-entity="${esc(id)}"><ha-icon icon="${ic}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${v}</div></div>`);
+      const tile = (id, ic, label, v) => (v === null ? "" : `<div class="tile srv-b" data-entity="${esc(id)}"><ha-icon icon="${esc(ic)}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${v}</div></div>`);
       const n = (id) => { const v = this._num(id); return v === null ? null : fmt(v, 0); };
       const det = c.show_details === false ? [] : [
         tile(r.clients, "mdi:devices", "Clients actifs", n(r.clients)),
@@ -3723,7 +3725,7 @@ class ServeurHaDnsCard extends HTMLElement {
         const id = r[k], s = this._st(id).state, armed = this._armed === id, guard = k === "protection" || k === "blocking";
         const [ic, label] = DNS_SWITCH[k];
         return `<button class="tile srv-b dns-sw ${s === "on" ? "good" : s === "off" ? "bad" : ""} ${guard ? "main" : ""} ${armed ? "armed" : ""}" data-toggle="${esc(id)}" ${guard ? 'data-guard="1"' : ""} title="${armed ? "Cliquez encore pour couper" : s === "on" ? "Cliquer pour couper" : "Cliquer pour activer"}">
-          <ha-icon icon="${armed ? "mdi:check-bold" : ic}"></ha-icon><div class="tile-l">${label}</div><div class="tile-n">${armed ? "Confirmer ?" : s === "on" ? "Activé" : s === "off" ? "Désactivé" : "Indisponible"}</div></button>`;
+          <ha-icon icon="${esc(armed ? "mdi:check-bold" : ic)}"></ha-icon><div class="tile-l">${label}</div><div class="tile-n">${armed ? "Confirmer ?" : s === "on" ? "Activé" : s === "off" ? "Désactivé" : "Indisponible"}</div></button>`;
       });
       // Pi-hole : pause du blocage
       const pauses = srv.app === "pi_hole" && r.blocking && this._st(r.blocking)?.state === "on" && c.show_switches !== false
@@ -3734,12 +3736,12 @@ class ServeurHaDnsCard extends HTMLElement {
       const ups = c.show_update === false ? [] : srv.updates.map((id) => {
         const u = this._st(id), a = u.attributes || {};
         const label = srv.updates.length > 1 ? (a.title || a.friendly_name || "Mise à jour").replace(/^Pi-?hole\s*/i, "") : DNS_APPS[srv.app][0];
-        return `<div class="tile srv-t nas-dsm ${u.state === "on" ? "up" : ""}" data-entity="${esc(id)}"><div class="tile-l"><ha-icon icon="${u.state === "on" ? "mdi:package-up" : "mdi:package-check"}"></ha-icon>${esc(label)}</div>
+        return `<div class="tile srv-t nas-dsm ${u.state === "on" ? "up" : ""}" data-entity="${esc(id)}"><div class="tile-l"><ha-icon icon="${esc(u.state === "on" ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>${esc(label)}</div>
           <div class="srv-kv"><span>${u.state === "on" ? "Dispo" : "Version"}</span><b class="${u.state === "on" ? "bad" : ""}">${esc((u.state === "on" ? a.latest_version : a.installed_version) || "—")}</b></div>
           <div class="srv-kv"><span>État</span><b class="${u.state === "on" ? "bad" : "ok"}">${u.state === "on" ? "À installer" : "À jour"}</b></div></div>`;
       });
 
-      const sec = (ic, t, inner) => (inner ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${ic}"></ha-icon>${t}</div>${inner}</div>` : "");
+      const sec = (ic, t, inner) => (inner ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(ic)}"></ha-icon>${t}</div>${inner}</div>` : "");
       body = tabs + (hero ? `<div class="srv-sec">${hero}</div>` : "")
         + sec("mdi:chart-box-outline", "Détails", det.length ? `<div class="srv-bk dns-det">${det.join("")}</div>` : "")
         + sec("mdi:toggle-switch-outline", "Réglages", sw.length || pauses.length ? `<div class="srv-bk dns-sws">${sw.join("")}${pauses.join("")}</div>` : "")
@@ -3960,13 +3962,13 @@ class ServeurHaLinuxCard extends HTMLElement {
           ${p.is_kept_back ? `<em>retenu</em>` : ""}</div>`).join("")}${pk.length > 40 ? `<div class="lnx-more">et ${pk.length - 40} autres</div>` : ""}</div>` : "";
       return `<div class="lnx-s ${cls}">
         <div class="lnx-row" data-entity="${esc(x.id)}">
-          <ha-icon class="lnx-i" icon="${icon}"></ha-icon>
+          <ha-icon class="lnx-i" icon="${esc(icon)}"></ha-icon>
           <div class="lnx-n"><b>${esc(sys.name || x.s.attributes.friendly_name || x.id)}</b>${os ? `<span>${esc(os)}</span>` : ""}</div>
           <div class="lnx-a">
             ${canInstall ? `<button class="pve-btn wide go${armed ? " armed" : ""}" data-install="${esc(x.id)}" title="Installer les mises à jour">
               <ha-icon icon="mdi:download"></ha-icon>${armed ? "Confirmer ?" : "Mettre à jour"}</button>` : ""}
             ${canFold ? `<button class="pve-btn" data-fold="${esc(x.id)}" title="${open ? "Masquer" : "Voir"} les paquets" aria-expanded="${open}">
-              <ha-icon icon="${open ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>` : ""}
+              <ha-icon icon="${esc(open ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon></button>` : ""}
           </div>
         </div>
         <div class="lnx-bs">${badges}</div>${list}
