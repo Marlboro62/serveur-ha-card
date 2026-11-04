@@ -19,7 +19,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.15.1";
+const CARD_VERSION = "0.15.2-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -28,7 +28,7 @@ const fmt = (n, digits = 1) =>
     ? "—"
     : Number(n).toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 /** Classe de thème de la carte :
  *  v2   : style MyElectricalData, toujours bleu nuit ;
@@ -1556,7 +1556,7 @@ class ServeurHaProxmoxCard extends HTMLElement {
         const inst = upd?.attributes?.installed_version, last = upd?.attributes?.latest_version;
         const memMax = this._num(node.roles.mem_max), memPct = this._num(node.roles.mem);
         const tiles = [
-          `<div class="tile srv-t" data-entity="${esc(node.roles.status || node.roles.running || "")}"><div class="tile-l"><ha-icon icon="mdi:server"></ha-icon>${esc(node.name)}</div><div class="pve-st ${stCls}"><i></i>${stTxt}</div></div>`,
+          `<div class="tile srv-t" data-entity="${esc(node.roles.status || node.roles.running || "")}"><div class="tile-l"><ha-icon icon="mdi:server"></ha-icon>${esc(node.name)}</div><div class="pve-st ${stCls}"><i></i>${esc(stTxt)}</div></div>`,
           boot && since(boot) ? `<div class="tile srv-t" data-entity="${esc(node.roles.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
           upd ? `<div class="tile srv-t nas-dsm ${upd.state === "on" ? "up" : ""}" data-entity="${esc(node.roles.update)}" title="${esc([inst, upd.state === "on" ? `→ ${last}` : ""].filter(Boolean).join(" "))}"><div class="tile-l"><ha-icon icon="${upd.state === "on" ? "mdi:package-up" : "mdi:package-check"}"></ha-icon>Proxmox</div>
             <div class="srv-kv"><span>${upd.state === "on" ? "Dispo" : "Version"}</span><b class="${upd.state === "on" ? "bad" : ""}">${esc((upd.state === "on" ? last : inst) || "—")}</b></div>
@@ -2925,7 +2925,8 @@ class ServeurHaWireguardCard extends HTMLElement {
 
     const serversHtml = m.servers.map((s) => {
       const on = s.peers.filter(isUp);
-      const total = this._st(s.count)?.attributes?.total_peers ?? s.peers.length;
+      const totalRaw = Number(this._st(s.count)?.attributes?.total_peers);
+      const total = Number.isFinite(totalRaw) ? totalRaw : s.peers.length;
       const isOpen = open(s.key);
       const dots = s.peers.map((p) => `<i class="${isUp(p) ? "ok" : "na"}"></i>`).join("");
       return `<div class="ping-g ${isOpen ? "open" : ""}">
