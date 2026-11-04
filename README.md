@@ -108,8 +108,6 @@
 
 Si la carte n'apparaît pas encore dans la recherche de HACS, ajoutez le dépôt à la main : menu **⋮** → **Dépôts personnalisés**, adresse `https://github.com/Marlboro62/serveur-ha-card`, type **Tableau de bord** (Dashboard), puis cherchez **Cartes Serveur HA**.
 
-> Tant qu'il n'existe qu'une version bêta, activez **Afficher les versions bêta** dans la fenêtre de téléchargement de HACS.
-
 ### Manuellement
 
 1. Téléchargez [`serveur-ha-card.js`](https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/serveur-ha-card.js) (clic droit → Enregistrer sous) et copiez-le dans `/config/www/`.
