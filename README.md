@@ -28,6 +28,9 @@
 
 # Cartes Serveur HA
 
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz/)
+[![Release](https://img.shields.io/github/v/release/Marlboro62/serveur-ha-card)](https://github.com/Marlboro62/serveur-ha-card/releases)
+
 **Douze cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
 
 | Type | Carte |
