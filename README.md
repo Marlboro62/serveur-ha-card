@@ -613,6 +613,7 @@ La carte reprend tous les serveurs des intégrations **Plex**, **Jellyfin** et *
 - **Commandes de lecture** sous chaque lecture : ⏮ précédent, −10 s, lecture/pause, +30 s, ⏭ suivant, arrêt. Seules les commandes que le lecteur accepte s'affichent.
 - **Volume** : couper ou remettre le son, baisser et monter le volume, avec le niveau affiché.
 - **Détails** (bouton ⓘ) : résumé, classification, bibliothèque, utilisateur, lecteur, application, volume et durée, selon ce que fournissent l'intégration et le lecteur.
+- **Parcourir et lancer** : un clic sur une bibliothèque (**Films**, **Séries TV**, **Musique**) liste son contenu, avec une recherche et les jaquettes. Ouvrez une série, puis une saison ; le bouton ▶ lance la lecture sur le lecteur choisi (**Lire sur**). Il faut qu'au moins un lecteur soit disponible : ouvrez Plex sur la TV.
 - **Minuterie de veille** (bouton ⏳, avec l'option `sleep_timer`) : 15, 30, 45, 60 ou 90 min, temps restant affiché et bouton Annuler.
 
 Un clic sur une lecture, une bibliothèque ou un lecteur ouvre sa fiche dans Home Assistant (lecture, pause, volume).
@@ -638,6 +639,8 @@ Un clic sur une lecture, une bibliothèque ou un lecteur ouvre sa fiche dans Hom
 | `sleep_player` | Lecteur concerné par la minuterie | toutes les lectures |
 | `sleep_durations` | Durées proposées, en minutes | `[15, 30, 45, 60, 90]` |
 | `show_details` | Bouton Détails | `true` |
+| `browse` | Clic sur une bibliothèque : lister son contenu et lancer la lecture | `true` |
+| `browse_player` | Lecteur choisi par défaut pour lancer la lecture | celui en lecture, sinon le premier disponible |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ### Minuterie de veille

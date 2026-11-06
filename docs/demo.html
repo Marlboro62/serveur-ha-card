@@ -567,7 +567,7 @@
     add("sensor.plex_media_library_films", 412, { friendly_name: "Plex-Media Library - Films" }, "plex", null, "plex");
     add("sensor.plex_media_library_series_tv", 57, { friendly_name: "Plex-Media Library - Séries TV" }, "plex", null, "plex");
     add("sensor.plex_media_library_musique", 1834, { friendly_name: "Plex-Media Library - Musique" }, "plex", null, "plex");
-    const pl = (k, name, s, a = {}, dev = "plex", pf = "plex") => { if (dev !== "jf") devices[`p_${k}`] = { id: `p_${k}`, name, config_entries: ["ce_plex"], via_device_id: dev }; add(`media_player.${pf}_${k}`, s, { friendly_name: name, ...a }, pf, null, dev === "jf" ? null : `p_${k}`); };
+    const pl = (k, name, s, a = {}, dev = "plex", pf = "plex") => { if (dev !== "jf") devices[`p_${k}`] = { id: `p_${k}`, name, config_entries: ["ce_plex"], via_device_id: dev }; add(`media_player.${pf}_${k}`, s, { friendly_name: name, ...(pf === "plex" ? { supported_features: 131584 } : {}), ...a }, pf, null, dev === "jf" ? null : `p_${k}`); };
     pl("tv_salon", "Plex (Plex for Android (TV) - TV Salon)", mp ? "playing" : "idle", mp ? { media_content_type: "episode", media_series_title: "Les Voyageurs du ciel", media_title: "Le dernier phare", media_season: 2, media_episode: 4, media_summary: "Le gardien du phare reçoit un message venu du large.", media_content_rating: "Tous publics", media_library_title: "Séries TV", media_duration: 2760, media_position: 1310, media_position_updated_at: new Date().toISOString(), username: "Invité", entity_picture: art("#2b6cb0", "S2") } : {});
     pl("chambre", "Plex (Plex for Android (TV) - Chambre)", mp ? "paused" : "idle", mp ? { media_content_type: "movie", media_title: "Horizon bleu", media_library_title: "Films", media_content_rating: "Tous publics", media_duration: 6480, media_position: 4870, media_position_updated_at: new Date().toISOString(), username: "Maison", entity_picture: art("#b7791f", "HB") } : {});
     pl("navigateur", "Plex (Plex Web - Navigateur)", "unavailable");
@@ -641,13 +641,27 @@
   const frame = document.getElementById("frame");
   const toast = document.getElementById("toast");
   let toastTimer;
+  // bibliothèque Plex fictive pour la navigation de la carte multimédia
+  function demoBrowse(id) {
+    const it = (cid, title, type, play, open) => ({ media_content_id: cid, media_content_type: type, title, can_play: play, can_expand: open, thumbnail: null });
+    if (!id) return { title: "Plex", children: [it("lib/films", "Films", "library", false, true), it("lib/series", "Séries TV", "library", false, true), it("lib/musique", "Musique", "library", false, true)] };
+    if (id === "lib/films") return { title: "Films", children: ["Horizon bleu", "La forêt d'argent", "Le grand départ", "Minuit à Lisbonne", "Nuages de sel", "Opération Colibri", "Port d'attache", "Quatre saisons", "Rivages", "Sous la lune", "Train de nuit", "Une île en hiver", "Vents contraires", "Zénith"].map((t, i) => it(`film/${i}`, t, "movie", true, false)) };
+    if (id === "lib/series") return { title: "Séries TV", children: [it("show/1", "Les Voyageurs du ciel", "show", true, true), it("show/2", "Brigade du port", "show", true, true)] };
+    if (id.startsWith("show/") && !id.includes("/s")) return { title: "Saisons", children: [1, 2].map((n) => it(`${id}/s${n}`, `Saison ${n}`, "season", true, true)) };
+    if (id.includes("/s")) return { title: "Épisodes", children: [1, 2, 3, 4].map((n) => it(`${id}/e${n}`, `Épisode ${n}`, "episode", true, false)) };
+    if (id === "lib/musique") return { title: "Musique", children: [it("artist/1", "Trio Lumière", "artist", true, true)] };
+    return { title: "", children: [] };
+  }
   function hass() {
     const { st, ent, devices } = build();
     return {
       states: st, entities: ent, devices, areas: { entree: { name: "Entrée" }, chambre: { name: "Chambre" }, couloir: { name: "Couloir" }, salon: { name: "Salon" }, cuisine: { name: "Cuisine" }, sdb: { name: "Salle de bain" } }, themes: { darkMode: state.page === "dark" }, language: "fr",
       // registre des entités (identifiants uniques des capteurs de stockage Proxmox)
-      callWS: async (msg) => msg.type === "config/entity_registry/get_entries"
-        ? Object.fromEntries(msg.entity_ids.map((id) => [id, { entity_id: id, unique_id: ent[id]?.unique_id, config_entry_id: ent[id]?.config_entry_id }])) : null,
+      callWS: async (msg) => {
+        if (msg.type === "config/entity_registry/get_entries") return Object.fromEntries(msg.entity_ids.map((id) => [id, { entity_id: id, unique_id: ent[id]?.unique_id, config_entry_id: ent[id]?.config_entry_id }]));
+        if (msg.type === "media_player/browse_media") return demoBrowse(msg.media_content_id);
+        return null;
+      },
       callService: (domain, service, data) => {
         toast.textContent = `Démo : ${domain}.${service} sur ${data?.entity_id || ""} (rien n'est envoyé ici).`;
         toast.classList.add("on");
