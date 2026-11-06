@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.17.0-beta.2";
+const CARD_VERSION = "0.17.0-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3496,10 +3496,16 @@ const MEDIA_DEFAULTS = {
   show_clients: true, // lecteurs connus, dépliables
   show_controls: true, // commandes de lecture (pause, arrêt, avance…)
   control_players: {}, // lecteur Plex/Jellyfin → lecteur qui commande l'appareil : { media_player.plex_tv: media_player.tv }
+  show_volume: true, // volume et coupure du son, si le lecteur le permet
+  volume_step: 5, // pas des boutons − et + (en %)
+  sleep_timer: "", // minuteur (timer.xxx) de la minuterie de veille ; une automatisation arrête la lecture à la fin
+  sleep_player: "", // lecteur concerné par la minuterie (sinon : toutes les lectures)
+  sleep_durations: [15, 30, 45, 60, 90], // durées proposées (minutes)
+  show_details: true, // volet Détails (résumé, classification, bibliothèque, application…)
   theme: "v2",
 };
 /** Fonctions d'un media_player (supported_features) utilisées par les commandes. */
-const MP = { PAUSE: 1, SEEK: 2, PREV: 16, NEXT: 32, STOP: 4096, PLAY: 16384 };
+const MP = { PAUSE: 1, SEEK: 2, VOLUME_SET: 4, MUTE: 8, PREV: 16, NEXT: 32, STOP: 4096, PLAY: 16384 };
 const MEDIA_APPS = {
   plex: ["Plex", "mdi:plex", "#e5a00d"],
   jellyfin: ["Jellyfin", "mdi:jellyfish", "#aa5cc3"],
@@ -3540,6 +3546,21 @@ class ServeurHaMediaCard extends HTMLElement {
           const id = cmd.dataset.mp, act = cmd.dataset.mpAct;
           const data = { entity_id: id };
           if (act === "media_seek") data.seek_position = Math.max(0, Number(cmd.dataset.pos) || 0);
+          if (act === "volume_set") data.volume_level = Math.min(1, Math.max(0, Number(cmd.dataset.vol) || 0));
+          if (act === "volume_mute") data.is_volume_muted = cmd.dataset.mute === "true";
+          if (act === "timer_start" || act === "timer_cancel") {
+            // minuterie de veille : minuteur Home Assistant, l'automatisation fait le reste
+            const t = this._config.sleep_timer;
+            if (!t) return;
+            if (act === "timer_cancel") this._hass?.callService("timer", "cancel", { entity_id: t });
+            else {
+              const mn = Math.max(1, Math.round(Number(cmd.dataset.min) || 30));
+              this._hass?.callService("timer", "start", { entity_id: t, duration: `${String(Math.floor(mn / 60)).padStart(2, "0")}:${String(mn % 60).padStart(2, "0")}:00` });
+            }
+            this._open.delete(`sleep:${id}`);
+            this._sig = null; this._render();
+            return;
+          }
           this._hass?.callService("media_player", act, data);
           return;
         }
@@ -3644,7 +3665,8 @@ class ServeurHaMediaCard extends HTMLElement {
     const m = this._resolve();
     const ids = m.servers.flatMap((s) => [s.count, s.update, ...s.libs, ...s.players]);
     if (c.show_controls !== false) for (const id of m.servers.flatMap((s) => s.players)) { const k = this._controller(id); if (k && !ids.includes(k)) ids.push(k); }
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${[...this._open].join(",")}|${Math.floor(Date.now() / 30000)}|` + ids.map((id) => { const o = this._st(id); return o ? `${o.state}|${o.attributes?.media_title}|${o.attributes?.media_position}` : "-"; }).join("|");
+    if (c.sleep_timer) ids.push(c.sleep_timer);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${[...this._open].join(",")}|${Math.floor(Date.now() / 30000)}|` + ids.map((id) => { const o = this._st(id); return o ? `${o.state}|${o.attributes?.media_title}|${o.attributes?.media_position}|${o.attributes?.volume_level}|${o.attributes?.is_volume_muted}|${o.attributes?.finishes_at}` : "-"; }).join("|");
     if (sig === this._sig) return;
     this._sig = sig;
 
@@ -3666,6 +3688,35 @@ class ServeurHaMediaCard extends HTMLElement {
       const via = k !== id ? mediaPlayerName(this._st(k)?.attributes?.friendly_name) : "";
       const b = (act, icon, label, extra = "") => `<button class="md-b" data-mp="${esc(k)}" data-mp-act="${act}"${extra} title="${esc(label)}${via ? ` (${esc(via)})` : ""}" aria-label="${esc(label)}"><ha-icon icon="${icon}"></ha-icon></button>`;
       const seek = (f & MP.SEEK) && Number.isFinite(pos);
+      const ka = this._st(k)?.attributes || {};
+      // volume : coupure, −, niveau, +
+      let vol = "";
+      if (c.show_volume !== false && (f & (MP.VOLUME_SET | MP.MUTE))) {
+        const lv = Number(ka.volume_level), muted = ka.is_volume_muted === true;
+        const step = Math.min(50, Math.max(1, Number(c.volume_step) || 5)) / 100;
+        const has = (f & MP.VOLUME_SET) && Number.isFinite(lv);
+        vol = `<div class="md-v">
+            ${f & MP.MUTE ? b("volume_mute", muted ? "mdi:volume-off" : "mdi:volume-high", muted ? "Remettre le son" : "Couper le son", ` data-mute="${!muted}"`) : ""}
+            ${has ? `${b("volume_set", "mdi:volume-minus", "Baisser le volume", ` data-vol="${(lv - step).toFixed(2)}"`)}
+            <div class="bar ${muted ? "mute" : ""}"><i style="width:${(lv * 100).toFixed(0)}%"></i></div><small>${muted ? "Muet" : `${Math.round(lv * 100)} %`}</small>
+            ${b("volume_set", "mdi:volume-plus", "Monter le volume", ` data-vol="${(lv + step).toFixed(2)}"`)}` : ""}
+            %EXTRA%</div>`;
+      }
+      // minuterie de veille (minuteur Home Assistant)
+      let sleep = "", sleepBtn = "";
+      const t = c.sleep_timer && (!c.sleep_player || c.sleep_player === k || c.sleep_player === id) ? this._st(c.sleep_timer) : null;
+      if (t) {
+        const left = t.state === "active" ? (Date.parse(t.attributes?.finishes_at || "") - Date.now()) / 60000 : NaN;
+        const sk = `sleep:${id}`, sOpen = this._open.has(sk);
+        sleepBtn = `<button class="md-b ${t.state === "active" ? "on" : ""}" data-fold="${esc(sk)}" title="Minuterie de veille" aria-label="Minuterie de veille" aria-expanded="${sOpen}"><ha-icon icon="mdi:timer-sand"></ha-icon></button>`;
+        const durs = (Array.isArray(c.sleep_durations) ? c.sleep_durations : [15, 30, 45, 60, 90]).map(Number).filter((x) => x > 0);
+        sleep = `${t.state === "active" ? `<div class="md-sl"><ha-icon icon="mdi:timer-sand"></ha-icon>Veille dans ${Number.isFinite(left) ? Math.max(1, Math.ceil(left)) : "?"} min</div>` : ""}
+          ${sOpen ? `<div class="md-c md-ch">${durs.map((d) => `<button class="md-chip" data-mp="${esc(k)}" data-mp-act="timer_start" data-min="${d}">${d} min</button>`).join("")}
+            ${t.state === "active" ? `<button class="md-chip off" data-mp="${esc(k)}" data-mp-act="timer_cancel">Annuler</button>` : ""}</div>` : ""}`;
+      }
+      // volet Détails
+      const dk = `det:${id}`, dOpen = this._open.has(dk);
+      const detBtn = c.show_details !== false ? `<button class="md-b ${dOpen ? "on" : ""}" data-fold="${esc(dk)}" title="Détails" aria-label="Détails" aria-expanded="${dOpen}"><ha-icon icon="mdi:information-outline"></ha-icon></button>` : "";
       return `<div class="md-c">
           ${f & MP.PREV ? b("media_previous_track", "mdi:skip-previous", "Précédent") : ""}
           ${seek ? b("media_seek", "mdi:rewind-10", "Reculer de 10 s", ` data-pos="${Math.round(pos - 10)}"`) : ""}
@@ -3673,7 +3724,24 @@ class ServeurHaMediaCard extends HTMLElement {
           ${seek ? b("media_seek", "mdi:fast-forward-30", "Avancer de 30 s", ` data-pos="${Math.round(pos + 30)}"`) : ""}
           ${f & MP.NEXT ? b("media_next_track", "mdi:skip-next", "Suivant") : ""}
           ${f & MP.STOP ? b("media_stop", "mdi:stop", "Arrêt") : ""}
-        </div>`;
+        </div>${vol ? vol.replace("%EXTRA%", sleepBtn + detBtn) : sleepBtn || detBtn ? `<div class="md-c">${sleepBtn}${detBtn}</div>` : ""}${sleep}`;
+    };
+    // volet Détails : ce que fournissent l'intégration et le lecteur de l'appareil
+    const details = (id) => {
+      if (c.show_details === false || !this._open.has(`det:${id}`)) return "";
+      const a = this._st(id)?.attributes || {}, k = this._controller(id), ka = k ? this._st(k)?.attributes || {} : {};
+      const rows = [
+        ["Résumé", a.media_summary],
+        ["Classification", a.media_content_rating],
+        ["Bibliothèque", a.media_library_title],
+        ["Utilisateur", a.username || a.user],
+        ["Lecteur", mediaPlayerName(a.friendly_name)],
+        ["Application", ka.app_name],
+        ["Commandé par", k && k !== id ? mediaPlayerName(ka.friendly_name) : null],
+        ["Volume", Number.isFinite(Number(ka.volume_level)) ? `${Math.round(ka.volume_level * 100)} %${ka.is_volume_muted ? " (muet)" : ""}` : null],
+        ["Durée", Number.isFinite(Number(a.media_duration)) ? clock(Number(a.media_duration)) : null],
+      ].filter(([, v]) => v !== undefined && v !== null && v !== "");
+      return rows.length ? `<dl class="md-d">${rows.map(([n, v]) => `<dt>${esc(n)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : "";
     };
     const session = (id) => {
       const o = this._st(id), a = o.attributes || {};
@@ -3689,7 +3757,7 @@ class ServeurHaMediaCard extends HTMLElement {
           <div class="md-i"><div class="md-t">${esc(t1)}</div>${t2 ? `<div class="md-t2">${esc(t2)}</div>` : ""}
             <div class="md-w"><ha-icon icon="${esc(o.state === "paused" ? "mdi:pause" : "mdi:play")}"></ha-icon>${esc(who || "Lecteur")}${MEDIA_TYPES[a.media_content_type] ? ` · ${MEDIA_TYPES[a.media_content_type]}` : ""}</div>
             ${pct !== null ? `<div class="md-p"><div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div><small>${clock(pos)} / ${clock(dur)}</small></div>` : ""}
-            ${c.show_controls !== false ? controls(id, pos) : ""}</div>
+            ${c.show_controls !== false ? controls(id, pos) : ""}${details(id)}</div>
         </div>`;
     };
 
@@ -3766,6 +3834,21 @@ const MEDIA_STYLE = `<style>
 .md-b:hover { border-color: var(--med-accent, var(--med-blue)); color: var(--med-accent, var(--med-blue)); }
 .md-b:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); outline-offset: 1px; }
 .md-b ha-icon { --mdc-icon-size: 18px; }
+.md-b.on { border-color: var(--med-accent, var(--med-blue)); color: var(--med-accent, var(--med-blue)); }
+.md-v { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.md-v .bar { flex: 1; min-width: 40px; }
+.md-v .bar.mute i { opacity: .35; }
+.md-v small { font-size: .68rem; color: var(--med-muted); min-width: 36px; text-align: right; white-space: nowrap; }
+.md-sl { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: .72rem; color: var(--med-accent, var(--med-blue)); }
+.md-sl ha-icon { --mdc-icon-size: 14px; }
+.md-chip { all: unset; box-sizing: border-box; cursor: pointer; padding: 4px 10px; border-radius: 999px; font-size: .72rem;
+  border: 1px solid var(--med-line); background: var(--med-bg); color: var(--med-text); }
+.md-chip:hover { border-color: var(--med-accent, var(--med-blue)); }
+.md-chip.off { color: var(--t-red, #ee4a4a); }
+.md-chip:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
+.md-d { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 8px 0 0; font-size: .72rem; }
+.md-d dt { color: var(--med-muted); }
+.md-d dd { margin: 0; color: var(--med-text); overflow-wrap: anywhere; }
 .md-libs { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; }
 .md-lib { display: grid; justify-items: center; padding: 6px 4px; border-radius: 10px; background: var(--med-surface); font-size: .7rem; color: var(--med-muted); cursor: pointer; text-align: center; }
 .md-lib b { font-size: 1rem; color: var(--med-text); }
@@ -5119,6 +5202,11 @@ const MEDIA_SCHEMA = [
   { name: "show_clients", selector: { boolean: {} } },
   { name: "show_controls", selector: { boolean: {} } },
   { name: "control_players", selector: { object: {} } },
+  { name: "show_volume", selector: { boolean: {} } },
+  { name: "volume_step", selector: { number: { min: 1, max: 25, mode: "box", unit_of_measurement: "%" } } },
+  { name: "sleep_timer", selector: { entity: { domain: "timer" } } },
+  { name: "sleep_player", selector: { entity: { domain: "media_player" } } },
+  { name: "show_details", selector: { boolean: {} } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -5129,6 +5217,11 @@ const MEDIA_LABELS = {
   show_libraries: "Afficher les bibliothèques (capteurs à activer dans l'intégration)",
   show_clients: "Liste des lecteurs connus (dépliable)",
   show_controls: "Commandes de lecture (pause, arrêt, avance…)",
+  show_volume: "Volume et coupure du son",
+  volume_step: "Pas du volume",
+  sleep_timer: "Minuteur de la minuterie de veille",
+  sleep_player: "Lecteur concerné par la minuterie (vide : tous)",
+  show_details: "Bouton Détails",
   control_players: "Lecteur qui commande l'appareil (YAML : lecteur Plex: lecteur de la TV), sinon trouvé d'après le nom",
   theme: "Couleurs de la carte",
 };

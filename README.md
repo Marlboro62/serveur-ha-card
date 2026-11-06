@@ -611,6 +611,9 @@ La carte reprend tous les serveurs des intégrations **Plex**, **Jellyfin** et *
 - **Lecteurs** : liste dépliable des lecteurs connus, en vert quand ils sont joignables.
 
 - **Commandes de lecture** sous chaque lecture : ⏮ précédent, −10 s, lecture/pause, +30 s, ⏭ suivant, arrêt. Seules les commandes que le lecteur accepte s'affichent.
+- **Volume** : couper ou remettre le son, baisser et monter le volume, avec le niveau affiché.
+- **Détails** (bouton ⓘ) : résumé, classification, bibliothèque, utilisateur, lecteur, application, volume et durée, selon ce que fournissent l'intégration et le lecteur.
+- **Minuterie de veille** (bouton ⏳, avec l'option `sleep_timer`) : 15, 30, 45, 60 ou 90 min, temps restant affiché et bouton Annuler.
 
 Un clic sur une lecture, une bibliothèque ou un lecteur ouvre sa fiche dans Home Assistant (lecture, pause, volume).
 
@@ -629,7 +632,47 @@ Un clic sur une lecture, une bibliothèque ou un lecteur ouvre sa fiche dans Hom
 | `show_clients` | Liste dépliable des lecteurs | `true` |
 | `show_controls` | Commandes de lecture sous chaque lecture | `true` |
 | `control_players` | Lecteur de session → lecteur qui commande l'appareil | trouvé d'après le nom |
+| `show_volume` | Volume et coupure du son | `true` |
+| `volume_step` | Pas des boutons − et + (en %) | `5` |
+| `sleep_timer` | Minuteur (`timer.…`) de la minuterie de veille | aucun |
+| `sleep_player` | Lecteur concerné par la minuterie | toutes les lectures |
+| `sleep_durations` | Durées proposées, en minutes | `[15, 30, 45, 60, 90]` |
+| `show_details` | Bouton Détails | `true` |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
+
+### Minuterie de veille
+
+La carte lance un **minuteur** de Home Assistant ; une automatisation arrête la lecture quand il se termine. La minuterie continue même si le tableau de bord est fermé.
+
+1. Créez le minuteur : **Paramètres › Appareils et services › Entrées › Créer une entrée › Minuteur**, par exemple « Veille TV » (`timer.veille_tv`).
+2. Créez l'automatisation :
+
+   ```yaml
+   alias: Minuterie de veille de la TV
+   triggers:
+     - trigger: event
+       event_type: timer.finished
+       event_data:
+         entity_id: timer.veille_tv
+   actions:
+     - action: media_player.media_pause
+       target:
+         entity_id: media_player.tv_salon
+   mode: single
+   ```
+
+   Remplacez `media_pause` par `turn_off` pour éteindre la TV.
+3. Dans la carte :
+
+   ```yaml
+   type: custom:serveur-ha-media-card
+   sleep_timer: timer.veille_tv
+   sleep_player: media_player.tv_salon
+   ```
+
+### Ce que la carte ne peut pas régler
+
+Les **sous-titres**, la **piste audio** (français AAC stéréo…), la **qualité**, la **vitesse de lecture** et le **mode d'affichage** ne sont proposés ni par l'intégration Plex de Home Assistant ni par Google Cast : aucune action de Home Assistant ne permet de les changer. Réglez-les dans l'application Plex ou avec sa télécommande. Pour la même raison, la carte n'affiche pas le débit ni les codecs.
 
 ## Carte Filtrage DNS — `custom:serveur-ha-dns-card`
 

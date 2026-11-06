@@ -568,11 +568,12 @@
     add("sensor.plex_media_library_series_tv", 57, { friendly_name: "Plex-Media Library - Séries TV" }, "plex", null, "plex");
     add("sensor.plex_media_library_musique", 1834, { friendly_name: "Plex-Media Library - Musique" }, "plex", null, "plex");
     const pl = (k, name, s, a = {}, dev = "plex", pf = "plex") => { if (dev !== "jf") devices[`p_${k}`] = { id: `p_${k}`, name, config_entries: ["ce_plex"], via_device_id: dev }; add(`media_player.${pf}_${k}`, s, { friendly_name: name, ...a }, pf, null, dev === "jf" ? null : `p_${k}`); };
-    pl("tv_salon", "Plex (Plex for Android (TV) - TV Salon)", mp ? "playing" : "idle", mp ? { media_content_type: "episode", media_series_title: "Les Voyageurs du ciel", media_title: "Le dernier phare", media_season: 2, media_episode: 4, media_duration: 2760, media_position: 1310, media_position_updated_at: new Date().toISOString(), username: "Invité", entity_picture: art("#2b6cb0", "S2") } : {});
+    pl("tv_salon", "Plex (Plex for Android (TV) - TV Salon)", mp ? "playing" : "idle", mp ? { media_content_type: "episode", media_series_title: "Les Voyageurs du ciel", media_title: "Le dernier phare", media_season: 2, media_episode: 4, media_summary: "Le gardien du phare reçoit un message venu du large.", media_content_rating: "Tous publics", media_library_title: "Séries TV", media_duration: 2760, media_position: 1310, media_position_updated_at: new Date().toISOString(), username: "Invité", entity_picture: art("#2b6cb0", "S2") } : {});
     pl("chambre", "Plex (Plex for Android (TV) - Chambre)", mp ? "paused" : "idle", mp ? { media_content_type: "movie", media_title: "Horizon bleu", media_library_title: "Films", media_content_rating: "Tous publics", media_duration: 6480, media_position: 4870, media_position_updated_at: new Date().toISOString(), username: "Maison", entity_picture: art("#b7791f", "HB") } : {});
     pl("navigateur", "Plex (Plex Web - Navigateur)", "unavailable");
     // lecteur de la TV (autre intégration, même nom) : c'est lui qui accepte les commandes de lecture
-    add("media_player.tv_salon", mp ? "playing" : "on", { friendly_name: "TV Salon", supported_features: 152463 }, "androidtv");
+    add("media_player.tv_salon", mp ? "playing" : "on", { friendly_name: "TV Salon", supported_features: 152463, volume_level: 0.35, is_volume_muted: false, app_name: "Plex" }, "androidtv");
+    add("timer.veille_tv", mp ? "active" : "idle", mp ? { friendly_name: "Veille TV", duration: "0:30:00", finishes_at: new Date(Date.now() + 23 * 60000).toISOString() } : { friendly_name: "Veille TV" });
     add("sensor.jellyfin_clients_actifs", mp ? 1 : 0, { unit_of_measurement: "clients", friendly_name: "Jellyfin Clients actifs" }, "jellyfin", null, "jf");
     pl("tablette", "Tablette", mp ? "playing" : "idle", mp ? { media_content_type: "music", media_title: "Matin calme", media_artist: "Trio Lumière", media_album_name: "Saisons", media_duration: 245, media_position: 92, media_position_updated_at: new Date().toISOString(), supported_features: 20531 } : { supported_features: 20531 }, "jf", "jellyfin");
     return { st, ent, devices };
@@ -594,7 +595,7 @@
       ping: { type: "custom:serveur-ha-ping-card", theme: t },
       wg: { type: "custom:serveur-ha-wireguard-card", theme: t },
       gl: { type: "custom:serveur-ha-glances-card", theme: t },
-      media: { type: "custom:serveur-ha-media-card", theme: t },
+      media: { type: "custom:serveur-ha-media-card", sleep_timer: "timer.veille_tv", sleep_player: "media_player.tv_salon", theme: t },
       zb: { type: "custom:serveur-ha-zigbee-card", theme: t },
       gh: { type: "custom:serveur-ha-github-card", user: "exemple", exclude: ["archives"], theme: t },
     };
