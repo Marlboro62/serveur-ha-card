@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.17.0-beta.3";
+const CARD_VERSION = "0.17.0-beta.4";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3505,7 +3505,7 @@ const MEDIA_DEFAULTS = {
   theme: "v2",
 };
 /** Fonctions d'un media_player (supported_features) utilisées par les commandes. */
-const MP = { PAUSE: 1, SEEK: 2, VOLUME_SET: 4, MUTE: 8, PREV: 16, NEXT: 32, STOP: 4096, PLAY: 16384 };
+const MP = { PAUSE: 1, SEEK: 2, VOLUME_SET: 4, MUTE: 8, PREV: 16, NEXT: 32, PLAY_MEDIA: 512, STOP: 4096, PLAY: 16384 };
 const MEDIA_APPS = {
   plex: ["Plex", "mdi:plex", "#e5a00d"],
   jellyfin: ["Jellyfin", "mdi:jellyfish", "#aa5cc3"],
@@ -3548,6 +3548,17 @@ class ServeurHaMediaCard extends HTMLElement {
           if (act === "media_seek") data.seek_position = Math.max(0, Number(cmd.dataset.pos) || 0);
           if (act === "volume_set") data.volume_level = Math.min(1, Math.max(0, Number(cmd.dataset.vol) || 0));
           if (act === "volume_mute") data.is_volume_muted = cmd.dataset.mute === "true";
+          if (act === "plex_resume") {
+            // reprise par Plex : la TV a fermé la session Cast pendant la pause
+            const a = this._hass?.states?.[id]?.attributes || {};
+            const q = { library_name: a.media_library_title, resume: 1 };
+            let type = "MOVIE";
+            if (a.media_series_title) { type = "EPISODE"; Object.assign(q, { show_name: a.media_series_title, season_number: a.media_season, episode_number: a.media_episode }); }
+            else if (a.media_artist || a.media_content_type === "music") { type = "MUSIC"; Object.assign(q, { artist_name: a.media_artist, album_name: a.media_album_name, track_name: a.media_title }); }
+            else q.title = a.media_title;
+            this._hass?.callService("media_player", "play_media", { entity_id: id, media_content_type: type, media_content_id: `plex://${JSON.stringify(q)}` });
+            return;
+          }
           if (act === "timer_start" || act === "timer_cancel") {
             // minuterie de veille : minuteur Home Assistant, l'automatisation fait le reste
             const t = this._config.sleep_timer;
@@ -3683,11 +3694,17 @@ class ServeurHaMediaCard extends HTMLElement {
     const controls = (id, pos) => {
       const k = this._controller(id);
       if (!k) return "";
-      const f = Number(this._st(k)?.attributes?.supported_features) || 0, kst = this._st(k)?.state;
+      let f = Number(this._st(k)?.attributes?.supported_features) || 0, kst = this._st(k)?.state;
+      // lecteur de l'appareil sans média (ex. Cast fermé par l'appli Plex pendant la pause) : seule la reprise par Plex reste possible
+      const lost = k !== id && !["playing", "paused", "buffering"].includes(kst);
+      const sf = Number(this._st(id)?.attributes?.supported_features) || 0;
+      const plexResume = lost && this._st(id)?.state === "paused" && (sf & MP.PLAY_MEDIA) && this._hass?.entities?.[id]?.platform === "plex";
+      if (lost) f = 0;
       const on = kst === "playing" || this._st(id)?.state === "playing";
       const via = k !== id ? mediaPlayerName(this._st(k)?.attributes?.friendly_name) : "";
       const b = (act, icon, label, extra = "") => `<button class="md-b" data-mp="${esc(k)}" data-mp-act="${act}"${extra} title="${esc(label)}${via ? ` (${esc(via)})` : ""}" aria-label="${esc(label)}"><ha-icon icon="${icon}"></ha-icon></button>`;
       const seek = (f & MP.SEEK) && Number.isFinite(pos);
+      const resumeBtn = plexResume ? `<button class="md-b" data-mp="${esc(id)}" data-mp-act="plex_resume" title="Reprendre la lecture (par Plex)" aria-label="Reprendre la lecture"><ha-icon icon="mdi:play"></ha-icon></button>` : "";
       const ka = this._st(k)?.attributes || {};
       // volume : coupure, −, niveau, +
       let vol = "";
@@ -3720,7 +3737,7 @@ class ServeurHaMediaCard extends HTMLElement {
       return `<div class="md-c">
           ${f & MP.PREV ? b("media_previous_track", "mdi:skip-previous", "Précédent") : ""}
           ${seek ? b("media_seek", "mdi:rewind-10", "Reculer de 10 s", ` data-pos="${Math.round(pos - 10)}"`) : ""}
-          ${f & (MP.PAUSE | MP.PLAY) ? b("media_play_pause", on ? "mdi:pause" : "mdi:play", on ? "Pause" : "Lecture") : ""}
+          ${resumeBtn}${f & (MP.PAUSE | MP.PLAY) ? b("media_play_pause", on ? "mdi:pause" : "mdi:play", on ? "Pause" : "Lecture") : ""}
           ${seek ? b("media_seek", "mdi:fast-forward-30", "Avancer de 30 s", ` data-pos="${Math.round(pos + 30)}"`) : ""}
           ${f & MP.NEXT ? b("media_next_track", "mdi:skip-next", "Suivant") : ""}
           ${f & MP.STOP ? b("media_stop", "mdi:stop", "Arrêt") : ""}
