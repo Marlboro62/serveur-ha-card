@@ -95,7 +95,7 @@
     <aside class="panel" aria-label="Réglages de la démo">
       <h2>Carte</h2>
       <div class="ctl"><div class="seg" data-key="card">
-        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="ping">Réseau</button><button data-v="wg">WireGuard</button><button data-v="gl">Glances</button><button data-v="media">Multimédia</button><button data-v="zb">Zigbee et piles</button><button data-v="all">Les 13</button></div></div>
+        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="ping">Réseau</button><button data-v="wg">WireGuard</button><button data-v="gl">Glances</button><button data-v="media">Multimédia</button><button data-v="zb">Zigbee et piles</button><button data-v="gh">GitHub</button><button data-v="all">Les 14</button></div></div>
 
       <h2>Affichage</h2>
       <div class="ctl"><div class="ctl-l">Page</div><div class="seg" data-key="page">
@@ -183,7 +183,7 @@
     });
   }
 
-  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card", ping: "serveur-ha-ping-card", wg: "serveur-ha-wireguard-card", gl: "serveur-ha-glances-card", media: "serveur-ha-media-card", zb: "serveur-ha-zigbee-card" };
+  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card", ping: "serveur-ha-ping-card", wg: "serveur-ha-wireguard-card", gl: "serveur-ha-glances-card", media: "serveur-ha-media-card", zb: "serveur-ha-zigbee-card", gh: "serveur-ha-github-card" };
   const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok", ping: "ok", wg: "some", gl: "ok", media: "play", zb: "low" };
   let state = { ...defaults };
   try { state = { ...defaults, ...JSON.parse(localStorage.getItem("serveur-ha-demo") || "{}") }; } catch (e) { /* ignoré */ }
@@ -594,6 +594,7 @@
       gl: { type: "custom:serveur-ha-glances-card", theme: t },
       media: { type: "custom:serveur-ha-media-card", theme: t },
       zb: { type: "custom:serveur-ha-zigbee-card", theme: t },
+      gh: { type: "custom:serveur-ha-github-card", user: "exemple", exclude: ["archives"], theme: t },
     };
     return state.card === "all" ? Object.values(c) : [c[state.card]];
   }
@@ -603,6 +604,35 @@
     const one = (c, nested) => Object.entries(c).map(([k, v], i) => `${nested ? (i === 0 ? "  - " : "    ") : ""}${k}:${val(v, nested ? "    " : "")}`).join("\n");
     return list.length === 1 ? one(list[0], false) : "type: vertical-stack\ncards:\n" + list.map((c) => one(c, true)).join("\n");
   }
+
+  /* Carte GitHub : la recherche de GitHub est simulée (compte, dépôts, issues et auteurs fictifs). */
+  const ghFake = () => {
+    const at = (h) => new Date(Date.now() - h * H).toISOString();
+    const it = (id, repo, n, title, author, h, upd, comments, labels = [], pr = false, draft = false) => ({
+      id, number: n, title, html_url: `https://github.com/exemple/${repo}/${pr ? "pull" : "issues"}/${n}`, repository_url: `https://api.github.com/repos/exemple/${repo}`,
+      user: { login: author }, comments, created_at: at(h), updated_at: at(upd), labels, ...(pr ? { pull_request: {}, draft } : {}),
+    });
+    const bug = { name: "bug", color: "d73a4a" }, req = { name: "enhancement", color: "a2eeef" }, q = { name: "question", color: "d876e3" };
+    const items = [
+      it(1, "carte-meteo", 14, "[bug] La tuile lune ne s'ouvre pas avec un capteur personnalisé", "camille-dev", 1.5, 0.4, 2, [bug]),
+      it(2, "carte-meteo", 15, "[REQUEST] Afficher l'image des entités pour le soleil et la saison", "camille-dev", 0.8, 0.8, 0, [req]),
+      it(3, "addon-energie", 41, "Coûts Tempo à -1 dans le capteur de consommation", "dominique-ha", 30, 2, 6, [bug]),
+      it(4, "addon-energie", 42, "Ajout de la traduction en néerlandais", "alex-nl", 5, 5, 1, [], true),
+      it(5, "integration-voiture", 7, "Prise en charge d'un deuxième véhicule sur le même téléphone", "jordan78", 72, 48, 3, [req, q]),
+      it(6, "cartes-maison", 22, "Nouvelle carte : arrosage du jardin", "sam-maison", 100, 100, 0, [], true, true),
+      it(7, "archives", 3, "Ancienne demande", "quelqu-un", 900, 900, 0),
+    ];
+    return { total_count: items.length, items };
+  };
+  const realFetch = window.fetch.bind(window);
+  window.fetch = (url, opts) => (String(url).startsWith("https://api.github.com/search/issues")
+    ? Promise.resolve(new Response(JSON.stringify(ghFake()), { status: 200, headers: { "Content-Type": "application/json" } }))
+    : realFetch(url, opts));
+  // dernière visite il y a 3 h : les deux issues de la carte Météo apparaissent comme nouvelles
+  try {
+    localStorage.setItem("serveur-ha-github-seen:exemple", JSON.stringify(Date.now() - 3 * H));
+    Object.keys(localStorage).filter((k) => k.startsWith("serveur-ha-github:")).forEach((k) => localStorage.removeItem(k));
+  } catch (e) { /* stockage indisponible */ }
 
   const frame = document.getElementById("frame");
   const toast = document.getElementById("toast");

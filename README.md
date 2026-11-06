@@ -48,6 +48,7 @@
 | `custom:serveur-ha-glances-card` | **Serveurs Glances** : CPU, RAM, disques par point de montage, températures, ventilateurs, réseau et processus de chaque serveur, repliés en une ligne |
 | `custom:serveur-ha-media-card` | **Serveurs multimédia** (Plex, Jellyfin, Emby) : ce qui est en lecture, qui regarde et sur quel lecteur, avancement, bibliothèques, mise à jour du serveur |
 | `custom:serveur-ha-omv-card` | **OpenMediaVault** : système (uptime, version, charge, CPU, RAM), systèmes de fichiers, disques (température, SMART), services, réseau, mises à jour, redémarrage et arrêt confirmés en deux clics |
+| `custom:serveur-ha-github-card` | **GitHub** *(bêta)* : issues et pull requests ouvertes sur les dépôts d'un compte, groupées par dépôt, avec les **nouvelles** depuis la dernière visite, sans jeton ni intégration |
 
 **Pare-feu OPNsense** : la carte a son propre dépôt, [Carte OPNsense](https://github.com/Marlboro62/opnsense-card) (`custom:opnsense-card`).
 
@@ -105,7 +106,7 @@
 
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 13 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 14 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 ## Installation
 
@@ -459,6 +460,89 @@ source: zigbee
 warn: 40
 exclude:
   - Télécommande invités
+```
+
+## Carte GitHub — `custom:serveur-ha-github-card` *(bêta)*
+
+```yaml
+type: custom:serveur-ha-github-card
+user: Marlboro62
+```
+
+Les **issues** et **pull requests** ouvertes sur tous les dépôts publics d'un compte (ou d'une organisation) GitHub, lues directement par la carte avec la recherche de GitHub : **ni jeton, ni intégration**.
+
+- **En-tête** : nombre d'éléments ouverts, et voyant rouge **« N nouvelles »** pour ce qui a été ouvert depuis votre dernière visite.
+- **Résumé** : issues ouvertes, pull requests ouvertes, nouvelles, dépôts concernés.
+- **Un groupe par dépôt**, les dépôts avec du nouveau en premier : titre, numéro, auteur, âge, dernière activité, étiquettes (bug, demande…) et nombre de commentaires. Un clic ouvre l'élément sur GitHub, dans un nouvel onglet. Les pull requests en brouillon sont grisées.
+- **Tout marquer comme vu** : les nouvelles redeviennent normales. La date de la dernière visite est gardée dans le navigateur (chaque appareil a la sienne).
+
+Sans jeton, GitHub accepte **10 recherches par minute** depuis une même adresse : la carte relit GitHub toutes les 10 minutes (option `refresh`, 5 minutes au moins), et toutes les cartes d'une même page partagent la même lecture. Si la limite est atteinte, la carte garde la dernière liste et indique l'heure du prochain essai. Seuls les **dépôts publics** sont lus.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `user` | Compte ou organisation GitHub suivi | — |
+| `types` | `all` (issues et PR), `issues` ou `prs` | `all` |
+| `exclude` | Dépôts à ignorer (ex. une copie d'un autre dépôt) | — |
+| `repos` | Dépôts à suivre, les autres sont ignorés (vide = tous) | — |
+| `refresh` | Minutes entre deux lectures de GitHub (5 au moins) | `10` |
+| `max_items` | Nombre d'éléments affichés au plus | `50` |
+| `expanded` | Dépôts dépliés à l'ouverture (sinon, seuls ceux avec du nouveau) | `true` |
+| `show_labels` | Étiquettes des issues | `true` |
+| `title`, `icon`, `icon_color`, `theme` | En-tête et couleurs | `GitHub`, `mdi:github`, `v2` |
+
+```yaml
+type: custom:serveur-ha-github-card
+user: Marlboro62
+types: issues
+exclude:
+  - default
+  - brands
+```
+
+### Être prévenu sur son téléphone
+
+La carte ne lit GitHub que lorsqu'un tableau de bord est ouvert. Pour une **notification**, même Home Assistant fermé, ajoutez un capteur REST (fichier de package, par exemple `/config/packages/github.yaml`, puis redémarrage) :
+
+```yaml
+rest:
+  - resource: https://api.github.com/search/issues?q=user:Marlboro62+is:open+archived:false&sort=created&order=desc&per_page=5
+    scan_interval: 600
+    headers:
+      Accept: application/vnd.github+json
+    sensor:
+      - name: GitHub ouverts
+        unique_id: github_ouverts
+        icon: mdi:github
+        value_template: "{{ value_json.total_count }}"
+        json_attributes:
+          - items
+```
+
+puis une automatisation qui prévient à chaque nouvel élément (remplacez `notify.mobile_app_mon_telephone` par votre téléphone) :
+
+```yaml
+alias: GitHub – nouvelle issue ou pull request
+triggers:
+  - trigger: state
+    entity_id: sensor.github_ouverts
+    attribute: items
+conditions:
+  - condition: template
+    value_template: >
+      {% set new = trigger.to_state.attributes.get('items') or [] %}
+      {% set old = (trigger.from_state.attributes.get('items') or []) if trigger.from_state else [] %}
+      {{ new | count > 0 and new[0].id not in old | map(attribute='id') | list }}
+actions:
+  - variables:
+      item: "{{ trigger.to_state.attributes['items'][0] }}"
+  - action: notify.mobile_app_mon_telephone
+    data:
+      title: "GitHub : {{ 'pull request' if item.pull_request is defined else 'issue' }} sur {{ item.repository_url.split('/')[-1] }}"
+      message: "#{{ item.number }} {{ item.title }} ({{ item.user.login }})"
+      data:
+        url: "{{ item.html_url }}"
+        clickAction: "{{ item.html_url }}"
+mode: queued
 ```
 
 ## Carte VPN WireGuard — `custom:serveur-ha-wireguard-card`

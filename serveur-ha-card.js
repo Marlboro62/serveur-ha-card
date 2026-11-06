@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.16.1";
+const CARD_VERSION = "0.17.0-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -4411,6 +4411,237 @@ ha-card.light .tag.t-white { color: #1f2937; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>`;
 
+/* ------------------------------------------------------------ carte GitHub */
+
+const GH_DEFAULTS = {
+  title: "GitHub",
+  icon: "mdi:github",
+  icon_color: "",
+  user: "", // compte ou organisation suivi
+  repos: [], // dépôts à suivre (vide = tous les dépôts du compte)
+  exclude: [], // dépôts à ignorer
+  types: "all", // all, issues ou prs
+  refresh: 10, // minutes entre deux lectures (5 au minimum)
+  max_items: 50, // éléments affichés au plus
+  expanded: true, // dépôts dépliés à l'ouverture
+  show_labels: true,
+  theme: "v2",
+};
+
+/** Lectures partagées entre les cartes d'une même page (même compte, mêmes filtres) : une seule requête. */
+const GH_CACHE = {};
+const ghSafeColor = (c) => (/^[0-9a-f]{6}$/i.test(String(c || "")) ? `#${c}` : "#8fa0b8");
+const ghList = (v) => (Array.isArray(v) ? v : typeof v === "string" && v.trim() ? v.split(",") : []).map((x) => String(x).trim().toLowerCase()).filter(Boolean);
+const ghStore = {
+  get(k) { try { return JSON.parse(window.localStorage.getItem(k) || "null"); } catch (e) { return null; } },
+  set(k, v) { try { window.localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* stockage indisponible */ } },
+};
+
+class ServeurHaGithubCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("serveur-ha-github-card-editor");
+  }
+
+  static getStubConfig() {
+    return { user: "" };
+  }
+
+  setConfig(config) {
+    this._config = { ...GH_DEFAULTS, ...(config || {}) };
+    this._sig = null;
+    this._open = null;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    if (!this._clicks) {
+      this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const fold = ev.target.closest?.("[data-fold]");
+        if (fold) {
+          ev.stopPropagation();
+          const k = fold.dataset.fold;
+          if (this._open.has(k)) this._open.delete(k); else this._open.add(k);
+          this._sig = null; this._render(); return;
+        }
+        if (ev.target.closest?.("[data-act=seen]")) {
+          ghStore.set(this._seenKey(), Date.now());
+          this._sig = null; this._render(); return;
+        }
+        if (ev.target.closest?.("[data-act=reload]")) { this._load(true); }
+      }));
+    }
+    this._load(false);
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
+
+  connectedCallback() {
+    clearInterval(this._tick);
+    // l'âge des éléments et la prochaine lecture sont recalculés chaque minute
+    this._tick = setInterval(() => { this._load(false); this._sig = null; this._render(); }, 60000);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._tick);
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  _query() {
+    const c = this._config, user = String(c.user || "").trim();
+    if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(user)) return null;
+    const type = c.types === "issues" ? " is:issue" : c.types === "prs" ? " is:pr" : "";
+    return `user:${user} is:open${type} archived:false`;
+  }
+
+  _seenKey() {
+    return `serveur-ha-github-seen:${String(this._config.user || "").toLowerCase()}`;
+  }
+
+  /** Recherche GitHub (sans jeton : 10 recherches par minute et par adresse), gardée `refresh` minutes. */
+  async _load(force) {
+    const q = this._query();
+    if (!q) { this._data = null; this._render(); return; }
+    const refresh = Math.max(5, Number(this._config.refresh) || 10) * 60000;
+    const key = `serveur-ha-github:${q}`;
+    const mem = GH_CACHE[key] || (GH_CACHE[key] = { data: ghStore.get(key), pending: null, until: 0 });
+    this._data = mem.data;
+    this._render();
+    const fresh = mem.data && Date.now() - mem.data.at < refresh;
+    if ((fresh && !force) || mem.pending || Date.now() < mem.until) { if (mem.pending) mem.pending.then(() => { this._data = mem.data; this._sig = null; this._render(); }); return; }
+    const url = `https://api.github.com/search/issues?q=${encodeURIComponent(q)}&sort=updated&order=desc&per_page=100`;
+    mem.pending = (async () => {
+      try {
+        const r = await fetch(url, { headers: { Accept: "application/vnd.github+json" } });
+        if (r.status === 403 || r.status === 429) {
+          const reset = Number(r.headers.get("x-ratelimit-reset")) * 1000;
+          mem.until = Number.isFinite(reset) && reset > Date.now() ? reset : Date.now() + 120000;
+          mem.error = `Limite de GitHub atteinte : nouvel essai à ${new Date(mem.until).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.`;
+          return;
+        }
+        if (!r.ok) { mem.error = r.status === 422 ? "Compte GitHub introuvable." : `GitHub a répondu ${r.status}.`; mem.until = Date.now() + 120000; return; }
+        const j = await r.json();
+        const items = (j.items || []).map((it) => ({
+          id: it.id, n: it.number, title: String(it.title || ""), url: String(it.html_url || ""),
+          repo: String(it.repository_url || "").split("/").slice(-1)[0], pr: !!it.pull_request, draft: !!it.draft,
+          author: it.user?.login || "", comments: Number(it.comments) || 0, created: it.created_at, updated: it.updated_at,
+          labels: (it.labels || []).map((l) => ({ name: String(l.name || ""), color: l.color })),
+        }));
+        mem.data = { at: Date.now(), total: Number(j.total_count) || items.length, items };
+        mem.error = null;
+        ghStore.set(key, mem.data);
+        // première lecture : rien n'est « nouveau » jusqu'à la suivante
+        if (ghStore.get(this._seenKey()) === null) ghStore.set(this._seenKey(), Date.now());
+      } catch (e) {
+        mem.error = "GitHub injoignable.";
+        mem.until = Date.now() + 120000;
+      } finally {
+        mem.pending = null;
+      }
+    })();
+    await mem.pending;
+    this._data = mem.data;
+    this._error = mem.error;
+    this._sig = null;
+    this._render();
+  }
+
+  _render() {
+    if (!this._config || !this.shadowRoot) return;
+    const c = this._config, q = this._query();
+    const key = q ? `serveur-ha-github:${q}` : "";
+    const err = q ? GH_CACHE[key]?.error : null;
+    const d = this._data;
+    const seen = Number(ghStore.get(this._seenKey())) || 0;
+    const sig = `${c.theme}|${this._hass?.themes?.darkMode}|${d?.at}|${err}|${seen}|${[...(this._open || [])].join(",")}|${Math.floor(Date.now() / 60000)}`;
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const only = ghList(c.repos), skip = ghList(c.exclude);
+    const items = (d?.items || []).filter((it) => (!only.length || only.includes(it.repo.toLowerCase())) && !skip.includes(it.repo.toLowerCase()))
+      .slice(0, Math.max(1, Number(c.max_items) || 50));
+    const isNew = (it) => seen && new Date(it.created).getTime() > seen;
+    const repos = [...new Set(items.map((it) => it.repo))]
+      .map((r) => ({ name: r, list: items.filter((it) => it.repo === r) }))
+      .sort((a, b) => b.list.some(isNew) - a.list.some(isNew) || new Date(b.list[0].updated) - new Date(a.list[0].updated));
+    if (!this._open) this._open = new Set(c.expanded ? repos.map((r) => r.name) : repos.filter((r) => r.list.some(isNew)).map((r) => r.name));
+    const nIssues = items.filter((it) => !it.pr).length, nPr = items.length - nIssues, nNew = items.filter(isNew).length;
+    const ago = (iso) => { const s = since(iso); return s ? `il y a ${s}` : ""; };
+
+    const row = (it) => {
+      const icon = it.pr ? "mdi:source-pull" : "mdi:alert-circle-outline";
+      const labels = c.show_labels ? it.labels.slice(0, 3).map((l) => `<span class="gh-l" style="--lc:${ghSafeColor(l.color)}">${esc(l.name)}</span>`).join("") : "";
+      return `<a class="gh-i ${it.pr ? "pr" : "is"}${isNew(it) ? " new" : ""}${it.draft ? " draft" : ""}" href="${esc(/^https:\/\/github\.com\//.test(it.url) ? it.url : "#")}" target="_blank" rel="noopener noreferrer" title="${esc(it.title)}">
+        <ha-icon icon="${icon}"></ha-icon>
+        <div class="gh-t"><span>${isNew(it) ? '<b class="gh-new">nouveau</b>' : ""}${esc(it.title)}</span>
+          <small>#${it.n}${it.draft ? " · brouillon" : ""} · ${esc(it.author)} · ${esc(ago(it.created))}${it.updated !== it.created ? ` · activité ${esc(ago(it.updated))}` : ""}</small>
+          ${labels ? `<div class="gh-ls">${labels}</div>` : ""}</div>
+        ${it.comments ? `<span class="gh-c" title="${it.comments} commentaire${it.comments > 1 ? "s" : ""}"><ha-icon icon="mdi:comment-outline"></ha-icon>${it.comments}</span>` : ""}
+      </a>`;
+    };
+    const groups = repos.map((r) => {
+      const open = this._open.has(r.name), nn = r.list.filter(isNew).length;
+      const dots = r.list.map((it) => `<i class="${it.pr ? "pr" : "is"}${isNew(it) ? " new" : ""}"></i>`).join("");
+      return `<div class="ping-g ${open ? "open" : ""}">
+        <button class="ping-gh" data-fold="${esc(r.name)}" aria-expanded="${open}"><ha-icon icon="mdi:source-repository"></ha-icon><span class="ping-gl">${esc(r.name)}</span>
+          <span class="ping-dots gh-dots">${dots}</span>${nn ? `<b class="gh-nb">${nn} nouv.</b>` : ""}<b>${r.list.length}</b><ha-icon class="ping-chev" icon="${open ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
+        ${open ? `<div class="gh-list">${r.list.map(row).join("")}</div>` : ""}
+      </div>`;
+    }).join("");
+
+    const user = String(c.user || "").trim();
+    let body;
+    if (!q) body = `<div class="empty">Compte GitHub à indiquer<span>Choisissez le compte ou l'organisation à suivre dans l'éditeur (option <code>user</code>), par exemple <code>user: Marlboro62</code>.</span></div>`;
+    else if (!d) body = `<div class="empty">${err ? esc(err) : "Lecture de GitHub…"}</div>`;
+    else {
+      body = `<div class="ping-sum">
+          <div class="${nIssues ? "warn" : "ok"}"><b>${nIssues}</b><span>issue${nIssues > 1 ? "s" : ""} ouverte${nIssues > 1 ? "s" : ""}</span></div>
+          <div class="${nPr ? "warn" : "ok"}"><b>${nPr}</b><span>PR ouverte${nPr > 1 ? "s" : ""}</span></div>
+          <div class="${nNew ? "bad" : ""}"><b>${nNew}</b><span>nouvelle${nNew > 1 ? "s" : ""}</span></div>
+          <div><b>${repos.length}</b><span>dépôt${repos.length > 1 ? "s" : ""}</span></div>
+        </div>
+        ${items.length ? `<div class="srv-sec ping-groups">${groups}</div>` : `<div class="empty gh-ok"><ha-icon icon="mdi:check-circle-outline"></ha-icon>Rien d'ouvert : tout est traité.</div>`}
+        <div class="gh-f"><span>${err ? `${esc(err)} · ` : ""}Lu ${Date.now() - d.at < 60000 ? "à l'instant" : esc(ago(new Date(d.at).toISOString()))}</span>
+          <span>${nNew ? `<button data-act="seen">Tout marquer comme vu</button>` : ""}<button data-act="reload" title="Relire maintenant">Actualiser</button></span></div>`;
+    }
+    const leds = d ? `<span class="srv-led ${nNew ? "bad" : items.length ? "upd" : "ok"}"><i></i>${nNew ? `${nNew} nouvelle${nNew > 1 ? "s" : ""}` : items.length ? `${items.length} ouverte${items.length > 1 ? "s" : ""}` : "Tout est traité"}</span>` : "";
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${PVE_STYLE}${PING_STYLE}${GH_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
+      <header>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:github")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
+          <div><div class="title">${esc(c.title || "GitHub")}</div><div class="sub">${user ? `<a href="https://github.com/${esc(user)}" target="_blank" rel="noopener noreferrer">${esc(user)}</a>` : "Issues et pull requests"}</div></div></div>
+        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+      </header>
+      ${body}
+    </ha-card>`;
+  }
+}
+
+const GH_STYLE = `<style>
+.sub a { color: inherit; text-decoration: none; } .sub a:hover { text-decoration: underline; }
+.gh-dots i { background: #3fb950; } .gh-dots i.pr { background: #a371f7; } .gh-dots i.new { box-shadow: 0 0 0 2px var(--t-red); }
+.gh-nb { color: var(--t-red); }
+.gh-list { display: grid; gap: 6px; padding: 0 8px 8px; }
+.gh-i { display: grid; grid-template-columns: 20px 1fr auto; align-items: start; gap: 9px; padding: 8px 10px; border-radius: 10px; text-decoration: none; color: inherit;
+  border: 1px solid var(--med-line); background: var(--med-surface); min-width: 0; }
+.gh-i:hover { border-color: var(--med-accent, var(--med-blue)); }
+.gh-i > ha-icon { --mdc-icon-size: 18px; color: #3fb950; margin-top: 1px; }
+.gh-i.pr > ha-icon { color: #a371f7; } .gh-i.draft > ha-icon { color: var(--med-muted); }
+.gh-i.new { border-color: color-mix(in srgb, var(--t-red) 55%, transparent); }
+.gh-t { display: grid; gap: 2px; min-width: 0; }
+.gh-t > span { font-size: .8rem; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.gh-t small { font-size: .68rem; color: var(--med-muted); }
+.gh-new { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 999px; font-size: .62rem; text-transform: uppercase; letter-spacing: .03em; background: var(--t-red); color: #fff; vertical-align: 1px; }
+.gh-ls { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.gh-l { font-size: .62rem; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--lc); color: var(--lc); background: color-mix(in srgb, var(--lc) 14%, transparent); }
+.gh-c { display: inline-flex; align-items: center; gap: 3px; font-size: .72rem; color: var(--med-muted); white-space: nowrap; } .gh-c ha-icon { --mdc-icon-size: 14px; }
+.gh-ok { flex-direction: row; align-items: center; color: var(--med-down); } .gh-ok ha-icon { --mdc-icon-size: 20px; }
+.gh-f { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 12px 12px; font-size: .7rem; color: var(--med-muted); }
+.gh-f button { font: inherit; font-size: .72rem; color: var(--med-text); background: var(--med-surface); border: 1px solid var(--med-line); border-radius: 999px; padding: 4px 10px; cursor: pointer; margin-left: 6px; }
+.gh-f button:hover { border-color: var(--med-accent, var(--med-blue)); }
+</style>`;
+
 /* ----------------------------------------------------------------- éditeur */
 
 const THEME_SELECT = {
@@ -4889,6 +5120,37 @@ const LNX_LABELS = {
   theme: "Couleurs de la carte",
 };
 const ServeurHaLinuxCardEditor = makeEditor(LNX_SCHEMA, LNX_LABELS, LNX_DEFAULTS);
+const GH_SCHEMA = [
+  { name: "user", selector: { text: {} } },
+  { name: "types", selector: { select: { mode: "dropdown", options: [
+    { value: "all", label: "Issues et pull requests" }, { value: "issues", label: "Issues seulement" }, { value: "prs", label: "Pull requests seulement" }] } } },
+  { name: "exclude", selector: { text: { multiple: true } } },
+  { name: "repos", selector: { text: { multiple: true } } },
+  { name: "title", selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  { name: "icon_color", selector: { text: {} } },
+  { name: "refresh", selector: { number: { min: 5, max: 120, step: 5, mode: "box", unit_of_measurement: "min" } } },
+  { name: "max_items", selector: { number: { min: 5, max: 100, step: 5, mode: "box" } } },
+  { name: "expanded", selector: { boolean: {} } },
+  { name: "show_labels", selector: { boolean: {} } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const GH_LABELS = {
+  user: "Compte ou organisation GitHub suivi",
+  types: "Éléments affichés",
+  exclude: "Dépôts à ignorer",
+  repos: "Dépôts à suivre (vide = tous)",
+  title: "Titre",
+  icon: "Icône",
+  icon_color: "Couleur de l'icône",
+  refresh: "Lecture de GitHub toutes les (minutes, 5 au moins)",
+  max_items: "Nombre d'éléments affichés au plus",
+  expanded: "Dépôts dépliés à l'ouverture",
+  show_labels: "Étiquettes (bug, demande…)",
+  theme: "Couleurs de la carte",
+};
+const ServeurHaGithubCardEditor = makeEditor(GH_SCHEMA, GH_LABELS, GH_DEFAULTS);
 
 /* ---------------------------------------------------------- enregistrement */
 
@@ -4950,6 +5212,8 @@ if (typeof customElements !== "undefined") {
   define("serveur-ha-dns-card-editor", ServeurHaDnsCardEditor);
   define("serveur-ha-linux-card", ServeurHaLinuxCard);
   define("serveur-ha-linux-card-editor", ServeurHaLinuxCardEditor);
+  define("serveur-ha-github-card", ServeurHaGithubCard);
+  define("serveur-ha-github-card-editor", ServeurHaGithubCardEditor);
   define("serveur-ha-opnsense-card", ServeurHaOpnsenseMoved);
   window.customCards = window.customCards || [];
   if (!window.customCards.some((c) => c.type === "serveur-ha-card")) {
@@ -5053,6 +5317,14 @@ if (typeof customElements !== "undefined") {
       type: "serveur-ha-linux-card",
       name: "Carte Serveurs Linux (mises à jour)",
       description: "Mises à jour des serveurs Linux suivis par Linux Update Dashboard : paquets, sécurité, redémarrage, installation confirmée.",
+      preview: true,
+    });
+  }
+  if (!window.customCards.some((c) => c.type === "serveur-ha-github-card")) {
+    window.customCards.push({
+      type: "serveur-ha-github-card",
+      name: "Carte GitHub (issues et pull requests)",
+      description: "Issues et pull requests ouvertes sur les dépôts d'un compte GitHub, groupées par dépôt, avec les nouvelles depuis la dernière visite.",
       preview: true,
     });
   }
