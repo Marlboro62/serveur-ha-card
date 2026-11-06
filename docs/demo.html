@@ -571,8 +571,10 @@
     pl("tv_salon", "Plex (Plex for Android (TV) - TV Salon)", mp ? "playing" : "idle", mp ? { media_content_type: "episode", media_series_title: "Les Voyageurs du ciel", media_title: "Le dernier phare", media_season: 2, media_episode: 4, media_duration: 2760, media_position: 1310, media_position_updated_at: new Date().toISOString(), username: "Invité", entity_picture: art("#2b6cb0", "S2") } : {});
     pl("chambre", "Plex (Plex for Android (TV) - Chambre)", mp ? "paused" : "idle", mp ? { media_content_type: "movie", media_title: "Horizon bleu", media_library_title: "Films", media_content_rating: "Tous publics", media_duration: 6480, media_position: 4870, media_position_updated_at: new Date().toISOString(), username: "Maison", entity_picture: art("#b7791f", "HB") } : {});
     pl("navigateur", "Plex (Plex Web - Navigateur)", "unavailable");
+    // lecteur de la TV (autre intégration, même nom) : c'est lui qui accepte les commandes de lecture
+    add("media_player.tv_salon", mp ? "playing" : "on", { friendly_name: "TV Salon", supported_features: 152463 }, "androidtv");
     add("sensor.jellyfin_clients_actifs", mp ? 1 : 0, { unit_of_measurement: "clients", friendly_name: "Jellyfin Clients actifs" }, "jellyfin", null, "jf");
-    pl("tablette", "Tablette", mp ? "playing" : "idle", mp ? { media_content_type: "music", media_title: "Matin calme", media_artist: "Trio Lumière", media_album_name: "Saisons", media_duration: 245, media_position: 92, media_position_updated_at: new Date().toISOString() } : {}, "jf", "jellyfin");
+    pl("tablette", "Tablette", mp ? "playing" : "idle", mp ? { media_content_type: "music", media_title: "Matin calme", media_artist: "Trio Lumière", media_album_name: "Saisons", media_duration: 245, media_position: 92, media_position_updated_at: new Date().toISOString(), supported_features: 20531 } : { supported_features: 20531 }, "jf", "jellyfin");
     return { st, ent, devices };
   }
 

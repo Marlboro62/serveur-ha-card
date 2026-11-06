@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.17.0-beta.1";
+const CARD_VERSION = "0.17.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3494,8 +3494,12 @@ const MEDIA_DEFAULTS = {
   icon_color: "",
   show_libraries: true,
   show_clients: true, // lecteurs connus, dépliables
+  show_controls: true, // commandes de lecture (pause, arrêt, avance…)
+  control_players: {}, // lecteur Plex/Jellyfin → lecteur qui commande l'appareil : { media_player.plex_tv: media_player.tv }
   theme: "v2",
 };
+/** Fonctions d'un media_player (supported_features) utilisées par les commandes. */
+const MP = { PAUSE: 1, SEEK: 2, PREV: 16, NEXT: 32, STOP: 4096, PLAY: 16384 };
 const MEDIA_APPS = {
   plex: ["Plex", "mdi:plex", "#e5a00d"],
   jellyfin: ["Jellyfin", "mdi:jellyfish", "#aa5cc3"],
@@ -3529,6 +3533,16 @@ class ServeurHaMediaCard extends HTMLElement {
           if (this._open.has(k)) this._open.delete(k); else this._open.add(k);
           this._sig = null; this._render(); return;
         }
+        const cmd = ev.target.closest?.("[data-mp-act]");
+        if (cmd) {
+          // commande de lecture : pas d'ouverture de la fiche
+          ev.stopPropagation();
+          const id = cmd.dataset.mp, act = cmd.dataset.mpAct;
+          const data = { entity_id: id };
+          if (act === "media_seek") data.seek_position = Math.max(0, Number(cmd.dataset.pos) || 0);
+          this._hass?.callService("media_player", act, data);
+          return;
+        }
         const el = ev.target.closest?.("[data-entity]");
         if (el?.dataset.entity) {
           const e = new Event("hass-more-info", { bubbles: true, composed: true });
@@ -3544,6 +3558,22 @@ class ServeurHaMediaCard extends HTMLElement {
     if (this._hass?.entities !== hass.entities || this._hass?.devices !== hass.devices) this._map = null;
     this._hass = hass;
     this._render();
+  }
+
+  /** Lecteur qui commande une session : la session elle-même si elle accepte la pause, sinon celui indiqué
+   *  dans control_players, sinon un lecteur d'une autre intégration qui porte le même nom (ex. la TV). */
+  _controller(id) {
+    const st = this._hass?.states || {}, reg = this._hass?.entities || {};
+    const feat = (x) => Number(st[x]?.attributes?.supported_features) || 0;
+    const can = (x) => st[x] && st[x].state !== "unavailable" && (feat(x) & (MP.PAUSE | MP.PLAY | MP.STOP));
+    if (can(id)) return id;
+    const map = this._config.control_players && typeof this._config.control_players === "object" ? this._config.control_players : {};
+    if (map[id] && can(map[id])) return map[id];
+    const norm = (n) => String(n || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+    const name = norm(mediaPlayerName(st[id]?.attributes?.friendly_name));
+    if (!name) return null;
+    return Object.keys(st).find((x) => x.startsWith("media_player.") && x !== id && !MEDIA_APPS[reg[x]?.platform] && can(x)
+      && norm(st[x].attributes?.friendly_name) === name) || null;
   }
 
   connectedCallback() {
@@ -3613,6 +3643,7 @@ class ServeurHaMediaCard extends HTMLElement {
     const c = this._config;
     const m = this._resolve();
     const ids = m.servers.flatMap((s) => [s.count, s.update, ...s.libs, ...s.players]);
+    if (c.show_controls !== false) for (const id of m.servers.flatMap((s) => s.players)) { const k = this._controller(id); if (k && !ids.includes(k)) ids.push(k); }
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|${[...this._open].join(",")}|${Math.floor(Date.now() / 30000)}|` + ids.map((id) => { const o = this._st(id); return o ? `${o.state}|${o.attributes?.media_title}|${o.attributes?.media_position}` : "-"; }).join("|");
     if (sig === this._sig) return;
     this._sig = sig;
@@ -3625,6 +3656,24 @@ class ServeurHaMediaCard extends HTMLElement {
       if (a.media_series_title) return [a.media_series_title, `${a.media_title || ""}${ep}`];
       if (a.media_artist) return [a.media_title || "", [a.media_artist, a.media_album_name].filter(Boolean).join(" · ")];
       return [a.media_title || a.media_content_id || "Lecture", [a.media_library_title, a.media_content_rating].filter(Boolean).join(" · ")];
+    };
+    // commandes de lecture, selon ce que permet le lecteur qui commande la session
+    const controls = (id, pos) => {
+      const k = this._controller(id);
+      if (!k) return "";
+      const f = Number(this._st(k)?.attributes?.supported_features) || 0, kst = this._st(k)?.state;
+      const on = kst === "playing" || this._st(id)?.state === "playing";
+      const via = k !== id ? mediaPlayerName(this._st(k)?.attributes?.friendly_name) : "";
+      const b = (act, icon, label, extra = "") => `<button class="md-b" data-mp="${esc(k)}" data-mp-act="${act}"${extra} title="${esc(label)}${via ? ` (${esc(via)})` : ""}" aria-label="${esc(label)}"><ha-icon icon="${icon}"></ha-icon></button>`;
+      const seek = (f & MP.SEEK) && Number.isFinite(pos);
+      return `<div class="md-c">
+          ${f & MP.PREV ? b("media_previous_track", "mdi:skip-previous", "Précédent") : ""}
+          ${seek ? b("media_seek", "mdi:rewind-10", "Reculer de 10 s", ` data-pos="${Math.round(pos - 10)}"`) : ""}
+          ${f & (MP.PAUSE | MP.PLAY) ? b("media_play_pause", on ? "mdi:pause" : "mdi:play", on ? "Pause" : "Lecture") : ""}
+          ${seek ? b("media_seek", "mdi:fast-forward-30", "Avancer de 30 s", ` data-pos="${Math.round(pos + 30)}"`) : ""}
+          ${f & MP.NEXT ? b("media_next_track", "mdi:skip-next", "Suivant") : ""}
+          ${f & MP.STOP ? b("media_stop", "mdi:stop", "Arrêt") : ""}
+        </div>`;
     };
     const session = (id) => {
       const o = this._st(id), a = o.attributes || {};
@@ -3639,7 +3688,8 @@ class ServeurHaMediaCard extends HTMLElement {
           <div class="md-art">${pic}</div>
           <div class="md-i"><div class="md-t">${esc(t1)}</div>${t2 ? `<div class="md-t2">${esc(t2)}</div>` : ""}
             <div class="md-w"><ha-icon icon="${esc(o.state === "paused" ? "mdi:pause" : "mdi:play")}"></ha-icon>${esc(who || "Lecteur")}${MEDIA_TYPES[a.media_content_type] ? ` · ${MEDIA_TYPES[a.media_content_type]}` : ""}</div>
-            ${pct !== null ? `<div class="md-p"><div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div><small>${clock(pos)} / ${clock(dur)}</small></div>` : ""}</div>
+            ${pct !== null ? `<div class="md-p"><div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div><small>${clock(pos)} / ${clock(dur)}</small></div>` : ""}
+            ${c.show_controls !== false ? controls(id, pos) : ""}</div>
         </div>`;
     };
 
@@ -3710,6 +3760,12 @@ const MEDIA_STYLE = `<style>
 .md-p { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; margin-top: 4px; }
 .md-p .bar { height: 5px; } .md-p .bar i { background: var(--med-accent, var(--med-blue)); }
 .md-p small { font-size: .68rem; color: var(--med-muted); white-space: nowrap; }
+.md-c { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.md-b { all: unset; box-sizing: border-box; cursor: pointer; display: inline-grid; place-items: center; width: 34px; height: 30px; border-radius: 9px;
+  border: 1px solid var(--med-line); background: var(--med-bg); color: var(--med-text); }
+.md-b:hover { border-color: var(--med-accent, var(--med-blue)); color: var(--med-accent, var(--med-blue)); }
+.md-b:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); outline-offset: 1px; }
+.md-b ha-icon { --mdc-icon-size: 18px; }
 .md-libs { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; }
 .md-lib { display: grid; justify-items: center; padding: 6px 4px; border-radius: 10px; background: var(--med-surface); font-size: .7rem; color: var(--med-muted); cursor: pointer; text-align: center; }
 .md-lib b { font-size: 1rem; color: var(--med-text); }
@@ -5061,6 +5117,8 @@ const MEDIA_SCHEMA = [
   { name: "icon_color", selector: { text: {} } },
   { name: "show_libraries", selector: { boolean: {} } },
   { name: "show_clients", selector: { boolean: {} } },
+  { name: "show_controls", selector: { boolean: {} } },
+  { name: "control_players", selector: { object: {} } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -5070,6 +5128,8 @@ const MEDIA_LABELS = {
   icon_color: "Couleur de l'icône",
   show_libraries: "Afficher les bibliothèques (capteurs à activer dans l'intégration)",
   show_clients: "Liste des lecteurs connus (dépliable)",
+  show_controls: "Commandes de lecture (pause, arrêt, avance…)",
+  control_players: "Lecteur qui commande l'appareil (YAML : lecteur Plex: lecteur de la TV), sinon trouvé d'après le nom",
   theme: "Couleurs de la carte",
 };
 const ServeurHaMediaCardEditor = makeEditor(MEDIA_SCHEMA, MEDIA_LABELS, MEDIA_DEFAULTS);

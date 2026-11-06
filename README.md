@@ -610,13 +610,25 @@ La carte reprend tous les serveurs des intégrations **Plex**, **Jellyfin** et *
 - **Bibliothèques** : nombre de films, séries, morceaux… (Plex : capteurs `Library` désactivés par défaut, à activer dans l'intégration).
 - **Lecteurs** : liste dépliable des lecteurs connus, en vert quand ils sont joignables.
 
+- **Commandes de lecture** sous chaque lecture : ⏮ précédent, −10 s, lecture/pause, +30 s, ⏭ suivant, arrêt. Seules les commandes que le lecteur accepte s'affichent.
+
 Un clic sur une lecture, une bibliothèque ou un lecteur ouvre sa fiche dans Home Assistant (lecture, pause, volume).
+
+> **Plex sur une TV ou une box Android** : le lecteur Plex de la TV n'accepte souvent aucune commande depuis Home Assistant. La carte cherche alors toute seule le lecteur de l'appareil qui porte **le même nom** (par exemple `media_player.smart_tv_pro`, de l'intégration Android TV ou Google Cast) et lui envoie les commandes. Si les noms diffèrent, indiquez la correspondance avec `control_players` :
+>
+> ```yaml
+> type: custom:serveur-ha-media-card
+> control_players:
+>   media_player.plex_plex_for_android_tv_salon: media_player.tv_salon
+> ```
 
 | Option | Rôle | Défaut |
 | --- | --- | --- |
 | `title`, `icon`, `icon_color` | En-tête | `Serveurs multimédia`, `mdi:play-box-multiple` |
 | `show_libraries` | Afficher les bibliothèques | `true` |
 | `show_clients` | Liste dépliable des lecteurs | `true` |
+| `show_controls` | Commandes de lecture sous chaque lecture | `true` |
+| `control_players` | Lecteur de session → lecteur qui commande l'appareil | trouvé d'après le nom |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ## Carte Filtrage DNS — `custom:serveur-ha-dns-card`
