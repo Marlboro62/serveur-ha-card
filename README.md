@@ -484,6 +484,8 @@ Sans jeton, GitHub accepte **10 recherches par minute** depuis une même adresse
 | `types` | `all` (issues et PR), `issues` ou `prs` | `all` |
 | `exclude` | Dépôts à ignorer (ex. une copie d'un autre dépôt) | — |
 | `repos` | Dépôts à suivre, les autres sont ignorés (vide = tous) | — |
+| `hide_bots` | Masquer ce qu'ouvrent les robots (`github-actions[bot]`, `dependabot[bot]`…) | `true` |
+| `exclude_authors` | Auteurs à masquer | — |
 | `refresh` | Minutes entre deux lectures de GitHub (5 au moins) | `10` |
 | `max_items` | Nombre d'éléments affichés au plus | `50` |
 | `expanded` | Dépôts dépliés à l'ouverture (sinon, seuls ceux avec du nouveau) | `true` |

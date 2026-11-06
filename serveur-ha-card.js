@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.17.0-beta";
+const CARD_VERSION = "0.17.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -4420,6 +4420,8 @@ const GH_DEFAULTS = {
   user: "", // compte ou organisation suivi
   repos: [], // dépôts à suivre (vide = tous les dépôts du compte)
   exclude: [], // dépôts à ignorer
+  hide_bots: true, // masquer ce qu'ouvrent les robots (github-actions[bot], dependabot[bot]…)
+  exclude_authors: [], // auteurs à masquer
   types: "all", // all, issues ou prs
   refresh: 10, // minutes entre deux lectures (5 au minimum)
   max_items: 50, // éléments affichés au plus
@@ -4559,8 +4561,9 @@ class ServeurHaGithubCard extends HTMLElement {
     if (sig === this._sig) return;
     this._sig = sig;
 
-    const only = ghList(c.repos), skip = ghList(c.exclude);
-    const items = (d?.items || []).filter((it) => (!only.length || only.includes(it.repo.toLowerCase())) && !skip.includes(it.repo.toLowerCase()))
+    const only = ghList(c.repos), skip = ghList(c.exclude), authors = ghList(c.exclude_authors);
+    const hidden = (it) => (c.hide_bots !== false && /\[bot\]$/i.test(it.author)) || authors.includes(it.author.toLowerCase());
+    const items = (d?.items || []).filter((it) => (!only.length || only.includes(it.repo.toLowerCase())) && !skip.includes(it.repo.toLowerCase()) && !hidden(it))
       .slice(0, Math.max(1, Number(c.max_items) || 50));
     const isNew = (it) => seen && new Date(it.created).getTime() > seen;
     const repos = [...new Set(items.map((it) => it.repo))]
@@ -5126,6 +5129,8 @@ const GH_SCHEMA = [
     { value: "all", label: "Issues et pull requests" }, { value: "issues", label: "Issues seulement" }, { value: "prs", label: "Pull requests seulement" }] } } },
   { name: "exclude", selector: { text: { multiple: true } } },
   { name: "repos", selector: { text: { multiple: true } } },
+  { name: "hide_bots", selector: { boolean: {} } },
+  { name: "exclude_authors", selector: { text: { multiple: true } } },
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
   { name: "icon_color", selector: { text: {} } },
@@ -5141,6 +5146,8 @@ const GH_LABELS = {
   types: "Éléments affichés",
   exclude: "Dépôts à ignorer",
   repos: "Dépôts à suivre (vide = tous)",
+  hide_bots: "Masquer ce qu'ouvrent les robots (github-actions, dependabot…)",
+  exclude_authors: "Auteurs à masquer",
   title: "Titre",
   icon: "Icône",
   icon_color: "Couleur de l'icône",
