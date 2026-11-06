@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.16.0-beta";
+const CARD_VERSION = "0.16.1-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2799,13 +2799,15 @@ class ServeurHaZigbeeCard extends HTMLElement {
     this._config = { ...ZB_DEFAULTS, ...(config || {}) };
     this._map = null;
     this._sig = null;
-    this._open = !!this._config.expanded;
+    this._open = new Set(this._config.expanded ? ["bat", "mains"] : []);
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     if (!this._clicks) {
       this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
-        if (ev.target.closest?.("[data-fold]")) {
+        const fold = ev.target.closest?.("[data-fold]");
+        if (fold) {
           ev.stopPropagation();
-          this._open = !this._open;
+          const k = fold.dataset.fold;
+          if (this._open.has(k)) this._open.delete(k); else this._open.add(k);
           this._sig = null; this._render(); return;
         }
         const el = ev.target.closest?.("[data-entity]");
@@ -2912,7 +2914,7 @@ class ServeurHaZigbeeCard extends HTMLElement {
     const c = this._config;
     const m = this._resolve();
     const ids = m.items.flatMap((it) => [it.roles.battery, it.roles.low, it.roles.lqi, it.ids[0]]);
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._open}|${Math.floor(Date.now() / 60000)}|${this._st(m.bridge)?.state}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${[...this._open].join(",")}|${Math.floor(Date.now() / 60000)}|${this._st(m.bridge)?.state}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
     if (sig === this._sig) return;
     this._sig = sig;
 
@@ -2920,6 +2922,7 @@ class ServeurHaZigbeeCard extends HTMLElement {
     const by = (k) => rows.filter((r) => r.s.st === k);
     const off = by("off"), alert = by("alert"), warn = by("warn"), weak = [...by("silent"), ...by("lqi")];
     const okRows = by("ok").sort((a, b) => (a.s.bat ?? 101) - (b.s.bat ?? 101) || a.it.name.localeCompare(b.it.name, "fr", { numeric: true }));
+    const okBat = okRows.filter((r) => r.it.roles.battery || r.it.roles.low), okMains = okRows.filter((r) => !(r.it.roles.battery || r.it.roles.low));
     const bats = rows.filter((r) => r.s.bat !== null);
     const lowest = bats.length ? bats.reduce((a, b) => (b.s.bat < a.s.bat ? b : a)) : null;
     const zb = rows.filter((r) => r.it.zigbee).length;
@@ -2929,11 +2932,19 @@ class ServeurHaZigbeeCard extends HTMLElement {
     const line = ({ it, s }) => {
       const detail = s.st === "off" ? `hors ligne${s.offSince && since(s.offSince) ? ` depuis ${since(s.offSince)}` : ""}`
         : s.st === "silent" ? `aucune nouvelle depuis ${since(s.seen)}`
-        : [it.area, s.lqi !== null ? `signal ${fmt(s.lqi, 0)}` : null, s.seen && s.st !== "ok" ? `vu il y a ${since(s.seen)}` : null].filter(Boolean).join(" · ");
+        : [it.area || it.model, s.lqi !== null ? `signal ${fmt(s.lqi, 0)}` : null, s.seen && s.st !== "ok" ? `vu il y a ${since(s.seen)}` : null].filter(Boolean).join(" · ");
       const val = s.bat !== null ? `<b class="${batCls(s.bat)}">${fmt(s.bat, 0)} %</b>` : s.low ? `<b class="bad">Faible</b>` : it.roles.low ? `<b class="ok">OK</b>` : it.zigbee && !it.roles.battery ? `<small class="zb-mains">secteur</small>` : "";
       const gauge = s.bat !== null ? `<span class="zb-g ${batCls(s.bat)}"><i style="width:${Math.max(3, Math.min(100, s.bat))}%"></i></span>` : "";
       const title = [it.name, it.model, it.area, s.bat !== null ? `Pile ${fmt(s.bat, 0)} %` : null, s.lqi !== null ? `Qualité du lien ${fmt(s.lqi, 0)}/255` : null, s.seen ? `Dernière nouvelle il y a ${since(s.seen)}` : null].filter(Boolean).join(" · ");
       return `<div class="zb-r s-${s.st}" data-entity="${esc(s.main)}" title="${esc(title)}"><i class="zb-d"></i><div class="zb-n"><span>${esc(it.name)}</span><small>${esc(detail)}</small></div>${gauge}${val}</div>`;
+    };
+    // groupes repliés : piles en bon état, appareils sur secteur
+    const fold = (k, icon, label, list) => {
+      if (!list.length) return "";
+      const on = this._open.has(k);
+      return `<div class="ping-g ${on ? "open" : ""}"><button class="ping-gh" data-fold="${k}" aria-expanded="${on}"><ha-icon icon="${icon}"></ha-icon><span class="ping-gl">${label}</span>
+        <span class="ping-dots"></span><b class="ok">${list.length}</b><ha-icon class="ping-chev" icon="${on ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
+        ${on ? `<div class="zb-list zb-in">${list.map(line).join("")}</div>` : ""}</div>`;
     };
     const sec = (list, icon, label, cls) => (list.length ? `<div class="srv-sec"><div class="srv-h ${cls}"><ha-icon icon="${icon}"></ha-icon>${label} <small class="pve-n">${list.length}</small></div><div class="zb-list">${list.map(line).join("")}</div></div>` : "");
 
@@ -2952,11 +2963,7 @@ class ServeurHaZigbeeCard extends HTMLElement {
         ${sec(alert, "mdi:battery-alert-variant-outline", "Piles à changer", "ping-bad")}
         ${sec(warn, "mdi:battery-low", "Piles faibles", "zb-warn")}
         ${sec(weak, "mdi:signal-cellular-1", "Signal faible ou silencieux", "zb-warn")}
-        ${okRows.length ? `<div class="srv-sec"><div class="ping-g ${this._open ? "open" : ""}">
-          <button class="ping-gh" data-fold="ok" aria-expanded="${this._open}"><ha-icon icon="mdi:check-circle-outline"></ha-icon><span class="ping-gl">Tout va bien</span>
-            <span class="ping-dots"></span><b class="ok">${okRows.length}</b><ha-icon class="ping-chev" icon="${this._open ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
-          ${this._open ? `<div class="zb-list zb-in">${okRows.map(line).join("")}</div>` : ""}
-        </div></div>` : ""}`;
+        ${okBat.length || okMains.length ? `<div class="srv-sec ping-groups">${fold("bat", "mdi:battery-high", "Piles en bon état", okBat)}${fold("mains", "mdi:power-plug-outline", "Sur secteur", okMains)}</div>` : ""}`;
 
     const nbBad = off.length + alert.length;
     const leds = [
@@ -2977,7 +2984,7 @@ class ServeurHaZigbeeCard extends HTMLElement {
 const ZB_STYLE = `<style>
 .zb-list { display: grid; gap: 4px; }
 .zb-in { padding: 0 8px 8px; }
-.zb-r { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--med-line); background: var(--med-surface); cursor: pointer; min-width: 0; }
+.zb-r { display: flex; align-items: center; gap: 9px; padding: 7px 10px; min-height: 46px; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--med-line); background: var(--med-surface); cursor: pointer; min-width: 0; }
 .zb-d { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--med-down); }
 .zb-r.s-off .zb-d, .zb-r.s-alert .zb-d { background: var(--t-red); } .zb-r.s-warn .zb-d, .zb-r.s-lqi .zb-d, .zb-r.s-silent .zb-d { background: #f0a33a; }
 .zb-r.s-off, .zb-r.s-alert { border-color: color-mix(in srgb, var(--t-red) 55%, transparent); }
@@ -4768,7 +4775,7 @@ const ZB_LABELS = {
   lqi_warn: "Qualité du lien Zigbee orange en dessous de (0 à 255)",
   silent_hours: "Appareil silencieux sans nouvelle depuis",
   exclude: "Entités ou appareils à ignorer",
-  expanded: "Liste « Tout va bien » dépliée à l'ouverture",
+  expanded: "Groupes « Piles en bon état » et « Sur secteur » dépliés à l'ouverture",
   theme: "Couleurs de la carte",
 };
 const ServeurHaZigbeeCardEditor = makeEditor(ZB_SCHEMA, ZB_LABELS, ZB_DEFAULTS);

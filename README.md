@@ -437,7 +437,7 @@ La carte reprend seule tous les appareils qui ont un **capteur de batterie en %*
 - **Hors ligne** : les appareils dont toutes les entités sont indisponibles, avec la durée depuis la coupure.
 - **Piles à changer** (rouge, sous 15 %) et **Piles faibles** (orange, sous 30 %), avec une jauge, la pièce et la qualité du lien.
 - **Signal faible ou silencieux** : qualité du lien Zigbee sous 50, ou aucune nouvelle depuis plus de 25 h (capteur *Last seen*).
-- **Tout va bien** : le reste, replié ; un clic le déplie, trié de la pile la plus faible à la plus pleine. Un clic sur un appareil ouvre sa batterie.
+- **Piles en bon état** et **Sur secteur** : le reste, en deux groupes repliés ; un clic déplie, les piles triées de la plus faible à la plus pleine. Un clic sur un appareil ouvre sa batterie.
 
 Les capteurs **Linkquality** et **Last seen** de Zigbee2MQTT sont désactivés par défaut dans Home Assistant : activez-les sur les appareils qui vous intéressent pour voir le signal et la dernière nouvelle (pour *Last seen*, activez aussi `last_seen` dans les réglages de Zigbee2MQTT). Pour qu'un appareil Zigbee éteint apparaisse **hors ligne**, activez la *disponibilité* (availability) dans Zigbee2MQTT.
 
@@ -450,7 +450,7 @@ Les capteurs **Linkquality** et **Last seen** de Zigbee2MQTT sont désactivés p
 | `lqi_warn` | Qualité du lien Zigbee orange en dessous de (0 à 255) | `50` |
 | `silent_hours` | Appareil silencieux sans nouvelle depuis (heures) | `25` |
 | `exclude` | Appareils à ignorer (noms ou entités) | — |
-| `expanded` | Liste « Tout va bien » dépliée à l'ouverture | `false` |
+| `expanded` | Groupes « Piles en bon état » et « Sur secteur » dépliés à l'ouverture | `false` |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ```yaml
