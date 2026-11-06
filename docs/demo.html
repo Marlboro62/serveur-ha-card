@@ -95,7 +95,7 @@
     <aside class="panel" aria-label="Réglages de la démo">
       <h2>Carte</h2>
       <div class="ctl"><div class="seg" data-key="card">
-        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="ping">Réseau</button><button data-v="wg">WireGuard</button><button data-v="gl">Glances</button><button data-v="media">Multimédia</button><button data-v="all">Les 12</button></div></div>
+        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="ping">Réseau</button><button data-v="wg">WireGuard</button><button data-v="gl">Glances</button><button data-v="media">Multimédia</button><button data-v="zb">Zigbee et piles</button><button data-v="all">Les 13</button></div></div>
 
       <h2>Affichage</h2>
       <div class="ctl"><div class="ctl-l">Page</div><div class="seg" data-key="page">
@@ -134,6 +134,8 @@
         <button data-v="some"><i class="sw green"></i>Pairs connectés</button><button data-v="none"><i class="sw"></i>Aucun pair</button></div></div>
       <div class="ctl" data-for="ping all"><div class="ctl-l">Réseau (Ping)</div><div class="seg" data-key="ping">
         <button data-v="ok"><i class="sw green"></i>Tout en ligne</button><button data-v="slow"><i class="sw orange"></i>Lent, pertes</button><button data-v="down"><i class="sw red"></i>Appareils hors ligne</button></div></div>
+      <div class="ctl" data-for="zb all"><div class="ctl-l">Zigbee et piles</div><div class="seg" data-key="zb">
+        <button data-v="ok"><i class="sw green"></i>Tout va bien</button><button data-v="low"><i class="sw orange"></i>Piles faibles</button><button data-v="down"><i class="sw red"></i>Hors ligne, pont coupé</button></div></div>
       <div class="ctl" data-for="asus all"><div class="ctl-l">Routeur ASUS</div><div class="seg" data-key="asus">
         <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="busy"><i class="sw orange"></i>Chargé, mise à jour</button><button data-v="down"><i class="sw red"></i>Internet coupé</button></div></div>
     </aside>
@@ -181,8 +183,8 @@
     });
   }
 
-  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card", ping: "serveur-ha-ping-card", wg: "serveur-ha-wireguard-card", gl: "serveur-ha-glances-card", media: "serveur-ha-media-card" };
-  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok", ping: "ok", wg: "some", gl: "ok", media: "play" };
+  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card", ping: "serveur-ha-ping-card", wg: "serveur-ha-wireguard-card", gl: "serveur-ha-glances-card", media: "serveur-ha-media-card", zb: "serveur-ha-zigbee-card" };
+  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok", ping: "ok", wg: "some", gl: "ok", media: "play", zb: "low" };
   let state = { ...defaults };
   try { state = { ...defaults, ...JSON.parse(localStorage.getItem("serveur-ha-demo") || "{}") }; } catch (e) { /* ignoré */ }
 
@@ -490,6 +492,23 @@
       add(`sensor.${k}_gigue`, off ? "unavailable" : (r * 0.3).toFixed(2), { unit_of_measurement: "ms" }, "ping", "jitter", dev);
       add(`sensor.${k}_perte_de_paquets`, off ? "unavailable" : ps && i % 4 === 0 ? "20" : "0", { unit_of_measurement: "%" }, "ping", "packet_loss", dev);
     });
+    // --- Zigbee et piles (noms fictifs, entités au format de Zigbee2MQTT)
+    const zl = state.zb === "low", zd = state.zb === "down";
+    devices.z2m = { id: "z2m", name: "Zigbee2MQTT Bridge", manufacturer: "Zigbee2MQTT", model: "Bridge" };
+    add("binary_sensor.zigbee2mqtt_bridge_connection_state", zd ? "off" : "on", { device_class: "connectivity" }, "mqtt", null, "z2m");
+    const zbDev = [["Capteur porte entrée", "Aqara", 72, 96, "entree"], ["Fenêtre chambre", "Aqara", zl ? 22 : 64, 54, "chambre"], ["Mouvement couloir", "Aqara", 100, 130, "couloir"],
+      ["Thermomètre salon", "Xiaomi", 100, 168, "salon"], ["Thermomètre congélateur", "Xiaomi", zl ? 9 : 88, zl ? 28 : 80, "cuisine"], ["Interrupteur chevet", "Aqara", zl ? 41 : 57, 72, "chambre"],
+      ["Détecteur de fumée", "Heiman", 98, 120, "couloir"], ["Bouton sonnette", "Aqara", 63, 44, "entree"], ["Prise lave-linge", "Sonoff", null, 190, "cuisine"], ["Plafonnier salle de bain", "IKEA", null, 47, "sdb"]];
+    zbDev.forEach(([name, man, bat, lqi, area], i) => {
+      const dev = `zb_${i}`, k = name.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "_").replace(/_$/, "");
+      const off = zd && (i === 2 || i === 9);
+      devices[dev] = { id: dev, name, manufacturer: man, model: bat === null ? "Routeur" : "Capteur", area_id: area, via_device_id: "z2m", identifiers: [["mqtt", `zigbee2mqtt_0x00158d00000000${i}`]] };
+      if (bat !== null) add(`sensor.${k}_battery`, off ? "unavailable" : bat, { unit_of_measurement: "%", device_class: "battery" }, "mqtt", null, dev);
+      add(`sensor.${k}_linkquality`, off ? "unavailable" : lqi, { unit_of_measurement: "lqi" }, "mqtt", null, dev);
+      add(`sensor.${k}_last_seen`, off ? "unavailable" : iso(-(zl && i === 7 ? 40 : (i + 1) * 0.3) * H), { device_class: "timestamp" }, "mqtt", null, dev);
+      if (bat === null) add(`switch.${k}`, off ? "unavailable" : "on", {}, "mqtt", null, dev);
+      if (off) for (const id of Object.keys(ent)) if (ent[id].device_id === dev) st[id].last_changed = iso(-3.2 * H);
+    });
     // --- VPN WireGuard (noms fictifs, entités au format de l'intégration WGDashboard Monitor)
     const wgOn = state.wg === "some";
     [["maison", "WGDashboard (maison)", "10.0.0", [["Téléphone 1", true, 0.05, 1.36, 14.02], ["Téléphone 2", false, 26, 0.42, 3.9], ["Tablette", false, 140, 0.08, 0.61], ["Portable", true, 0.2, 2.75, 31.4]]],
@@ -574,6 +593,7 @@
       wg: { type: "custom:serveur-ha-wireguard-card", theme: t },
       gl: { type: "custom:serveur-ha-glances-card", theme: t },
       media: { type: "custom:serveur-ha-media-card", theme: t },
+      zb: { type: "custom:serveur-ha-zigbee-card", theme: t },
     };
     return state.card === "all" ? Object.values(c) : [c[state.card]];
   }
@@ -590,7 +610,7 @@
   function hass() {
     const { st, ent, devices } = build();
     return {
-      states: st, entities: ent, devices, themes: { darkMode: state.page === "dark" }, language: "fr",
+      states: st, entities: ent, devices, areas: { entree: { name: "Entrée" }, chambre: { name: "Chambre" }, couloir: { name: "Couloir" }, salon: { name: "Salon" }, cuisine: { name: "Cuisine" }, sdb: { name: "Salle de bain" } }, themes: { darkMode: state.page === "dark" }, language: "fr",
       // registre des entités (identifiants uniques des capteurs de stockage Proxmox)
       callWS: async (msg) => msg.type === "config/entity_registry/get_entries"
         ? Object.fromEntries(msg.entity_ids.map((id) => [id, { entity_id: id, unique_id: ent[id]?.unique_id, config_entry_id: ent[id]?.config_entry_id }])) : null,

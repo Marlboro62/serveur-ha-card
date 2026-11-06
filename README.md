@@ -31,7 +31,7 @@
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz/)
 [![Release](https://img.shields.io/github/v/release/Marlboro62/serveur-ha-card)](https://github.com/Marlboro62/serveur-ha-card/releases)
 
-**Douze cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
+**Treize cartes Lovelace indépendantes, dans un seul fichier**, pour surveiller l'infrastructure de Home Assistant. Elles ont le style des cartes MyElectricalData new ([Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new)) : thème bleu nuit, version claire, ou thème Home Assistant.
 
 | Type | Carte |
 | --- | --- |
@@ -43,6 +43,7 @@
 | `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
 | `custom:serveur-ha-asus-card` | **Routeur ASUS** ([AsusRouter](https://github.com/Vaskivskyi/ha-asusrouter)) : Internet et IP publique, débits, Wi-Fi et réseaux invités, ports Ethernet, appareils connectés, VPN, firmware, températures, redémarrage confirmé en deux clics |
 | `custom:serveur-ha-ping-card` | **Réseau** (intégration Ping) : appareils en ligne ou hors ligne, latence, gigue et perte de paquets, groupés par type ou par pièce, groupes dépliables |
+| `custom:serveur-ha-zigbee-card` | **Zigbee et piles** : piles à changer et piles faibles, appareils Zigbee hors ligne, signal faible ou silencieux, état du pont Zigbee2MQTT |
 | `custom:serveur-ha-wireguard-card` | **VPN WireGuard** ([WGDashboard](https://github.com/donaldzou/WGDashboard)) : serveurs, pairs connectés, dernier handshake, données reçues et envoyées |
 | `custom:serveur-ha-glances-card` | **Serveurs Glances** : CPU, RAM, disques par point de montage, températures, ventilateurs, réseau et processus de chaque serveur, repliés en une ligne |
 | `custom:serveur-ha-media-card` | **Serveurs multimédia** (Plex, Jellyfin, Emby) : ce qui est en lecture, qui regarde et sur quel lecteur, avancement, bibliothèques, mise à jour du serveur |
@@ -98,9 +99,13 @@
 | --- | --- | --- |
 | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/multimedia.png" alt="Serveurs multimédia" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/multimedia-repos.png" alt="Serveurs multimédia au repos" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/multimedia-clair.png" alt="Serveurs multimédia clair" width="300"> |
 
+| Zigbee et piles | Hors ligne, pont coupé | Zigbee et piles clair |
+| --- | --- | --- |
+| <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/zigbee.png" alt="Zigbee et piles" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/zigbee-panne.png" alt="Zigbee, appareils hors ligne et pont coupé" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/serveur-ha-card/main/images/zigbee-clair.png" alt="Zigbee et piles, clair" width="300"> |
+
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 12 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 13 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 ## Installation
 
@@ -418,6 +423,43 @@ standby:
 ```
 
 Un appareil éteint volontairement qui se rallume redevient vert, comme les autres. S'il ne répond pas, il reste dans son groupe, en gris, et le voyant de la carte reste vert.
+
+## Carte Zigbee et piles — `custom:serveur-ha-zigbee-card`
+
+```yaml
+type: custom:serveur-ha-zigbee-card
+```
+
+La carte reprend seule tous les appareils qui ont un **capteur de batterie en %** (ou un capteur binaire « batterie faible »), quelle que soit leur intégration, et tous les appareils **Zigbee** (Zigbee2MQTT ou ZHA), y compris ceux sur secteur. Les téléphones et tablettes de l'application Companion sont ignorés par défaut, puisque leur batterie se recharge.
+
+- **En-tête** : nombre d'appareils et d'appareils à pile, voyant du **pont Zigbee2MQTT** (connecté ou déconnecté) et voyant **Tout va bien**, **N à surveiller** ou **N à traiter**.
+- **Résumé** : appareils en ligne, piles faibles, la pile la plus faible (avec le nom de l'appareil), appareils au signal faible ou silencieux.
+- **Hors ligne** : les appareils dont toutes les entités sont indisponibles, avec la durée depuis la coupure.
+- **Piles à changer** (rouge, sous 15 %) et **Piles faibles** (orange, sous 30 %), avec une jauge, la pièce et la qualité du lien.
+- **Signal faible ou silencieux** : qualité du lien Zigbee sous 50, ou aucune nouvelle depuis plus de 25 h (capteur *Last seen*).
+- **Tout va bien** : le reste, replié ; un clic le déplie, trié de la pile la plus faible à la plus pleine. Un clic sur un appareil ouvre sa batterie.
+
+Les capteurs **Linkquality** et **Last seen** de Zigbee2MQTT sont désactivés par défaut dans Home Assistant : activez-les sur les appareils qui vous intéressent pour voir le signal et la dernière nouvelle (pour *Last seen*, activez aussi `last_seen` dans les réglages de Zigbee2MQTT). Pour qu'un appareil Zigbee éteint apparaisse **hors ligne**, activez la *disponibilité* (availability) dans Zigbee2MQTT.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title`, `icon`, `icon_color` | En-tête | `Zigbee et piles`, `mdi:zigbee` |
+| `source` | `all` (tous les appareils à pile et les appareils Zigbee) ou `zigbee` (Zigbee seulement) | `all` |
+| `include_phones` | Inclure téléphones et tablettes (Companion App) | `false` |
+| `warn`, `alert` | Pile orange, rouge en dessous de (%) | `30`, `15` |
+| `lqi_warn` | Qualité du lien Zigbee orange en dessous de (0 à 255) | `50` |
+| `silent_hours` | Appareil silencieux sans nouvelle depuis (heures) | `25` |
+| `exclude` | Appareils à ignorer (noms ou entités) | — |
+| `expanded` | Liste « Tout va bien » dépliée à l'ouverture | `false` |
+| `theme` | `v2`, `auto` ou `ha` | `v2` |
+
+```yaml
+type: custom:serveur-ha-zigbee-card
+source: zigbee
+warn: 40
+exclude:
+  - Télécommande invités
+```
 
 ## Carte VPN WireGuard — `custom:serveur-ha-wireguard-card`
 

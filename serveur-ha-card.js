@@ -14,12 +14,14 @@
  *                                services, réseau, redémarrage et arrêt confirmés en deux clics
  *   custom:serveur-ha-dns-card   Filtrage DNS (AdGuard Home ou Pi-hole) : requêtes, part bloquée,
  *                                temps de réponse, protection et réglages, mises à jour
+ *   custom:serveur-ha-zigbee-card  Zigbee et piles : piles à changer, appareils hors ligne,
+ *                                signal faible ou silencieux, pont Zigbee2MQTT
  *
  * Capteurs détectés automatiquement, ou choisis dans la configuration (voir le README).
  */
 
 (() => {
-const CARD_VERSION = "0.15.4";
+const CARD_VERSION = "0.16.0-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2759,6 +2761,241 @@ const PING_STYLE = `<style>
 ha-card > .srv-sec:last-child { margin-bottom: 12px; }
 </style>`;
 
+/* ------------------------------------------------------------ carte Zigbee et piles */
+
+const ZB_DEFAULTS = {
+  title: "Zigbee et piles",
+  icon: "mdi:zigbee",
+  icon_color: "",
+  source: "all", // all : tous les appareils à pile ; zigbee : appareils Zigbee seulement (Zigbee2MQTT, ZHA)
+  include_phones: false, // téléphones et tablettes (Companion App) : leur batterie se recharge, ignorés par défaut
+  warn: 30, alert: 15, // pile orange sous warn %, rouge sous alert %
+  lqi_warn: 50, // qualité du lien Zigbee orange en dessous (0 à 255)
+  silent_hours: 25, // appareil Zigbee « silencieux » sans nouvelle depuis ce nombre d'heures (capteur Last seen)
+  exclude: [], // noms d'appareils ou entités à ignorer
+  expanded: false, // liste « Tout va bien » dépliée à l'ouverture
+  theme: "v2",
+};
+
+/** Appareil Zigbee : intégration ZHA, ou appareil MQTT créé par Zigbee2MQTT (identifiant zigbee2mqtt_…, ou relié au pont). */
+const zbIsZigbee = (dev, devs, platforms) => {
+  if (platforms.has("zha")) return true;
+  if (!platforms.has("mqtt") || !dev) return false;
+  if ((dev.identifiers || []).some((x) => /^zigbee2mqtt_/.test(String(x?.[1] ?? "")))) return true;
+  const via = devs[dev.via_device_id];
+  return !!via && /zigbee2mqtt|bridge|coordinat/i.test(`${via.name || ""} ${via.model || ""}`);
+};
+
+class ServeurHaZigbeeCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("serveur-ha-zigbee-card-editor");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { ...ZB_DEFAULTS, ...(config || {}) };
+    this._map = null;
+    this._sig = null;
+    this._open = !!this._config.expanded;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    if (!this._clicks) {
+      this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        if (ev.target.closest?.("[data-fold]")) {
+          ev.stopPropagation();
+          this._open = !this._open;
+          this._sig = null; this._render(); return;
+        }
+        const el = ev.target.closest?.("[data-entity]");
+        if (el?.dataset.entity) {
+          const e = new Event("hass-more-info", { bubbles: true, composed: true });
+          e.detail = { entityId: el.dataset.entity };
+          this.dispatchEvent(e);
+        }
+      }));
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    if (this._hass?.entities !== hass.entities || this._hass?.devices !== hass.devices) this._map = null;
+    this._hass = hass;
+    this._render();
+  }
+
+  connectedCallback() {
+    clearInterval(this._tick);
+    this._tick = setInterval(() => { this._sig = null; this._render(); }, 60000);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._tick);
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  _st(id) {
+    return id ? this._hass?.states?.[id] : undefined;
+  }
+
+  _num(id) {
+    const s = this._st(id);
+    if (!s || s.state === "unavailable" || s.state === "unknown") return null;
+    const v = Number(s.state);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  /** Appareils suivis : capteur de pile (%), pile faible (binaire), qualité du lien, dernière nouvelle, entités. */
+  _resolve() {
+    if (this._map) return this._map;
+    const hass = this._hass, c = this._config;
+    const reg = hass.entities || {}, devs = hass.devices || {}, areas = hass.areas || {};
+    const list = (v) => (Array.isArray(v) ? v : String(v || "").split(",")).map((x) => String(x).trim().toLowerCase()).filter(Boolean);
+    const ex = list(c.exclude);
+    const byDev = {};
+    for (const [id, st] of Object.entries(hass.states)) {
+      const e = reg[id];
+      if (e?.hidden) continue;
+      const key = e?.device_id || id;
+      const a = st.attributes || {};
+      const domain = id.split(".")[0];
+      const d = (byDev[key] ||= { key, dev: devs[e?.device_id], platforms: new Set(), ids: [], roles: {} });
+      if (e?.platform) d.platforms.add(e.platform);
+      if (e?.device_id) d.ids.push(id);
+      if (domain === "sensor" && a.device_class === "battery" && a.unit_of_measurement === "%") d.roles.battery ||= id;
+      else if (domain === "binary_sensor" && a.device_class === "battery") d.roles.low ||= id;
+      else if (domain === "sensor" && (e?.translation_key === "linkquality" || /_linkquality$/.test(id))) d.roles.lqi ||= id;
+      else if (domain === "sensor" && (e?.translation_key === "last_seen" || /_last_seen$/.test(id))) d.roles.seen ||= id;
+    }
+    const items = [];
+    for (const d of Object.values(byDev)) {
+      if (!d.dev) continue; // entité sans appareil : ignorée
+      const zigbee = zbIsZigbee(d.dev, devs, d.platforms);
+      const phone = d.platforms.has("mobile_app");
+      if (c.source === "zigbee" ? !zigbee : !(zigbee || d.roles.battery || d.roles.low)) continue;
+      if (phone && !c.include_phones) continue;
+      const name = d.dev.name_by_user || d.dev.name || this._st(d.roles.battery)?.attributes?.friendly_name || d.key;
+      if (ex.some((x) => name.toLowerCase() === x || d.ids.includes(x))) continue;
+      const area = areas[d.dev.area_id]?.name || "";
+      items.push({ ...d, name, area, zigbee, model: [d.dev.manufacturer, d.dev.model].filter(Boolean).join(" ") });
+    }
+    // pont Zigbee2MQTT : état de connexion
+    const bridge = Object.keys(hass.states).find((id) => /^binary_sensor\..*zigbee2mqtt.*(bridge_)?connection_state$/.test(id)) || null;
+    this._map = { items, bridge };
+    return this._map;
+  }
+
+  /** État d'un appareil : off (hors ligne), alert, warn, lqi, silent, ok. */
+  _state(it) {
+    const c = this._config;
+    const main = it.roles.battery || it.roles.low || it.ids[0];
+    const known = it.ids.map((id) => this._st(id)).filter(Boolean);
+    const offline = known.length > 0 && known.every((s) => s.state === "unavailable");
+    const bat = this._num(it.roles.battery);
+    const low = this._st(it.roles.low)?.state === "on";
+    const lqi = this._num(it.roles.lqi);
+    const seenS = this._st(it.roles.seen)?.state;
+    const seenT = seenS ? new Date(seenS).getTime() : NaN;
+    const silent = Number.isFinite(seenT) && Date.now() - seenT > (Number(c.silent_hours) || 25) * 3600e3;
+    const alert = Number(c.alert) || 15, warn = Number(c.warn) || 30;
+    const st = offline ? "off" : (bat !== null && bat < alert) || (bat === null && low) ? "alert" : bat !== null && bat < warn ? "warn"
+      : silent ? "silent" : lqi !== null && lqi < (Number(c.lqi_warn) || 50) ? "lqi" : "ok";
+    return { st, bat, low, lqi, seen: Number.isFinite(seenT) ? seenS : null, main, offSince: offline ? known[0].last_changed : null };
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const m = this._resolve();
+    const ids = m.items.flatMap((it) => [it.roles.battery, it.roles.low, it.roles.lqi, it.ids[0]]);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._open}|${Math.floor(Date.now() / 60000)}|${this._st(m.bridge)?.state}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const rows = m.items.map((it) => ({ it, s: this._state(it) }));
+    const by = (k) => rows.filter((r) => r.s.st === k);
+    const off = by("off"), alert = by("alert"), warn = by("warn"), weak = [...by("silent"), ...by("lqi")];
+    const okRows = by("ok").sort((a, b) => (a.s.bat ?? 101) - (b.s.bat ?? 101) || a.it.name.localeCompare(b.it.name, "fr", { numeric: true }));
+    const bats = rows.filter((r) => r.s.bat !== null);
+    const lowest = bats.length ? bats.reduce((a, b) => (b.s.bat < a.s.bat ? b : a)) : null;
+    const zb = rows.filter((r) => r.it.zigbee).length;
+    const nBat = rows.filter((r) => r.it.roles.battery || r.it.roles.low).length;
+
+    const batCls = (v) => (v === null ? "" : v < (Number(c.alert) || 15) ? "bad" : v < (Number(c.warn) || 30) ? "warn" : "ok");
+    const line = ({ it, s }) => {
+      const detail = s.st === "off" ? `hors ligne${s.offSince && since(s.offSince) ? ` depuis ${since(s.offSince)}` : ""}`
+        : s.st === "silent" ? `aucune nouvelle depuis ${since(s.seen)}`
+        : [it.area, s.lqi !== null ? `signal ${fmt(s.lqi, 0)}` : null, s.seen && s.st !== "ok" ? `vu il y a ${since(s.seen)}` : null].filter(Boolean).join(" · ");
+      const val = s.bat !== null ? `<b class="${batCls(s.bat)}">${fmt(s.bat, 0)} %</b>` : s.low ? `<b class="bad">Faible</b>` : it.roles.low ? `<b class="ok">OK</b>` : it.zigbee && !it.roles.battery ? `<small class="zb-mains">secteur</small>` : "";
+      const gauge = s.bat !== null ? `<span class="zb-g ${batCls(s.bat)}"><i style="width:${Math.max(3, Math.min(100, s.bat))}%"></i></span>` : "";
+      const title = [it.name, it.model, it.area, s.bat !== null ? `Pile ${fmt(s.bat, 0)} %` : null, s.lqi !== null ? `Qualité du lien ${fmt(s.lqi, 0)}/255` : null, s.seen ? `Dernière nouvelle il y a ${since(s.seen)}` : null].filter(Boolean).join(" · ");
+      return `<div class="zb-r s-${s.st}" data-entity="${esc(s.main)}" title="${esc(title)}"><i class="zb-d"></i><div class="zb-n"><span>${esc(it.name)}</span><small>${esc(detail)}</small></div>${gauge}${val}</div>`;
+    };
+    const sec = (list, icon, label, cls) => (list.length ? `<div class="srv-sec"><div class="srv-h ${cls}"><ha-icon icon="${icon}"></ha-icon>${label} <small class="pve-n">${list.length}</small></div><div class="zb-list">${list.map(line).join("")}</div></div>` : "");
+
+    const bridgeSt = this._st(m.bridge)?.state;
+    const bridgeOk = bridgeSt === "on" ? true : bridgeSt === "off" ? false : null;
+    const body = !rows.length
+      ? `<div class="empty">Aucun appareil à pile ni appareil Zigbee trouvé<span>La carte lit les capteurs de batterie (en %) de vos appareils, et les appareils Zigbee2MQTT ou ZHA. Vérifiez que leurs capteurs de batterie sont activés.</span></div>`
+      : `<div class="ping-sum">
+          <div class="${off.length ? "bad" : "ok"}"><b>${rows.length - off.length}<small>/${rows.length}</small></b><span>en ligne${zb ? ` · ${zb} Zigbee` : ""}</span></div>
+          <div class="${alert.length ? "bad" : warn.length ? "warn" : "ok"}"><b>${alert.length + warn.length}</b><span>pile${alert.length + warn.length > 1 ? "s" : ""} faible${alert.length + warn.length > 1 ? "s" : ""}</span></div>
+          <div class="${batCls(lowest?.s.bat ?? null)}" ${lowest ? `data-entity="${esc(lowest.it.roles.battery)}"` : ""}><b>${lowest ? `${fmt(lowest.s.bat, 0)}<small> %</small>` : "—"}</b><span>${lowest ? `plus faible : ${esc(lowest.it.name)}` : "aucune pile"}</span></div>
+          <div class="${weak.length ? "warn" : ""}"><b>${weak.length}</b><span>signal faible ou silencieux</span></div>
+        </div>
+        ${bridgeOk === false ? `<div class="zb-alert" data-entity="${esc(m.bridge)}"><ha-icon icon="mdi:zigbee"></ha-icon>Pont Zigbee2MQTT déconnecté : aucun appareil Zigbee ne répond.</div>` : ""}
+        ${sec(off, "mdi:lan-disconnect", "Hors ligne", "ping-bad")}
+        ${sec(alert, "mdi:battery-alert-variant-outline", "Piles à changer", "ping-bad")}
+        ${sec(warn, "mdi:battery-low", "Piles faibles", "zb-warn")}
+        ${sec(weak, "mdi:signal-cellular-1", "Signal faible ou silencieux", "zb-warn")}
+        ${okRows.length ? `<div class="srv-sec"><div class="ping-g ${this._open ? "open" : ""}">
+          <button class="ping-gh" data-fold="ok" aria-expanded="${this._open}"><ha-icon icon="mdi:check-circle-outline"></ha-icon><span class="ping-gl">Tout va bien</span>
+            <span class="ping-dots"></span><b class="ok">${okRows.length}</b><ha-icon class="ping-chev" icon="${this._open ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
+          ${this._open ? `<div class="zb-list zb-in">${okRows.map(line).join("")}</div>` : ""}
+        </div></div>` : ""}`;
+
+    const nbBad = off.length + alert.length;
+    const leds = [
+      bridgeOk !== null ? `<span class="srv-led ${bridgeOk ? "ok" : "bad"}" data-entity="${esc(m.bridge)}"><i></i>Pont ${bridgeOk ? "connecté" : "déconnecté"}</span>` : "",
+      rows.length ? (nbBad ? `<span class="srv-led bad"><i></i>${nbBad} à traiter</span>` : warn.length + weak.length ? `<span class="srv-led upd"><i></i>${warn.length + weak.length} à surveiller</span>` : `<span class="srv-led ok"><i></i>Tout va bien</span>`) : "",
+    ].join("");
+    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${PVE_STYLE}${PING_STYLE}${ZB_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${nbBad || bridgeOk === false ? "srv-alert" : ""}">
+      <header>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:zigbee")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
+          <div><div class="title">${esc(c.title || "Zigbee et piles")}</div><div class="sub">${rows.length} appareil${rows.length > 1 ? "s" : ""}${nBat ? `, ${nBat} à pile` : ""}</div></div></div>
+        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+      </header>
+      ${body}
+    </ha-card>`;
+  }
+}
+
+const ZB_STYLE = `<style>
+.zb-list { display: grid; gap: 4px; }
+.zb-in { padding: 0 8px 8px; }
+.zb-r { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--med-line); background: var(--med-surface); cursor: pointer; min-width: 0; }
+.zb-d { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--med-down); }
+.zb-r.s-off .zb-d, .zb-r.s-alert .zb-d { background: var(--t-red); } .zb-r.s-warn .zb-d, .zb-r.s-lqi .zb-d, .zb-r.s-silent .zb-d { background: #f0a33a; }
+.zb-r.s-off, .zb-r.s-alert { border-color: color-mix(in srgb, var(--t-red) 55%, transparent); }
+.zb-n { flex: 1; display: grid; min-width: 0; }
+.zb-n span { font-size: .8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zb-n small { font-size: .68rem; color: var(--med-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zb-r.s-off small { color: var(--t-red); }
+.zb-g { width: 54px; height: 6px; border-radius: 4px; background: var(--med-line); overflow: hidden; flex: none; }
+.zb-g i { display: block; height: 100%; background: var(--med-down); } .zb-g.warn i { background: #f0a33a; } .zb-g.bad i { background: var(--t-red); }
+.zb-r > b { font-size: .8rem; min-width: 42px; text-align: right; flex: none; } .zb-r > b.ok { color: var(--med-down); } .zb-r > b.warn { color: #f0a33a; } .zb-r > b.bad { color: var(--t-red); }
+.zb-mains { font-size: .68rem; color: var(--med-muted); flex: none; }
+.zb-warn ha-icon { color: #f0a33a; }
+.zb-alert { display: flex; align-items: center; gap: 8px; margin: 10px 12px 0; padding: 9px 12px; border-radius: 12px; font-size: .82rem; cursor: pointer;
+  background: color-mix(in srgb, var(--t-red) 14%, transparent); border: 1px solid var(--t-red); }
+.zb-alert ha-icon { color: var(--t-red); }
+.ping-sum > div[data-entity] { cursor: pointer; }
+</style>`;
+
 /* ------------------------------------------------------------ carte VPN WireGuard (WGDashboard) */
 
 const WG_DEFAULTS = {
@@ -4502,6 +4739,39 @@ const PING_LABELS = {
   theme: "Couleurs de la carte",
 };
 const ServeurHaPingCardEditor = makeEditor(PING_SCHEMA, PING_LABELS, PING_DEFAULTS);
+const ZB_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  { name: "icon_color", selector: { text: {} } },
+  { name: "source", selector: { select: { mode: "dropdown", options: [
+    { value: "all", label: "Tous les appareils à pile, et les appareils Zigbee" },
+    { value: "zigbee", label: "Appareils Zigbee seulement (Zigbee2MQTT, ZHA)" },
+  ] } } },
+  { name: "include_phones", selector: { boolean: {} } },
+  { name: "warn", selector: { number: { min: 5, max: 80, mode: "box", unit_of_measurement: "%" } } },
+  { name: "alert", selector: { number: { min: 1, max: 50, mode: "box", unit_of_measurement: "%" } } },
+  { name: "lqi_warn", selector: { number: { min: 1, max: 255, mode: "box" } } },
+  { name: "silent_hours", selector: { number: { min: 1, max: 720, mode: "box", unit_of_measurement: "h" } } },
+  { name: "exclude", selector: { entity: { multiple: true } } },
+  { name: "expanded", selector: { boolean: {} } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const ZB_LABELS = {
+  title: "Titre",
+  icon: "Icône",
+  icon_color: "Couleur de l'icône",
+  source: "Appareils suivis",
+  include_phones: "Inclure téléphones et tablettes (Companion App)",
+  warn: "Pile orange en dessous de",
+  alert: "Pile rouge (à changer) en dessous de",
+  lqi_warn: "Qualité du lien Zigbee orange en dessous de (0 à 255)",
+  silent_hours: "Appareil silencieux sans nouvelle depuis",
+  exclude: "Entités ou appareils à ignorer",
+  expanded: "Liste « Tout va bien » dépliée à l'ouverture",
+  theme: "Couleurs de la carte",
+};
+const ServeurHaZigbeeCardEditor = makeEditor(ZB_SCHEMA, ZB_LABELS, ZB_DEFAULTS);
 const WG_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -4661,6 +4931,8 @@ if (typeof customElements !== "undefined") {
   define("serveur-ha-asus-card-editor", ServeurHaAsusCardEditor);
   define("serveur-ha-ping-card", ServeurHaPingCard);
   define("serveur-ha-ping-card-editor", ServeurHaPingCardEditor);
+  define("serveur-ha-zigbee-card", ServeurHaZigbeeCard);
+  define("serveur-ha-zigbee-card-editor", ServeurHaZigbeeCardEditor);
   define("serveur-ha-wireguard-card", ServeurHaWireguardCard);
   define("serveur-ha-wireguard-card-editor", ServeurHaWireguardCardEditor);
   define("serveur-ha-glances-card", ServeurHaGlancesCard);
@@ -4726,6 +4998,14 @@ if (typeof customElements !== "undefined") {
       type: "serveur-ha-ping-card",
       name: "Carte Réseau (Ping)",
       description: "Appareils suivis par Ping : en ligne ou hors ligne, latence, gigue et perte de paquets, groupés par type ou par pièce.",
+      preview: true,
+    });
+  }
+  if (!window.customCards.some((c) => c.type === "serveur-ha-zigbee-card")) {
+    window.customCards.push({
+      type: "serveur-ha-zigbee-card",
+      name: "Carte Zigbee et piles",
+      description: "Piles à changer et piles faibles, appareils Zigbee hors ligne, signal faible ou silencieux, état du pont Zigbee2MQTT.",
       preview: true,
     });
   }
