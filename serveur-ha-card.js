@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.17.0-beta.5";
+const CARD_VERSION = "0.17.0-beta.6";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3680,7 +3680,8 @@ class ServeurHaMediaCard extends HTMLElement {
       const players = this._brPlayers(s);
       const now = players.find((id) => /^(playing|paused|buffering)$/.test(this._st(id)?.state || ""));
       const player = players.includes(this._config.browse_player) ? this._config.browse_player : now || players[0];
-      this._br = { srv: s.key, lib: el.dataset.lib, player, stack: [], items: [], filter: "", limit: BROWSE_PAGE, msg: "" };
+      // sans capteurs de bibliothèque : on part de la liste des bibliothèques du serveur
+      this._br = { srv: s.key, lib: el.dataset.lib, player, stack: el.dataset.lib ? [] : [{ id: "", type: "", title: "Bibliothèques" }], items: [], filter: "", limit: BROWSE_PAGE, msg: "" };
       if (!player) { this._br.error = "Aucun lecteur disponible : ouvrez Plex (ou Jellyfin) sur la TV, puis réessayez."; this._brRedraw(); return; }
       this._brLoad(null);
       return;
@@ -3710,7 +3711,7 @@ class ServeurHaMediaCard extends HTMLElement {
 
   _brPanel(s) {
     const b = this._br, players = this._brPlayers(s);
-    const title = b.stack.length ? b.stack[b.stack.length - 1].title : b.lib;
+    const title = b.stack.length ? b.stack[b.stack.length - 1].title : b.lib || "Bibliothèques";
     const vis = this._brVisible(), total = this._brMatches().length;
     const img = (x) => {
       const u = x.thumb ? (x.thumb.startsWith("/") ? this._thumbs?.get(x.thumb) : x.thumb) : "";
@@ -3958,6 +3959,7 @@ class ServeurHaMediaCard extends HTMLElement {
           </div>
           ${now.length ? `<div class="md-ss">${now.map(session).join("")}</div>` : ""}
           ${libs.length ? `<div class="md-libs">${libs.join("")}</div>` : ""}
+          ${!libs.length && canBrowse ? `<button class="md-more ${this._br?.srv === s.key ? "on" : ""}" data-br="lib" data-srv="${esc(s.key)}" data-lib="" aria-expanded="${this._br?.srv === s.key}"><ha-icon icon="mdi:folder-play-outline"></ha-icon>Bibliothèques</button>` : ""}
           ${panel}
           ${clients}
         </div>`;
