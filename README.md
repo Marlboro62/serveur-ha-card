@@ -28,6 +28,9 @@
 
 # Cartes Serveur HA
 
+> **🇬🇧 English version:** [Read the English documentation](README.en.md). All 14 cards support `language: auto` (Home Assistant language), `language: en` (English), or `language: fr` (French). The language can also be changed in the visual editor of every card.
+
+
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz/)
 [![Release](https://img.shields.io/github/v/release/Marlboro62/serveur-ha-card)](https://github.com/Marlboro62/serveur-ha-card/releases)
 
