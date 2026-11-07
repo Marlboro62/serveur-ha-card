@@ -1,10 +1,10 @@
 # Home Assistant Server Cards — English Documentation
 
-[Français](README.md) | **English**
+[Français](README.md) | **English** | [Polski](README.pl.md)
 
 A collection of **14 independent Home Assistant Lovelace cards in one JavaScript resource**. Built in the visual style of MyElectricalData, with a midnight-blue design and optional light or Home Assistant native theming.
 
-**This bilingual build supports French and English.** All cards have a shared `language` option. The default `auto` follows your Home Assistant interface language: French for `fr` locales and English for other locales. You can override the language on each card. The existing French user interface and entity-detection logic are preserved.
+**This build supports French, English and Polish.** All cards have a shared `language` option. The default `auto` follows your Home Assistant interface language: French for `fr` locales, Polish for `pl` locales, and English for other locales. You can override the language on each card. The existing French user interface and entity-detection logic are preserved.
 
 ## Cards
 
@@ -68,9 +68,17 @@ type: custom:serveur-ha-proxmox-card
 language: fr
 ```
 
-- `auto` (or omitting the setting): use the Home Assistant UI language; `fr` and `fr-*` use French, other languages use English as a fallback.
+Force Polish:
+
+```yaml
+type: custom:serveur-ha-card
+language: pl
+```
+
+- `auto` (or omitting the setting): use the Home Assistant UI language; `fr` locales use French, `pl` locales use Polish, and other languages use English as a fallback.
 - `en`: English labels, statuses, tooltips, visual editor, number and date formatting (UK English locale).
 - `fr`: existing French labels, statuses, tooltips, visual editor and number/date formatting.
+- `pl`: Polish labels, statuses, tooltips, visual editor and Polish number/date formatting (`pl-PL`).
 - Each card can use a different language. A change to the Home Assistant interface language is reflected in cards using `auto` on their next update.
 - **Sensor and entity discovery is not tied to the display language**. Existing French and English entity identifiers continue to be recognized.
 
@@ -78,7 +86,7 @@ language: fr
 
 | Option | Description | Default |
 | --- | --- | --- |
-| `language` | `auto`, `en` or `fr` | `auto` |
+| `language` | `auto`, `en`, `fr` or `pl` | `auto` |
 | `theme` | `v2` (midnight blue), `auto` (light/dark with HA), `ha` (use Home Assistant colors) | `v2` |
 | `text_size` | Scale the whole card, from 70% to 200% | `100` |
 | `title` | Custom title (where supported) | Card-specific |

@@ -28,7 +28,7 @@
 
 # Cartes Serveur HA
 
-> **🇬🇧 English version:** [Read the English documentation](README.en.md). All 14 cards support `language: auto` (Home Assistant language), `language: en` (English), or `language: fr` (French). The language can also be changed in the visual editor of every card.
+> **🌍 Traductions :** [Documentation anglaise](README.en.md) · [Dokumentacja polska](README.pl.md). Les 14 cartes prennent en charge `language: auto` (langue de Home Assistant), `language: fr` (français), `language: en` (anglais) et `language: pl` (polonais). Le choix de la langue est également disponible dans chaque éditeur visuel.
 
 
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz/)

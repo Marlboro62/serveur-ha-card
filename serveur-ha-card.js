@@ -21,22 +21,22 @@
  */
 
 (() => {
-const CARD_VERSION = "0.17.1-en-fr";
+const CARD_VERSION = "0.17.2-fr-en-pl";
 
-/* ---------------------------------------------------------------- i18n FR/EN
+/* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
  * text in the card shadow DOM and the Home Assistant editor is localized.
- * 'auto' follows the Home Assistant UI language; other HA languages fall back
- * to English.  The existing French presentation remains the FR source of truth.
+ * 'auto' follows the Home Assistant UI language (fr/pl/en); other
+ * HA languages fall back to English.  The existing French presentation remains the FR source of truth.
  */
 let CURRENT_CARD_LANGUAGE = "fr";
 const cardLanguage = (config, hass) => {
   const explicit = String(config?.language || "auto").toLowerCase().split("-")[0];
-  if (explicit === "fr" || explicit === "en") return explicit;
+  if (["fr", "en", "pl"].includes(explicit)) return explicit;
   const haLanguage = String(hass?.locale?.language || hass?.language || "fr").toLowerCase();
-  return haLanguage.startsWith("fr") ? "fr" : "en";
+  return haLanguage.startsWith("fr") ? "fr" : haLanguage.startsWith("pl") ? "pl" : "en";
 };
-const cardLocale = () => CURRENT_CARD_LANGUAGE === "en" ? "en-GB" : "fr-FR";
+const cardLocale = () => CURRENT_CARD_LANGUAGE === "en" ? "en-GB" : CURRENT_CARD_LANGUAGE === "pl" ? "pl-PL" : "fr-FR";
 
 const EN_TEXT = {
   // Shared card sections, statuses, commands and units
@@ -289,6 +289,682 @@ Object.assign(EN_TEXT, {
   "Temps réel": "Real time", "Requêtes bloquées": "Blocked requests",
 });
 
+/* --------------------------------------------------------- Polish localization
+ * Source language remains French.  Polish presentation is built from the
+ * original French messages; configuration keys, entity IDs and services are
+ * deliberately never translated.
+ */
+const PL_TEXT = {
+  "Serveur": "Serwer",
+  "Serveurs": "Serwery",
+  "Serveur Home Assistant": "Serwer Home Assistant",
+  "Serveur domotique": "Serwer automatyki domowej",
+  "Serveurs multimédia": "Serwery multimediów",
+  "Réseau": "Sieć",
+  "Réseaux": "Sieci",
+  "Réseau local": "Sieć lokalna",
+  "Réception": "Pobieranie",
+  "Envoi": "Wysyłanie",
+  "Envoyé": "Wysłano",
+  "Reçu": "Odebrano",
+  "Débits réseau": "Ruch sieciowy",
+  "Débits": "Transfery",
+  "Débit": "Transfer",
+  "Bande passante": "Przepustowość",
+  "Trafic": "Ruch",
+  "Ressources": "Zasoby",
+  "Informations": "Informacje",
+  "Information": "Informacja",
+  "Adresses IP": "Adresy IP",
+  "Adresse IP": "Adres IP",
+  "Interne": "Wewnętrzny",
+  "Externe": "Zewnętrzny",
+  "IP publique": "Publiczny adres IP",
+  "Connexion": "Połączenie",
+  "Connexions": "Połączenia",
+  "Système": "System",
+  "Systèmes": "Systemy",
+  "Systèmes de fichiers": "Systemy plików",
+  "Disques": "Dyski",
+  "Disque": "Dysk",
+  "Disques USB": "Dyski USB",
+  "Stockage": "Pamięć masowa",
+  "Températures": "Temperatury",
+  "Température": "Temperatura",
+  "Ventilation": "Chłodzenie",
+  "Températures et ventilation": "Temperatury i chłodzenie",
+  "Ventilateur": "Wentylator",
+  "Ventilateurs": "Wentylatory",
+  "Alimentation": "Zasilanie",
+  "Sous-tension détectée : vérifiez l'alimentation": "Wykryto zbyt niskie napięcie: sprawdź zasilanie",
+  "État de l'alimentation sur 24 h": "Stan zasilania z ostatnich 24 godz.",
+  "Historique de l'alimentation sur 24 heures": "Historia zasilania z ostatnich 24 godzin",
+  "Historique indisponible": "Historia niedostępna",
+  "Chargement de l'historique…": "Wczytywanie historii…",
+  "Sauvegardes": "Kopie zapasowe",
+  "Sauvegarde": "Kopia zapasowa",
+  "Sauvegarde…": "Tworzenie kopii zapasowej…",
+  "Réception…": "Odbieranie…",
+  "Restauration…": "Przywracanie…",
+  "Dernière": "Ostatnia",
+  "Dernière sauvegarde": "Ostatnia kopia zapasowa",
+  "Prochaine": "Następna",
+  "État": "Stan",
+  "Statut": "Status",
+  "Version": "Wersja",
+  "Dispo": "Dostępna",
+  "État des disques": "Stan dysków",
+  "Santé": "Kondycja",
+  "Sécurité": "Bezpieczeństwo",
+  "Sécurisé": "Zabezpieczony",
+  "Alerte": "Alarm",
+  "Alertes": "Alarmy",
+  "Normal": "Normalny",
+  "Dégradé": "Zdegradowany",
+  "En panne": "Awaria",
+  "Défaillant": "Uszkodzony",
+  "Avertissement": "Ostrzeżenie",
+  "Attention": "Uwaga",
+  "Initialisé": "Zainicjowany",
+  "Non initialisé": "Niezainicjowany",
+  "Partition système en échec": "Awaria partycji systemowej",
+  "Réparation…": "Naprawianie…",
+  "Sur batterie": "Na baterii",
+  "Secteur": "Zasilanie sieciowe",
+  "Secteur · en charge": "Zasilanie sieciowe · ładowanie",
+  "Batterie faible": "Niski poziom baterii",
+  "Batterie à remplacer": "Wymień baterię",
+  "Surcharge": "Przeciążenie",
+  "Onduleur": "UPS",
+  "Secteurs défectueux": "Uszkodzone sektory",
+  "Erreurs CRC": "Błędy CRC",
+  "Durée de vie": "Żywotność",
+  "Mise à jour": "Aktualizacja",
+  "Mises à jour": "Aktualizacje",
+  "Mises à jour système": "Aktualizacje systemu",
+  "Redémarrage requis": "Wymagane ponowne uruchomienie",
+  "redémarrage requis": "wymagane ponowne uruchomienie",
+  "À jour": "Aktualny",
+  "à jour": "aktualny",
+  "À installer": "Do zainstalowania",
+  "Applications": "Aplikacje",
+  "Application": "Aplikacja",
+  "Détails": "Szczegóły",
+  "Services": "Usługi",
+  "Actions": "Działania",
+  "Réglages": "Ustawienia",
+  "Paramètres": "Ustawienia",
+  "Paquets": "Pakiety",
+  "Paquet": "Pakiet",
+  "Paquets en attente": "Oczekujące pakiety",
+  "Système d'exploitation": "System operacyjny",
+  "Noyau": "Jądro systemu",
+  "Nœuds": "Węzły",
+  "Nœud": "Węzeł",
+  "Invités": "Maszyny wirtualne",
+  "Invité": "Maszyna wirtualna",
+  "VM et conteneurs": "Maszyny wirtualne i kontenery",
+  "Conteneurs": "Kontenery",
+  "Tout démarrer": "Uruchom wszystkie",
+  "Démarrer": "Uruchom",
+  "Redémarrer": "Uruchom ponownie",
+  "Arrêter": "Zatrzymaj",
+  "Éteindre": "Wyłącz",
+  "Allumer": "Włącz",
+  "Veille": "Tryb uśpienia",
+  "Redémarrer le Wi-Fi": "Uruchom ponownie Wi-Fi",
+  "Éteindre les LED": "Wyłącz diody LED",
+  "Allumer les LED": "Włącz diody LED",
+  "Arrêt": "Zatrzymanie",
+  "Lecture": "Odtwarzanie",
+  "Pause": "Pauza",
+  "Reprendre": "Wznów",
+  "Précédent": "Poprzedni",
+  "Suivant": "Następny",
+  "Volume": "Głośność",
+  "Muet": "Wyciszony",
+  "Confirmer": "Potwierdź",
+  "Confirmer ?": "Potwierdzić?",
+  "Annuler": "Anuluj",
+  "Appui long : marche / arrêt": "Przytrzymaj: włącz / wyłącz",
+  "Afficher l'état des disques": "Pokaż stan dysków",
+  "Protégé : pas d'arrêt ni de redémarrage depuis la carte": "Chroniony: nie można zatrzymać ani uruchomić ponownie z karty",
+  "En ligne": "Online",
+  "en ligne": "online",
+  "Hors ligne": "Offline",
+  "hors ligne": "offline",
+  "Connecté": "Połączony",
+  "connecté": "połączony",
+  "Connectés": "Połączeni",
+  "Déconnecté": "Rozłączony",
+  "déconnecté": "rozłączony",
+  "Activé": "Włączony",
+  "activé": "włączony",
+  "Désactivé": "Wyłączony",
+  "désactivé": "wyłączony",
+  "Éteint": "Wyłączony",
+  "éteint": "wyłączony",
+  "Éteinte": "Wyłączona",
+  "Allumé": "Włączony",
+  "allumé": "włączony",
+  "Arrêté": "Zatrzymany",
+  "arrêté": "zatrzymany",
+  "En marche": "Uruchomiony",
+  "en marche": "uruchomiony",
+  "à l'arrêt": "zatrzymany",
+  "En cours": "W toku",
+  "en cours": "w toku",
+  "Inactif": "Bezczynny",
+  "Indisponible": "Niedostępny",
+  "indisponible": "niedostępny",
+  "Inconnu": "Nieznany",
+  "inconnu": "nieznany",
+  "Jamais connecté": "Nigdy niepołączony",
+  "Terminé": "Zakończono",
+  "Échoué": "Niepowodzenie",
+  "Échec": "Błąd",
+  "Bloqué": "Zablokowany",
+  "en erreur": "błąd",
+  "OK": "OK",
+  "Oui": "Tak",
+  "Non": "Nie",
+  "Tout va bien": "Wszystko w porządku",
+  "Tout est traité": "Wszystko obsłużono",
+  "Rien d'ouvert : tout est traité.": "Brak otwartych zgłoszeń: wszystko obsłużono.",
+  "aucun": "brak",
+  "Aucun": "Brak",
+  "Aucune": "Brak",
+  "Tous": "Wszystkie",
+  "Toutes": "Wszystkie",
+  "Filtres": "Filtry",
+  "Filtrage DNS": "Filtrowanie DNS",
+  "Requêtes": "Zapytania",
+  "Bloquées": "Zablokowane",
+  "bloqué": "zablokowany",
+  "Blocage": "Blokowanie",
+  "Blocage désactivé": "Blokowanie wyłączone",
+  "Protection": "Ochrona",
+  "Protection désactivée": "Ochrona wyłączona",
+  "Protection activée": "Ochrona włączona",
+  "Domaines bloqués": "Zablokowane domeny",
+  "Règles": "Reguły",
+  "Transférées": "Przekierowane",
+  "Contrôle parental": "Kontrola rodzicielska",
+  "Navigation sécurisée": "Bezpieczne przeglądanie",
+  "Recherches sécurisées": "Bezpieczne wyszukiwanie",
+  "Temps de réponse": "Czas odpowiedzi",
+  "Réponse": "Odpowiedź",
+  "Internet bloqué": "Internet zablokowany",
+  "Internet coupé": "Internet rozłączony",
+  "Wi-Fi invités": "Sieci Wi-Fi gościnne",
+  "Ports": "Porty",
+  "Ports Ethernet": "Porty Ethernet",
+  "Appareils connectés": "Podłączone urządzenia",
+  "Appareils": "Urządzenia",
+  "Appareil": "Urządzenie",
+  "Dernières connexions": "Ostatnie połączenia",
+  "Connexions récentes": "Ostatnie połączenia",
+  "Tous les appareils": "Wszystkie urządzenia",
+  "Filaire": "Przewodowy",
+  "Aucun réseau invité actif": "Brak aktywnej sieci gościnnej",
+  "Débits par bande": "Transfer według pasma",
+  "Voir tous": "Pokaż wszystkie",
+  "Réduire": "Zwiń",
+  "Déplier": "Rozwiń",
+  "Piles": "Baterie",
+  "Pile": "Bateria",
+  "Piles à changer": "Baterie do wymiany",
+  "Piles faibles": "Słabe baterie",
+  "Piles en bon état": "Baterie w dobrym stanie",
+  "Sur secteur": "Zasilanie sieciowe",
+  "Pont": "Bramka",
+  "Zigbee et piles": "Zigbee i baterie",
+  "Pont Zigbee2MQTT déconnecté : aucun appareil Zigbee ne répond.": "Bramka Zigbee2MQTT jest rozłączona: żadne urządzenie Zigbee nie odpowiada.",
+  "Qualité du lien": "Jakość połączenia",
+  "Dernière nouvelle": "Ostatnio widziany",
+  "À surveiller": "Wymaga uwagi",
+  "à surveiller": "wymaga uwagi",
+  "À traiter": "Wymaga działania",
+  "à traiter": "wymaga działania",
+  "Signal faible": "Słaby sygnał",
+  "Faible": "Słaby",
+  "faible": "słaby",
+  "Silencieux": "Brak aktywności",
+  "Frais": "Chłodny",
+  "Vitesse max": "Maksymalna prędkość",
+  "Économie": "Oszczędny",
+  "Raspberry Pi": "Raspberry Pi",
+  "Suivis": "Monitorowane",
+  "suivis": "monitorowane",
+  "Serveurs Linux": "Serwery Linux",
+  "Mettre à jour": "Aktualizuj",
+  "Installer les mises à jour": "Zainstaluj aktualizacje",
+  "Tous les serveurs sont à jour.": "Wszystkie serwery są aktualne.",
+  "mise à jour en cours…": "trwa aktualizacja…",
+  "tous à jour": "wszystkie aktualne",
+  "tout est à jour": "wszystko jest aktualne",
+  "Sécurité et redémarrage": "Bezpieczeństwo i ponowne uruchomienie",
+  "Dernier handshake": "Ostatni handshake",
+  "Pairs": "Peery",
+  "Pair": "Peer",
+  "pairs connectés": "połączone peery",
+  "Aucun pair connecté": "Brak połączonych peerów",
+  "Handshake": "Handshake",
+  "Jamais": "Nigdy",
+  "Vu": "Widziany",
+  "Point d'accès": "Punkt końcowy",
+  "Reçu par le serveur": "Odebrane przez serwer",
+  "Envoyé par le serveur": "Wysłane przez serwer",
+  "reçu": "odebrano",
+  "envoyé": "wysłano",
+  "Serveurs Glances": "Serwery Glances",
+  "Mémoire": "Pamięć",
+  "RAM libre": "Wolna pamięć RAM",
+  "Processus": "Procesy",
+  "processus": "procesy",
+  "Charge": "Obciążenie",
+  "Médias": "Media",
+  "Multimédia": "Multimedia",
+  "Bibliothèques": "Biblioteki",
+  "Bibliothèque": "Biblioteka",
+  "Lecteurs": "Odtwarzacze",
+  "Lecteur": "Odtwarzacz",
+  "Films": "Filmy",
+  "Séries": "Seriale",
+  "Musique": "Muzyka",
+  "En lecture": "Odtwarzanie",
+  "en lecture": "odtwarzanie",
+  "Rien en lecture": "Nic nie jest odtwarzane",
+  "En pause": "Wstrzymano",
+  "en pause": "wstrzymano",
+  "Lecture en cours": "Teraz odtwarzane",
+  "Épisode": "Odcinek",
+  "Saison": "Sezon",
+  "Artiste": "Artysta",
+  "Titre": "Tytuł",
+  "Résumé": "Opis",
+  "Commandé par": "Sterowany przez",
+  "Durée": "Czas trwania",
+  "Parcourir": "Przeglądaj",
+  "Lire": "Odtwórz",
+  "Lecture aléatoire": "Odtwarzanie losowe",
+  "Minuteur": "Minutnik",
+  "Minuteur de veille": "Minutnik uśpienia",
+  "Aucun lecteur": "Brak odtwarzacza",
+  "Nouvelle": "Nowa",
+  "Nouvelles": "Nowe",
+  "nouvelle": "nowa",
+  "nouvelles": "nowe",
+  "ouverte": "otwarta",
+  "ouvertes": "otwarte",
+  "Ouvert": "Otwarte",
+  "brouillon": "szkic",
+  "activité": "aktywność",
+  "Activité": "Aktywność",
+  "Dépôts": "Repozytoria",
+  "Dépôt": "Repozytorium",
+  "dépôt": "repozytorium",
+  "dépôts": "repozytoria",
+  "Issues et pull requests": "Zgłoszenia i pull requesty",
+  "Actualiser": "Odśwież",
+  "Lu": "Sprawdzono",
+  "à l'instant": "przed chwilą",
+  "Nombre": "Liczba",
+  "Compte GitHub à indiquer": "Wymagane konto GitHub",
+  "En marche d'abord": "Najpierw uruchomione",
+  "Par nom": "Według nazwy",
+  "Par CPU": "Według CPU",
+  "Par RAM": "Według RAM",
+  "Par type d'appareil (d'après le nom)": "Według typu urządzenia (na podstawie nazwy)",
+  "Par pièce": "Według pomieszczenia",
+  "Une seule liste": "Jedna lista",
+  "Téléphones et ordinateurs": "Telefony i komputery",
+  "Imprimantes": "Drukarki",
+  "Domotique": "Automatyka domowa",
+  "Tous les appareils à pile, et les appareils Zigbee": "Wszystkie urządzenia bateryjne i Zigbee",
+  "Appareils Zigbee seulement (Zigbee2MQTT, ZHA)": "Tylko urządzenia Zigbee (Zigbee2MQTT, ZHA)",
+  "Issues seulement": "Tylko zgłoszenia",
+  "Pull requests seulement": "Tylko pull requesty",
+  "Style MyElectricalData (bleu nuit)": "Styl MyElectricalData (granatowy)",
+  "Style MyElectricalData, clair ou sombre selon Home Assistant": "Styl MyElectricalData, jasny lub ciemny zależnie od Home Assistant",
+  "Thème Home Assistant (clair ou sombre)": "Motyw Home Assistant (jasny lub ciemny)",
+  "Limite de GitHub atteinte : nouvel essai à": "Osiągnięto limit GitHub: kolejna próba o",
+  "Erreur": "Błąd",
+  "Erreur de connexion": "Błąd połączenia",
+  "Sélectionner": "Wybierz",
+  "Choisir": "Wybierz",
+  "Historique": "Historia",
+  "Dernier": "Ostatni",
+  "Base de données": "Baza danych",
+  "Certificat SSL": "Certyfikat SSL",
+  "expire le": "wygasa",
+  "expiré": "wygasł",
+  "encore": "pozostało",
+  "installation…": "instalowanie…",
+  "disponible": "dostępna",
+  "sur": "z",
+  "depuis": "od",
+  "il y a": "temu",
+  "dans": "za",
+  "moins d'une minute": "mniej niż minuta",
+  "j": "d",
+  "Go": "GB",
+  "To": "TB",
+  "Mo": "MB",
+  "n°": "nr",
+  "Aucun capteur trouvé": "Nie znaleziono czujników",
+  "Ajoutez l'intégration System Monitor (Paramètres → Appareils et services) ou indiquez vos capteurs dans": "Dodaj integrację System Monitor (Ustawienia → Urządzenia i usługi) lub określ czujniki w",
+  "(voir le README).": "(patrz README).",
+  "Aucun nœud Proxmox VE trouvé": "Nie znaleziono węzłów Proxmox VE",
+  "Ajoutez l'intégration Proxmox VE (Paramètres › Appareils et services), puis rechargez la page.": "Dodaj integrację Proxmox VE (Ustawienia › Urządzenia i usługi), a następnie odśwież stronę.",
+  "Aucun OpenMediaVault trouvé": "Nie znaleziono OpenMediaVault",
+  "Aucun routeur ASUS trouvé": "Nie znaleziono routera ASUS",
+  "Aucun appareil suivi par Ping": "Nie znaleziono urządzeń monitorowanych przez Ping",
+  "Ajoutez l'intégration Ping (ICMP) pour chaque appareil dans Paramètres › Appareils et services, puis rechargez la page.": "Dodaj integrację Ping (ICMP) dla każdego urządzenia w Ustawienia › Urządzenia i usługi, a następnie odśwież stronę.",
+  "Aucun appareil à pile ni appareil Zigbee trouvé": "Nie znaleziono urządzeń bateryjnych ani Zigbee",
+  "Aucun serveur WireGuard trouvé": "Nie znaleziono serwera WireGuard",
+  "Aucun serveur Glances trouvé": "Nie znaleziono serwera Glances",
+  "Aucun serveur multimédia trouvé": "Nie znaleziono serwera multimediów",
+  "Ajoutez l'intégration Plex, Jellyfin ou Emby dans Paramètres › Appareils et services, puis rechargez la page.": "Dodaj integrację Plex, Jellyfin lub Emby w Ustawienia › Urządzenia i usługi, a następnie odśwież stronę.",
+  "Aucun serveur AdGuard Home ni Pi-hole trouvé": "Nie znaleziono serwera AdGuard Home ani Pi-hole",
+  "Ajoutez l'intégration AdGuard Home ou Pi-hole (Paramètres › Appareils et services), puis rechargez la page.": "Dodaj integrację AdGuard Home lub Pi-hole (Ustawienia › Urządzenia i usługi), a następnie odśwież stronę.",
+  "Aucun serveur trouvé": "Nie znaleziono serwera",
+  "Aucune mise à jour": "Brak aktualizacji",
+  "Aucun équipement": "Brak sprzętu",
+  "Cette carte lit les entités": "Ta karta odczytuje encje",
+  "Indiquez-les dans": "Określ je w",
+  "si besoin.": "w razie potrzeby.",
+  "La carte OPNsense a déménagé": "Karta OPNsense została przeniesiona",
+  "Elle a maintenant son propre dépôt : installez « Carte OPNsense » depuis HACS": "Ma teraz własne repozytorium: zainstaluj „Carte OPNsense” przez HACS",
+  "(dépôt personnalisé": "(repozytorium niestandardowe",
+  "puis remplacez": "następnie zamień",
+  "par": "na",
+  "dans ce tableau de bord.": "na tym panelu.",
+  "Les options restent les mêmes.": "Pozostałe opcje są takie same.",
+  "Routeur ASUS": "Router ASUS",
+  "Routeurs ASUS": "Routery ASUS",
+  "publiées en MQTT par": "publikowane przez MQTT przez",
+  "publiées en MQTT": "publikowane przez MQTT",
+  "suivi par Ping": "monitorowane przez Ping",
+  "suivis par Ping": "monitorowane przez Ping",
+  "suivi": "monitorowany",
+  "Aucune entité trouvée": "Nie znaleziono encji",
+  "Aucune entité Synology trouvée": "Nie znaleziono encji Synology",
+  "de Home Assistant (intégration Supervisor). Indiquez-les dans": "z Home Assistant (integracja Supervisor). Określ je w",
+  "et": "i",
+  "si besoin (voir le README).": "w razie potrzeby (patrz README).",
+  "NAS indisponible": "NAS niedostępny",
+  "NAS disponible": "NAS dostępny",
+  "Ajoutez l'intégration Synology DSM, ou indiquez le préfixe de vos entités (": "Dodaj integrację Synology DSM lub podaj prefiks encji (",
+  ") dans la configuration.": ") w konfiguracji.",
+  "Appui long : mode suivant": "Przytrzymaj: następny tryb",
+  "Machine virtuelle": "Maszyna wirtualna",
+  "Conteneur LXC": "Kontener LXC",
+  "Actions du nœud": "Działania węzła",
+  "Redémarrage et arrêt masqués : ce nœud fait tourner Home Assistant.": "Ponowne uruchomienie i wyłączenie są niedostępne: na tym węźle działa Home Assistant.",
+  "cliquez encore pour confirmer": "kliknij ponownie, aby potwierdzić",
+  "Cliquez encore pour couper": "Kliknij ponownie, aby wyłączyć",
+  "Cliquer pour couper": "Kliknij, aby wyłączyć",
+  "Cliquer pour activer": "Kliknij, aby włączyć",
+  "Couper le blocage pendant": "Wyłącz blokowanie na",
+  "les paquets": "pakiety",
+  "Masquer": "Ukryj",
+  "Voir": "Pokaż",
+  "Voir les paquets": "Pokaż pakiety",
+  "Masquer les paquets": "Ukryj pakiety",
+  "Confirmer :": "Potwierdź:",
+  "Installez l'intégration OpenMediaVault (HACS, dépôt SlyBase/homeassistant-openmediavault), ajoutez-la dans Paramètres › Appareils et services, puis rechargez la page.": "Zainstaluj integrację OpenMediaVault (HACS, repozytorium SlyBase/homeassistant-openmediavault), dodaj ją w Ustawienia › Urządzenia i usługi, a następnie odśwież stronę.",
+  "Installez l'intégration AsusRouter (HACS, dépôt Vaskivskyi/ha-asusrouter), ajoutez-la dans Paramètres › Appareils et services, puis rechargez la page.": "Zainstaluj integrację AsusRouter (HACS, repozytorium Vaskivskyi/ha-asusrouter), dodaj ją w Ustawienia › Urządzenia i usługi, a następnie odśwież stronę.",
+  "Voir les appareils": "Pokaż urządzenia",
+  "Voir les dernières connexions": "Pokaż ostatnie połączenia",
+  "Aucun VPN actif": "Brak aktywnego VPN",
+  "Connecté,": "Połączony,",
+  "connecté,": "połączony,",
+  "LAN connectés": "podłączone do LAN",
+  "depuis le démarrage": "od uruchomienia",
+  "Afficher": "Pokaż",
+  "Aucun appareil": "Brak urządzeń",
+  "latence moyenne": "średnie opóźnienie",
+  "perte de paquets": "utrata pakietów",
+  "Tout en ligne": "Wszystkie online",
+  "éteint (volontairement)": "wyłączony (celowo)",
+  "Éteint (volontairement)": "Wyłączony (celowo)",
+  "La carte lit les capteurs de batterie (en %) de vos appareils, et les appareils Zigbee2MQTT ou ZHA. Vérifiez que leurs capteurs de batterie sont activés.": "Karta odczytuje czujniki poziomu baterii (w %) urządzeń oraz urządzenia Zigbee2MQTT lub ZHA. Sprawdź, czy ich czujniki baterii są włączone.",
+  "pile faible": "słaba bateria",
+  "piles faibles": "słabe baterie",
+  "piles": "baterie",
+  "pile": "bateria",
+  "plus faible": "najsłabsza",
+  "aucune pile": "brak baterii",
+  "signal faible ou silencieux": "słaby sygnał lub brak aktywności",
+  "Signal faible ou silencieux": "Słaby sygnał lub brak aktywności",
+  "Dernière nouvelle il y a": "Ostatnio widziany: temu",
+  "Installez l'intégration WGDashboard Monitor (HACS) et ajoutez votre WGDashboard dans Paramètres › Appareils et services, puis rechargez la page.": "Zainstaluj integrację WGDashboard Monitor (HACS), dodaj WGDashboard w Ustawienia › Urządzenia i usługi, a następnie odśwież stronę.",
+  "Handshake il y a": "Ostatni handshake",
+  "Vu il y a": "Ostatnio widziany",
+  "Installez Glances (mode web, glances -w) sur vos serveurs, puis ajoutez l'intégration Glances dans Paramètres › Appareils et services.": "Zainstaluj Glances (tryb web, glances -w) na serwerach, a następnie dodaj integrację Glances w Ustawienia › Urządzenia i usługi.",
+  "Retour à la liste": "Wróć do listy",
+  "Voir la fiche": "Pokaż szczegóły",
+  "Fiche de": "Szczegóły",
+  "Voir le contenu": "Pokaż zawartość",
+  "Ouvrir": "Otwórz",
+  "Retour": "Wróć",
+  "Fermer": "Zamknij",
+  "Rechercher…": "Szukaj…",
+  "Rechercher": "Szukaj",
+  "Rien à afficher.": "Brak danych do wyświetlenia.",
+  "Aucun lecteur allumé : allumez la TV et ouvrez Plex pour lancer une lecture.": "Brak aktywnego odtwarzacza: włącz telewizor i uruchom Plex, aby rozpocząć odtwarzanie.",
+  "Reprendre la lecture (par Plex)": "Wznów odtwarzanie (przez Plex)",
+  "Reprendre la lecture": "Wznów odtwarzanie",
+  "Voir les lecteurs": "Pokaż odtwarzacze",
+  "Veille dans": "Uśpienie za",
+  "Aucune lecture": "Brak odtwarzania",
+  "Volume du lecteur": "Głośność odtwarzacza",
+  "Mise en veille": "Przechodzenie w stan uśpienia",
+  "lecture en cours": "trwa odtwarzanie",
+  "Nombre de lecteurs": "Liczba odtwarzaczy",
+  "(Paramètres → Notifications → MQTT, avec l'option Home Assistant). Indiquez-les dans": "(Ustawienia → Powiadomienia → MQTT, z opcją Home Assistant). Określ je w",
+  "Choisissez le compte ou l'organisation à suivre dans l'éditeur (option": "Wybierz konto lub organizację do monitorowania w edytorze (opcja",
+  "), par exemple": "), na przykład",
+  "Tout marquer comme vu": "Oznacz wszystko jako obejrzane",
+  "Relire maintenant": "Sprawdź ponownie",
+  "commentaire": "komentarz",
+  "commentaires": "komentarze",
+  "Aucune issue": "Brak zgłoszeń",
+  "dépôt personnalisé": "repozytorium niestandardowe",
+  "blocage en cours": "blokowanie aktywne",
+  "Aucun filtre": "Brak filtra",
+  "Dernière analyse": "Ostatnia analiza",
+  "Certificat": "Certyfikat",
+  "Installez": "Zainstaluj",
+  "Ajoutez": "Dodaj",
+  "Enregistrer": "Zapisz",
+  "Télécharger": "Pobierz",
+  "Télécharger les mises à jour": "Pobierz aktualizacje",
+  "en attente": "oczekujące",
+  "à installer": "do zainstalowania",
+  "Source": "Źródło",
+  "Total": "Łącznie",
+  "Batterie": "Bateria",
+  "Sortie": "Wyjście",
+  "Entrée": "Wejście",
+  "Réseaux invités": "Sieci gościnne",
+  "Appareils sans connexion": "Urządzenia bez połączenia",
+  "Événements": "Zdarzenia",
+  "Temps réel": "W czasie rzeczywistym",
+  "Requêtes bloquées": "Zablokowane zapytania",
+  "sous-tension": "zbyt niskie napięcie"
+};
+// Polish inflected phrases with counts (computed before single-word replacements).
+const plCountForm = (n, one, few, many) => {
+  const value = Math.abs(Number(n));
+  return value === 1 ? one : (value % 10 >= 2 && value % 10 <= 4 && (value % 100 < 12 || value % 100 > 14)) ? few : many;
+};
+const PL_PATTERNS = [
+  [/(\d+)\s+appareil(s?)\s+suivi(s?)\s+par Ping/gi, (_, n) => `${n} ${plCountForm(n, 'urządzenie monitorowane', 'urządzenia monitorowane', 'urządzeń monitorowanych')} przez Ping`],
+  [/(\d+)\s+pile(s?) faible(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'słaba bateria', 'słabe baterie', 'słabych baterii')}`],
+  [/(\d+)\s+mises? à jour/gi, (_, n) => `${n} ${plCountForm(n, 'aktualizacja', 'aktualizacje', 'aktualizacji')}`],
+  [/(\d+)\s+nœud(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'węzeł', 'węzły', 'węzłów')}`],
+  [/(\d+)\s+invité(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'maszyna wirtualna', 'maszyny wirtualne', 'maszyn wirtualnych')}`],
+  [/(\d+)\s+serveur(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'serwer', 'serwery', 'serwerów')}`],
+  [/(\d+)\s+appareil(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'urządzenie', 'urządzenia', 'urządzeń')}`],
+  [/(\d+)\s+pair(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'peer', 'peery', 'peerów')}`],
+  [/(\d+)\s+dépôt(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'repozytorium', 'repozytoria', 'repozytoriów')}`],
+  [/(\d+)\s+redémarrage(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'ponowne uruchomienie', 'ponowne uruchomienia', 'ponownych uruchomień')}`],
+  [/(\d+)\s+nouvelle(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'nowa', 'nowe', 'nowych')}`],
+  [/(\d+)\s+ouverte(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'otwarta', 'otwarte', 'otwartych')}`],
+  [/(\d+)\s+heure(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'godzina', 'godziny', 'godzin')}`],
+  [/(\d+)\s+jour(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'dzień', 'dni', 'dni')}`],
+  [/(\d+)\s+semaine(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'tydzień', 'tygodnie', 'tygodni')}`],
+  [/(\d+)\s+minute(s?)/gi, (_, n) => `${n} ${plCountForm(n, 'minuta', 'minuty', 'minut')}`],
+  [/(\d+)\s+j\b/g, '$1 d'],
+  [/(\d+)\s+suivi(s?) par Ping/gi, '$1 monitorowanych przez Ping'],
+  [/(\d+)\s+éteint(s?)/gi, '$1 wyłączonych'],
+  [/(\d+)\s+à pile/gi, '$1 bateryjnych'],
+  [/(\d+)\s+à surveiller/gi, '$1 wymaga uwagi'],
+  [/(\d+)\s+à traiter/gi, '$1 wymaga działania'],
+  [/(\d+)\s+à mettre à jour/gi, '$1 do aktualizacji'],
+  [/(\d+)\s+LAN connectés/gi, '$1 podłączonych do LAN'],
+  [/\bil y a (\d+)\s+(min|h|j)\b/gi, '$1 $2 temu'],
+];
+
+// Localized visual-editor field labels, covering all 14 cards.
+const PL_EDITOR_COMMON = {
+  title: 'Tytuł', subtitle: 'Podtytuł', icon: 'Ikona', icon_color: 'Kolor ikony',
+  theme: 'Motyw kolorystyczny karty', text_size: 'Rozmiar tekstu (100% = normalny)',
+  net_max: 'Maksymalna wartość skali transferu sieciowego',
+  ups_device: 'UPS (urządzenie NUT, opcjonalnie)', ups_name: 'Nazwa UPS (opcjonalnie)',
+  navigation_path: 'Strona otwierana po kliknięciu tytułu (opcjonalnie)',
+  show_info: 'Sekcja informacji', show_resources: 'Sekcja zasobów',
+  show_network: 'Sekcja ruchu sieciowego', show_actions: 'Sekcja działań',
+  show_ups: 'Sekcja UPS (NUT)', show_system: 'Sekcja systemu',
+  show_apps: 'Sekcja aplikacji', show_thermal: 'Sekcja temperatur i chłodzenia',
+  show_storage: 'Sekcja pamięci masowej', show_details: 'Sekcja szczegółów',
+  show_clients: 'Sekcja podłączonych klientów', expanded: 'Domyślnie rozwinięte',
+};
+const PL_EDITOR_LABELS = {
+  SRV: {
+    title: 'Tytuł (np. Raspberry Pi 4 4 GB)',
+    icon: 'Ikona nagłówka (np. mdi:raspberry-pi)', icon_color: 'Kolor ikony (np. #E30B5D)',
+    fan: 'Wentylator: encja fan.* lub czujnik RPM / procent (opcjonalnie)',
+    ram_total: 'Całkowita pamięć RAM dla wskaźnika wolnej RAM (opcjonalnie)',
+    backup_title: 'Tytuł sekcji kopii zapasowych (opcjonalnie)',
+    temp_warn: 'Temperatura: próg ostrzegawczy', temp_alert: 'Temperatura: próg alarmowy',
+    show_power: 'Sekcja zasilania', show_backup: 'Sekcja kopii zapasowych',
+  },
+  MAJ: {
+    database: 'Rozmiar bazy danych (opcjonalnie, domyślnie wykrywany automatycznie)',
+    ssl: 'Ważność certyfikatu SSL (opcjonalnie, domyślnie wykrywana automatycznie)',
+    ssl_warn: 'Ostrzeżenie o certyfikacie SSL poniżej (dni)',
+    ssl_alert: 'Alarm certyfikatu SSL poniżej (dni)',
+    include_hacs: 'Uwzględnij aktualizacje HACS w aplikacjach',
+    include_devices: 'Uwzględnij aktualizacje firmware urządzeń (Zigbee, ESPHome…)',
+    updates_first: 'Najpierw pokazuj aplikacje wymagające aktualizacji',
+    show_system: 'Sekcja aktualizacji systemu',
+  },
+  NAS: {
+    device: 'NAS (urządzenie Synology DSM, opcjonalnie)',
+    title: 'Tytuł (domyślnie nazwa urządzenia)',
+    tracker: 'Tracker sieci NAS dla adresu IP (opcjonalnie)',
+    ip: 'Adres IP NAS lub encja zawierająca adres (puste = tracker lub adres integracji Synology DSM)',
+    volume_name: 'Nazwa woluminu 1 (np. HDD 4 TB)',
+    fan: 'Tryb wentylatora (encja select, opcjonalnie)',
+    shutdown: 'Przycisk wyłączenia NAS (puste = przycisk Stop z Synology DSM)',
+    power_on: 'Włączenie NAS: Wake on LAN, inteligentne gniazdko lub skrypt (puste = wykryj Wake on LAN)',
+    actions: 'Dodatkowe przełączniki i przyciski (gniazdka, mini-PC…)',
+    usb: 'Dyski USB: czujniki procentowego użycia (puste = automatyczne wykrywanie Synology DSM)',
+    show_ups: 'Sekcja UPS',
+  },
+  PVE: {
+    nodes: 'Widoczne węzły (puste = wszystkie)',
+    protect: 'Chronione maszyny: wyłącz zatrzymanie i restart (puste = wykryj VM Home Assistant)',
+    sort: 'Sortowanie maszyn', hide_stopped: 'Ukryj zatrzymane maszyny',
+    show_node: 'Sekcja węzła', show_storage: 'Sekcja dysków', show_guests: 'Sekcja maszyn wirtualnych',
+    show_actions: 'Przyciski uruchamiania, zatrzymania i restartu (potwierdzenie drugim kliknięciem)',
+  },
+  OMV: {
+    device: 'Urządzenie integracji OpenMediaVault (opcjonalnie)', title: 'Tytuł (domyślnie OpenMediaVault)',
+    ip: 'Wyświetlany adres IP (puste = adres integracji)',
+    power_on: 'Włączenie przy wyłączonym OMV: Wake on LAN, gniazdko lub skrypt (opcjonalnie)',
+    show_system: 'Sekcja systemu (czas pracy, wersja, obciążenie, CPU, RAM)',
+    show_storage: 'Sekcja systemów plików', show_disks: 'Sekcja dysków (temperatura, SMART)',
+    show_services: 'Sekcja usług (NFS, SMB, SSH…)',
+    show_actions: 'Przyciski restartu, uśpienia i wyłączenia (potwierdzenie drugim kliknięciem)',
+  },
+  ASUS: {
+    device: 'Router (urządzenie integracji AsusRouter, opcjonalnie)',
+    title: 'Tytuł (domyślnie model routera)',
+    ip: 'Wyświetlany adres IP (puste = adres routera)',
+    wan_max: 'Maksymalna skala transferu internetowego (prędkość łącza)',
+    wifi_max: 'Maksymalna skala transferu Wi-Fi i LAN',
+    latest: 'Liczba ostatnich połączeń (0 = brak)',
+    show_system: 'Sekcja systemu (czas pracy, firmware, obciążenie, CPU, RAM, temperatury)',
+    show_internet: 'Sekcja internetu (połączenie, publiczny adres IP, transfer)',
+    show_wifi: 'Sekcja Wi-Fi (pasma, sieci gościnne, transfer)',
+    show_ports: 'Sekcja portów Ethernet', show_clients: 'Sekcja podłączonych urządzeń',
+    show_vpn: 'Sekcja VPN i kontroli rodzicielskiej',
+    show_actions: 'Przyciski restartu, Wi-Fi i diod LED (potwierdzenie drugim kliknięciem)',
+  },
+  PING: {
+    group_by: 'Grupowanie urządzeń', expanded: 'Rozwiń grupy przy otwieraniu',
+    standby: 'Celowo wyłączone urządzenia (szary status Wyłączony zamiast czerwonego)',
+    standby_groups: 'Grupy celowo wyłączone',
+    warn_ms: 'Próg ostrzegawczy opóźnienia (ms)', alert_ms: 'Próg alarmowy opóźnienia (ms)',
+  },
+  ZB: {
+    source: 'Monitorowane urządzenia', include_phones: 'Uwzględnij telefony i tablety (Companion App)',
+    warn: 'Próg ostrzegawczy niskiego poziomu baterii (%)', alert: 'Próg wymiany baterii (%)',
+    lqi_warn: 'Próg słabej jakości połączenia Zigbee (0–255)',
+    silent_hours: 'Urządzenie uznawane za nieaktywne po (godzinach)',
+    exclude: 'Encje lub urządzenia do pominięcia',
+    expanded: 'Domyślnie rozwiń grupy zdrowych baterii i urządzeń sieciowych',
+  },
+  WG: {
+    expanded: 'Domyślnie rozwiń serwery',
+    show_endpoint: 'Pokazuj publiczne adresy peerów (w przeciwnym razie tylko podpowiedź)',
+    names: 'Nazwy wyświetlane peerów (YAML: oryginalna nazwa: nowa nazwa)',
+  },
+  GL: {
+    expanded: 'Domyślnie rozwiń serwery',
+    temp_warn: 'Ostrzeżenie o temperaturze powyżej', temp_alert: 'Alarm temperatury powyżej',
+  },
+  MEDIA: {
+    show_libraries: 'Pokazuj biblioteki (włącz czujniki w integracji)',
+    show_clients: 'Lista znanych odtwarzaczy (rozwijana)',
+    show_controls: 'Sterowanie odtwarzaniem (pauza, stop, pomijanie…)',
+    show_volume: 'Sterowanie głośnością i wyciszaniem', volume_step: 'Krok zmiany głośności',
+    sleep_timer: 'Czas minutnika uśpienia (minuty)',
+    sleep_player: 'Odtwarzacz dla minutnika uśpienia (puste = wszystkie)',
+    show_details: 'Przycisk szczegółów',
+    browse: 'Kliknięcie biblioteki: przeglądanie zawartości i odtwarzanie',
+    browse_player: 'Domyślny odtwarzacz',
+    control_players: 'Odtwarzacz sterujący urządzeniem (YAML: odtwarzacz Plex: odtwarzacz TV), inaczej dopasowanie po nazwie',
+  },
+  DNS: {
+    title: 'Tytuł (puste = AdGuard Home, Pi-hole lub Filtrowanie DNS)',
+    servers: 'Widoczne serwery w kolejności (puste = wszystkie)',
+    show_stats: 'Zapytania i odsetek zablokowanych', show_details: 'Sekcja szczegółów',
+    show_switches: 'Sekcja ustawień (przełączniki, pauza Pi-hole)',
+    show_update: 'Sekcja aktualizacji',
+  },
+  LNX: {
+    entities: 'Widoczne serwery w kolejności (puste = wszystkie, wykrywane automatycznie)',
+    show_uptodate: 'Pokazuj również aktualne serwery',
+    show_os: 'System operacyjny, jądro i czas pracy',
+    show_packages: 'Lista oczekujących pakietów (rozwijana)',
+    show_actions: 'Przycisk aktualizacji (potwierdzenie drugim kliknięciem)',
+    show_app: 'Stan aktualizacji Linux Update Dashboard',
+  },
+  GH: {
+    user: 'Monitorowane konto lub organizacja GitHub', types: 'Typy wyświetlanych elementów',
+    exclude: 'Repozytoria do pominięcia', repos: 'Monitorowane repozytoria (puste = wszystkie)',
+    hide_bots: 'Ukryj zgłoszenia tworzone przez boty (github-actions, dependabot…)',
+    exclude_authors: 'Autorzy do pominięcia', refresh: 'Sprawdzaj GitHub co (minuty, minimum 5)',
+    max_items: 'Maksymalna liczba elementów', expanded: 'Domyślnie rozwiń repozytoria',
+    show_labels: 'Etykiety (błąd, propozycja funkcji…)',
+  },
+};
+
 // Display fragments with quantities, dates and status descriptions.
 const EN_PATTERNS = [
   [/\b(\d+)\s+appareil(s?)\s+suivi(s?)\s+par Ping\b/gi, (_, n, plural) => `${n} device${plural ? "s" : ""} monitored by Ping`],
@@ -337,8 +1013,27 @@ const translateEnglish = (original) => {
   result = result.replace(EN_FRAGMENT_RULE, (match) => EN_TEXT[match]);
   return result;
 };
+// Whole labels and short fragments are matched longest-first.  Do not touch
+// entity identifiers, attributes that are not human-facing, or script content.
+const PL_KEYS = Object.keys(PL_TEXT).sort((a, b) => b.length - a.length);
+const PL_FRAGMENT_RULE = new RegExp(
+  `(?<![\\p{L}\\p{N}_])(?:${PL_KEYS.filter((key) => key.length > 1).map(safeRegExp).join("|")})(?![\\p{L}\\p{N}_])`, "gu"
+);
+const translatePolish = (original) => {
+  const raw = String(original ?? "");
+  const trimmed = raw.trim();
+  if (!trimmed) return raw;
+  const match = /^(\s*)([\s\S]*?)(\s*)$/.exec(raw);
+  if (Object.prototype.hasOwnProperty.call(PL_TEXT, trimmed))
+    return `${match[1]}${PL_TEXT[trimmed]}${match[3]}`;
+  let result = raw;
+  for (const [regex, fn] of PL_PATTERNS) result = result.replace(regex, fn);
+  return result.replace(PL_FRAGMENT_RULE, (key) => PL_TEXT[key]);
+};
+const translateByLanguage = (original, lang) =>
+  lang === "pl" ? translatePolish(original) : lang === "en" ? translateEnglish(original) : original;
 const localizeCardDOM = (root, lang) => {
-  if (!root || lang !== "en") return;
+  if (!root || lang === "fr") return;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       return /^(STYLE|SCRIPT|CODE|PRE|TEXTAREA)$/i.test(node.parentElement?.tagName || "")
@@ -348,13 +1043,13 @@ const localizeCardDOM = (root, lang) => {
   const textNodes = [];
   while (walker.nextNode()) textNodes.push(walker.currentNode);
   for (const node of textNodes) {
-    const value = translateEnglish(node.nodeValue);
+    const value = translateByLanguage(node.nodeValue, lang);
     if (node.nodeValue !== value) node.nodeValue = value;
   }
   for (const el of root.querySelectorAll("[title],[aria-label],[placeholder]")) {
     for (const attr of ["title", "aria-label", "placeholder"]) {
       if (el.hasAttribute(attr)) {
-        const old = el.getAttribute(attr), next = translateEnglish(old);
+        const old = el.getAttribute(attr), next = translateByLanguage(old, lang);
         if (old !== next) el.setAttribute(attr, next);
       }
     }
@@ -373,7 +1068,7 @@ const enableCardLocalization = (CardType) => {
     CURRENT_CARD_LANGUAGE = lang;
     try {
       const result = originalRender.apply(this, args);
-      if (lang === "en") localizeCardDOM(this.shadowRoot, lang);
+      if (lang !== "fr") localizeCardDOM(this.shadowRoot, lang);
       return result;
     } finally {
       CURRENT_CARD_LANGUAGE = previousLanguage;
@@ -466,6 +1161,10 @@ const relTime = (iso) => {
   const s = (t - Date.now()) / 1000;
   const a = Math.abs(s);
   const txt = a < 90 ? "moins d'une minute" : a < 3600 ? `${Math.round(a / 60)} min` : a < 86400 ? `${Math.round(a / 3600)} h` : `${Math.round(a / 86400)} j`;
+  if (CURRENT_CARD_LANGUAGE === "pl") {
+    const plTxt = a < 90 ? "mniej niż minutę" : a < 3600 ? `${Math.round(a / 60)} min` : a < 86400 ? `${Math.round(a / 3600)} godz.` : `${Math.round(a / 86400)} ${plCountForm(Math.round(a / 86400), "dzień", "dni", "dni")}`;
+    return s >= 0 ? `za ${plTxt}` : `${plTxt} temu`;
+  }
   return CURRENT_CARD_LANGUAGE === "en" ? (s >= 0 ? `in ${a < 90 ? "less than a minute" : txt}` : `${a < 90 ? "less than a minute" : txt} ago`) : s >= 0 ? `dans ${txt}` : `il y a ${txt}`;
 };
 
@@ -475,7 +1174,7 @@ const since = (iso) => {
   if (!Number.isFinite(t)) return null;
   const m = Math.max(0, Math.floor((Date.now() - t) / 60000));
   const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mn = m % 60;
-  return d ? `${d} ${CURRENT_CARD_LANGUAGE === "en" ? "d" : "j"} ${h} h` : h ? `${h} h ${String(mn).padStart(2, "0")} min` : `${mn} min`;
+  return d ? `${d} ${CURRENT_CARD_LANGUAGE === "en" || CURRENT_CARD_LANGUAGE === "pl" ? "d" : "j"} ${h} h` : h ? `${h} h ${String(mn).padStart(2, "0")} min` : `${mn} min`;
 };
 
 /** « 22/10 23:40 », raccourci à « 22/10 » dans les tuiles étroites par le CSS. */
@@ -5556,17 +6255,24 @@ const LANGUAGE_SELECT = {
     { value: "auto", label: "Automatique (langue de Home Assistant)" },
     { value: "fr", label: "Français" },
     { value: "en", label: "Anglais" },
+    { value: "pl", label: "Polonais" },
   ] } },
 };
 const languageSchema = (schema, lang) => [
-  ...schema.map((s) => s.selector?.select?.options && lang === "en"
-    ? { ...s, selector: { select: { ...s.selector.select, options: s.selector.select.options.map((o) => ({
-       ...o, label: translateEnglish(o.label)
-    })) } } } : s),
+  ...schema.map((item) => item.selector?.select?.options && lang !== "fr"
+    ? { ...item, selector: { select: { ...item.selector.select, options: item.selector.select.options.map((option) => ({
+      ...option, label: translateByLanguage(option.label, lang)
+    })) } } } : item),
   { ...LANGUAGE_SELECT, selector: { select: { mode: "dropdown", options: lang === "en" ? [
     { value: "auto", label: "Automatic (Home Assistant language)" },
     { value: "fr", label: "French" },
     { value: "en", label: "English" },
+    { value: "pl", label: "Polish" },
+  ] : lang === "pl" ? [
+    { value: "auto", label: "Automatycznie (język Home Assistant)" },
+    { value: "fr", label: "Francuski" },
+    { value: "en", label: "Angielski" },
+    { value: "pl", label: "Polski" },
   ] : LANGUAGE_SELECT.selector.select.options } } }
 ];
 
@@ -5589,7 +6295,7 @@ const TEXT_SIZE = { name: "text_size", selector: { number: { min: 70, max: 200, 
 const COMMON_LABELS = { text_size: "Taille du texte (100 % = normal)" };
 
 /** Éditeur visuel : formulaire Home Assistant construit à partir du schéma. */
-function makeEditor(schema, labels, defaults, englishLabels = {}) {
+function makeEditor(schema, labels, defaults, englishLabels = {}, polishLabels = {}) {
   const hasDays = schema.some((s) => s.name === "days");
   return class extends HTMLElement {
     setConfig(config) {
@@ -5609,9 +6315,10 @@ function makeEditor(schema, labels, defaults, englishLabels = {}) {
         this._form = document.createElement("ha-form");
         this._form.computeLabel = (field) => {
           const lang = cardLanguage(this._config, this._hass);
-          if (field.name === "language") return lang === "en" ? "Language" : "Langue";
-          return lang === "en" ? (englishLabels[field.name] || EN_EDITOR_COMMON[field.name] || translateEnglish(labels[field.name] || COMMON_LABELS[field.name] || field.name))
-            : (labels[field.name] || COMMON_LABELS[field.name] || field.name);
+          if (field.name === "language") return lang === "en" ? "Language" : lang === "pl" ? "Język" : "Langue";
+          if (lang === "en") return englishLabels[field.name] || EN_EDITOR_COMMON[field.name] || translateEnglish(labels[field.name] || COMMON_LABELS[field.name] || field.name);
+          if (lang === "pl") return polishLabels[field.name] || PL_EDITOR_COMMON[field.name] || translatePolish(labels[field.name] || COMMON_LABELS[field.name] || field.name);
+          return labels[field.name] || COMMON_LABELS[field.name] || field.name;
         };
         this._form.addEventListener("value-changed", (ev) => {
           const v = { ...ev.detail.value };
@@ -5673,7 +6380,7 @@ const SRV_LABELS = {
   show_backup: "Section Sauvegardes",
   theme: "Couleurs de la carte",
 };
-const ServeurHaCardEditor = makeEditor(SRV_SCHEMA, SRV_LABELS, SRV_DEFAULTS, EN_EDITOR_LABELS.SRV);
+const ServeurHaCardEditor = makeEditor(SRV_SCHEMA, SRV_LABELS, SRV_DEFAULTS, EN_EDITOR_LABELS.SRV, PL_EDITOR_LABELS.SRV);
 const MAJ_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "subtitle", selector: { text: {} } },
@@ -5705,7 +6412,7 @@ const MAJ_LABELS = {
   show_apps: "Section Applications",
   theme: "Couleurs de la carte",
 };
-const ServeurHaMajCardEditor = makeEditor(MAJ_SCHEMA, MAJ_LABELS, MAJ_DEFAULTS, EN_EDITOR_LABELS.MAJ);
+const ServeurHaMajCardEditor = makeEditor(MAJ_SCHEMA, MAJ_LABELS, MAJ_DEFAULTS, EN_EDITOR_LABELS.MAJ, PL_EDITOR_LABELS.MAJ);
 const NAS_SCHEMA = [
   { name: "device", selector: { device: { integration: "synology_dsm" } } },
   { name: "title", selector: { text: {} } },
@@ -5757,7 +6464,7 @@ const NAS_LABELS = {
   show_ups: "Section Onduleur",
   theme: "Couleurs de la carte",
 };
-const ServeurHaNasCardEditor = makeEditor(NAS_SCHEMA, NAS_LABELS, NAS_DEFAULTS, EN_EDITOR_LABELS.NAS);
+const ServeurHaNasCardEditor = makeEditor(NAS_SCHEMA, NAS_LABELS, NAS_DEFAULTS, EN_EDITOR_LABELS.NAS, PL_EDITOR_LABELS.NAS);
 const PVE_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -5794,7 +6501,7 @@ const PVE_LABELS = {
   ups_name: "Nom de l'onduleur (facultatif)",
   theme: "Couleurs de la carte",
 };
-const ServeurHaProxmoxCardEditor = makeEditor(PVE_SCHEMA, PVE_LABELS, PVE_DEFAULTS, EN_EDITOR_LABELS.PVE);
+const ServeurHaProxmoxCardEditor = makeEditor(PVE_SCHEMA, PVE_LABELS, PVE_DEFAULTS, EN_EDITOR_LABELS.PVE, PL_EDITOR_LABELS.PVE);
 const OMV_SCHEMA = [
   { name: "device", selector: { device: { integration: "omv" } } },
   { name: "title", selector: { text: {} } },
@@ -5834,7 +6541,7 @@ const OMV_LABELS = {
   ups_name: "Nom de l'onduleur (facultatif)",
   theme: "Couleurs de la carte",
 };
-const ServeurHaOmvCardEditor = makeEditor(OMV_SCHEMA, OMV_LABELS, OMV_DEFAULTS, EN_EDITOR_LABELS.OMV);
+const ServeurHaOmvCardEditor = makeEditor(OMV_SCHEMA, OMV_LABELS, OMV_DEFAULTS, EN_EDITOR_LABELS.OMV, PL_EDITOR_LABELS.OMV);
 const ASUS_SCHEMA = [
   { name: "device", selector: { device: { integration: "asusrouter" } } },
   { name: "title", selector: { text: {} } },
@@ -5872,7 +6579,7 @@ const ASUS_LABELS = {
   show_actions: "Boutons redémarrer, Wi-Fi, LED (deux clics)",
   theme: "Couleurs de la carte",
 };
-const ServeurHaAsusCardEditor = makeEditor(ASUS_SCHEMA, ASUS_LABELS, ASUS_DEFAULTS, EN_EDITOR_LABELS.ASUS);
+const ServeurHaAsusCardEditor = makeEditor(ASUS_SCHEMA, ASUS_LABELS, ASUS_DEFAULTS, EN_EDITOR_LABELS.ASUS, PL_EDITOR_LABELS.ASUS);
 const PING_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -5911,7 +6618,7 @@ const PING_LABELS = {
   alert_ms: "Latence rouge à partir de",
   theme: "Couleurs de la carte",
 };
-const ServeurHaPingCardEditor = makeEditor(PING_SCHEMA, PING_LABELS, PING_DEFAULTS, EN_EDITOR_LABELS.PING);
+const ServeurHaPingCardEditor = makeEditor(PING_SCHEMA, PING_LABELS, PING_DEFAULTS, EN_EDITOR_LABELS.PING, PL_EDITOR_LABELS.PING);
 const ZB_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -5944,7 +6651,7 @@ const ZB_LABELS = {
   expanded: "Groupes « Piles en bon état » et « Sur secteur » dépliés à l'ouverture",
   theme: "Couleurs de la carte",
 };
-const ServeurHaZigbeeCardEditor = makeEditor(ZB_SCHEMA, ZB_LABELS, ZB_DEFAULTS, EN_EDITOR_LABELS.ZB);
+const ServeurHaZigbeeCardEditor = makeEditor(ZB_SCHEMA, ZB_LABELS, ZB_DEFAULTS, EN_EDITOR_LABELS.ZB, PL_EDITOR_LABELS.ZB);
 const WG_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -5964,7 +6671,7 @@ const WG_LABELS = {
   names: "Noms des pairs dans la carte (YAML : nom d'origine: nouveau nom)",
   theme: "Couleurs de la carte",
 };
-const ServeurHaWireguardCardEditor = makeEditor(WG_SCHEMA, WG_LABELS, WG_DEFAULTS, EN_EDITOR_LABELS.WG);
+const ServeurHaWireguardCardEditor = makeEditor(WG_SCHEMA, WG_LABELS, WG_DEFAULTS, EN_EDITOR_LABELS.WG, PL_EDITOR_LABELS.WG);
 const GL_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -5986,7 +6693,7 @@ const GL_LABELS = {
   net_max: "Pleine échelle des barres réseau",
   theme: "Couleurs de la carte",
 };
-const ServeurHaGlancesCardEditor = makeEditor(GL_SCHEMA, GL_LABELS, GL_DEFAULTS, EN_EDITOR_LABELS.GL);
+const ServeurHaGlancesCardEditor = makeEditor(GL_SCHEMA, GL_LABELS, GL_DEFAULTS, EN_EDITOR_LABELS.GL, PL_EDITOR_LABELS.GL);
 const MEDIA_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -6022,7 +6729,7 @@ const MEDIA_LABELS = {
   control_players: "Lecteur qui commande l'appareil (YAML : lecteur Plex: lecteur de la TV), sinon trouvé d'après le nom",
   theme: "Couleurs de la carte",
 };
-const ServeurHaMediaCardEditor = makeEditor(MEDIA_SCHEMA, MEDIA_LABELS, MEDIA_DEFAULTS, EN_EDITOR_LABELS.MEDIA);
+const ServeurHaMediaCardEditor = makeEditor(MEDIA_SCHEMA, MEDIA_LABELS, MEDIA_DEFAULTS, EN_EDITOR_LABELS.MEDIA, PL_EDITOR_LABELS.MEDIA);
 const DNS_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -6046,7 +6753,7 @@ const DNS_LABELS = {
   show_update: "Section Mise à jour",
   theme: "Couleurs de la carte",
 };
-const ServeurHaDnsCardEditor = makeEditor(DNS_SCHEMA, DNS_LABELS, DNS_DEFAULTS, EN_EDITOR_LABELS.DNS);
+const ServeurHaDnsCardEditor = makeEditor(DNS_SCHEMA, DNS_LABELS, DNS_DEFAULTS, EN_EDITOR_LABELS.DNS, PL_EDITOR_LABELS.DNS);
 const LNX_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -6072,7 +6779,7 @@ const LNX_LABELS = {
   show_app: "Mise à jour de Linux Update Dashboard",
   theme: "Couleurs de la carte",
 };
-const ServeurHaLinuxCardEditor = makeEditor(LNX_SCHEMA, LNX_LABELS, LNX_DEFAULTS, EN_EDITOR_LABELS.LNX);
+const ServeurHaLinuxCardEditor = makeEditor(LNX_SCHEMA, LNX_LABELS, LNX_DEFAULTS, EN_EDITOR_LABELS.LNX, PL_EDITOR_LABELS.LNX);
 const GH_SCHEMA = [
   { name: "user", selector: { text: {} } },
   { name: "types", selector: { select: { mode: "dropdown", options: [
@@ -6107,7 +6814,7 @@ const GH_LABELS = {
   show_labels: "Étiquettes (bug, demande…)",
   theme: "Couleurs de la carte",
 };
-const ServeurHaGithubCardEditor = makeEditor(GH_SCHEMA, GH_LABELS, GH_DEFAULTS, EN_EDITOR_LABELS.GH);
+const ServeurHaGithubCardEditor = makeEditor(GH_SCHEMA, GH_LABELS, GH_DEFAULTS, EN_EDITOR_LABELS.GH, PL_EDITOR_LABELS.GH);
 
 /* ---------------------------------------------------------- enregistrement */
 
@@ -6313,9 +7020,26 @@ if (typeof customElements !== "undefined") {
       "serveur-ha-linux-card": ["Linux Server Updates", "Linux Update Dashboard package updates, security updates, reboot status and confirmed installs."],
       "serveur-ha-github-card": ["GitHub Issues & PRs", "Open GitHub issues and pull requests grouped by repository, highlighting new activity."],
     };
+    const catalogPolish = {
+      "serveur-ha-card": ["Serwer Home Assistant", "CPU, temperatury, RAM, dyski, sieć, czas pracy, zasilanie i kopie zapasowe hosta Home Assistant."],
+      "serveur-ha-maj-card": ["Aktualizacje Home Assistant", "Aktualizacje Core, Supervisor, OS i aplikacji, rozmiar bazy danych oraz certyfikat SSL."],
+      "serveur-ha-nas-card": ["NAS Synology", "Woluminy, dyski, kondycja, CPU, RAM, temperatury, wentylatory, sieć i UPS."],
+      "serveur-ha-proxmox-card": ["Proxmox VE", "Węzły, pamięć masowa, maszyny wirtualne, kontenery, aktualizacje i sterowanie zasilaniem."],
+      "serveur-ha-omv-card": ["OpenMediaVault", "System, systemy plików, SMART dysków, usługi, sieć, aktualizacje i zasilanie."],
+      "serveur-ha-asus-card": ["Router ASUS", "Internet, Wi-Fi, porty LAN, klienci, VPN, firmware i ponowne uruchomienie przez AsusRouter."],
+      "serveur-ha-ping-card": ["Sieć (Ping)", "Monitorowanie dostępności urządzeń, opóźnień i utraty pakietów według typu lub pomieszczenia."],
+      "serveur-ha-zigbee-card": ["Zigbee i baterie", "Niskie poziomy baterii, urządzenia Zigbee offline, jakość połączenia i stan bramki Zigbee2MQTT."],
+      "serveur-ha-wireguard-card": ["VPN WireGuard", "Serwery WGDashboard, połączone peery, handshake oraz ruch przychodzący i wychodzący."],
+      "serveur-ha-glances-card": ["Serwery Glances", "CPU, RAM, dyski, temperatury, wentylatory, sieć i procesy z Glances."],
+      "serveur-ha-media-card": ["Serwery multimediów", "Odtwarzanie Plex, Jellyfin i Emby, odtwarzacze, biblioteki i aktualizacje."],
+      "serveur-ha-dns-card": ["Filtrowanie DNS", "Zapytania AdGuard Home i Pi-hole, blokowanie, czas odpowiedzi, ustawienia i aktualizacje."],
+      "serveur-ha-linux-card": ["Aktualizacje serwerów Linux", "Pakiety, aktualizacje bezpieczeństwa, restarty i instalacja przez Linux Update Dashboard."],
+      "serveur-ha-github-card": ["Zgłoszenia i PR GitHub", "Otwarte zgłoszenia i pull requesty w repozytoriach oraz nowe aktywności."],
+    };
+    const catalog = catalogLang.startsWith("pl") ? catalogPolish : catalogEnglish;
     for (const item of window.customCards) {
-      if (!catalogEnglish[item.type]) continue;
-      [item.name, item.description] = catalogEnglish[item.type];
+      if (!catalog[item.type]) continue;
+      [item.name, item.description] = catalog[item.type];
     }
   }
 
