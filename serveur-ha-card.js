@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.17.0-beta.7";
+const CARD_VERSION = "0.17.0-beta.8";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3763,8 +3763,16 @@ class ServeurHaMediaCard extends HTMLElement {
   _deviceOff(id) {
     if (this._st(id)?.state === "unavailable") return true;
     const t = this._twin(id);
-    // « off » est ambigu (l'appli Plex ferme sa session Cast à la pause, TV allumée) : seule l'indisponibilité compte
-    return !!t && /^(unavailable|standby)$/.test(this._st(t)?.state || "");
+    const ts = this._st(t);
+    if (!ts) return false;
+    if (/^(unavailable|standby)$/.test(ts.state)) return true;
+    // « off » est ambigu : l'appli Plex ferme sa session Cast au moment de la pause (TV allumée, à la seconde près) ;
+    // un « off » arrivé bien après la pause veut dire que la TV a été éteinte
+    if (ts.state === "off" && this._st(id)?.state === "paused") {
+      const gap = Date.parse(ts.last_changed || "") - Date.parse(this._st(id)?.last_changed || "");
+      return Number.isFinite(gap) && gap > 60000;
+    }
+    return false;
   }
 
   _controller(id) {
@@ -3851,7 +3859,7 @@ class ServeurHaMediaCard extends HTMLElement {
     if (c.show_controls !== false) for (const id of m.servers.flatMap((s) => s.players)) { const k = this._controller(id); if (k && !ids.includes(k)) ids.push(k); }
     for (const id of m.servers.flatMap((s) => s.players)) { const t = this._twin(id); if (t && !ids.includes(t)) ids.push(t); }
     if (c.sleep_timer) ids.push(c.sleep_timer);
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${[...this._open].join(",")}|${Math.floor(Date.now() / 30000)}|` + ids.map((id) => { const o = this._st(id); return o ? `${o.state}|${o.attributes?.media_title}|${o.attributes?.media_position}|${o.attributes?.volume_level}|${o.attributes?.is_volume_muted}|${o.attributes?.finishes_at}` : "-"; }).join("|");
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${[...this._open].join(",")}|${Math.floor(Date.now() / 30000)}|` + ids.map((id) => { const o = this._st(id); return o ? `${o.state}|${o.last_changed}|${o.attributes?.media_title}|${o.attributes?.media_position}|${o.attributes?.volume_level}|${o.attributes?.is_volume_muted}|${o.attributes?.finishes_at}` : "-"; }).join("|");
     if (sig === this._sig) return;
     this._sig = sig;
 
