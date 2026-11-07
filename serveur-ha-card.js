@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.17.0";
+const CARD_VERSION = "0.18.0-beta.1";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -1014,6 +1014,15 @@ const EN_PATTERNS = [
 ];
 // A string only matches on a full word boundary, so incidental substrings of
 // user-defined names / entity IDs are not rewritten.  Exact matches go first.
+Object.assign(EN_TEXT, {
+  "Entrée": "Input", "Sortie": "Output", "Utilisé": "Used", "Cœurs": "Cores", "noyau": "kernel",
+  "aucune nouvelle depuis": "no news since", "invités en marche": "guests running", "plus faible": "lowest",
+  "Signal faible ou silencieux": "Weak signal or silent", "Coupée": "Down", "secteur": "mains",
+});
+Object.assign(PL_TEXT, {
+  "Utilisé": "Zajęte", "Cœurs": "Rdzenie", "noyau": "jądro", "aucune nouvelle depuis": "brak aktywności od",
+  "invités en marche": "uruchomionych", "Coupée": "Rozłączone", "secteur": "sieć",
+});
 const EN_KEYS = Object.keys(EN_TEXT).sort((a, b) => b.length - a.length);
 const safeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const EN_FRAGMENT_RULE = new RegExp(
@@ -1102,7 +1111,7 @@ const uiText = (key, lang = CURRENT_CARD_LANGUAGE) => {
 
 const CONTEXT_TEXT = {
   pl: {
-    ServeurHaNasCard: { Volume: "Wolumin", Volumes: "Woluminy", Invité: "Gość", Invités: "Goście" },
+    ServeurHaNasCard: { Volume: "Wolumin", Volumes: "Woluminy", Invité: "Gość", Invités: "Goście", Silencieux: "Cichy" },
     ServeurHaOmvCard: { Volume: "Wolumin", Volumes: "Woluminy" },
     ServeurHaMediaCard: { Volume: "Głośność", Invité: "Gość", Invités: "Goście" },
     ServeurHaAsusCard: { Invité: "Gość", Invités: "Goście" },
@@ -1149,6 +1158,20 @@ const COMMON_MESSAGE_KEYS = Object.freeze({
   "Alerte": "state.alert", "Danger": "state.danger",
 });
 const trLabel = (label) => COMMON_MESSAGE_KEYS[label] ? uiText(COMMON_MESSAGE_KEYS[label]) : scopedText(label);
+// Traduction exacte d'un libellé de la carte : uniquement si le texte entier est
+// une clé du dictionnaire. Aucun remplacement partiel, donc un nom saisi par
+// l'utilisateur ou venant de Home Assistant n'est jamais découpé.
+const exactLabel = (text) => {
+  const lang = CURRENT_CARD_LANGUAGE;
+  if (lang === "fr" || typeof text !== "string") return text;
+  const raw = text.trim();
+  if (!raw) return text;
+  const over = CONTEXT_TEXT[lang]?.[CURRENT_CARD_CONTEXT];
+  if (over && Object.prototype.hasOwnProperty.call(over, raw)) return text.replace(raw, over[raw]);
+  if (COMMON_MESSAGE_KEYS[raw]) return text.replace(raw, uiText(COMMON_MESSAGE_KEYS[raw], lang));
+  const dict = lang === "pl" ? PL_TEXT : EN_TEXT;
+  return Object.prototype.hasOwnProperty.call(dict, raw) ? text.replace(raw, dict[raw]) : text;
+};
 const STATIC_TEMPLATE_CACHE = new WeakMap();
 const STATIC_STRING_CACHE = new Map();
 const PLACEHOLDER = /\uE000(\d+)\uE001/g;
@@ -1256,6 +1279,8 @@ const enableCardLocalization = (CardType) => {
 
 /* ------------------------------------------------------------- affichage */
 
+/** Unités d'octets : Go, To, Mo en français ; GB, TB, MB en anglais et en polonais. */
+const byteUnit = (u) => CURRENT_CARD_LANGUAGE === "fr" ? u : ({ Ko: "kB", Mo: "MB", Go: "GB", To: "TB" }[u] || u);
 const fmt = (n, digits = 1) =>
   n === null || n === undefined
     ? "—"
@@ -1368,6 +1393,33 @@ const countUi = (count, kind) => {
     : CURRENT_CARD_LANGUAGE === "pl" ? `${count} ${plWord("serwer", "serwery", "serwerów")}`
     : `${count} serveur${count > 1 ? "s" : ""}`;
 };
+/* Nombre + mot accordé dans la langue de la carte. Le pluriel n'est jamais
+ * fabriqué en collant un « s » au mot traduit. Polonais : 3 formes (1, 2-4, 5+). */
+const COUNT_WORDS = Object.freeze({
+  jour: { fr: ["jour", "jours"], en: ["day", "days"], pl: ["dzień", "dni", "dni"] },
+  maj: { fr: ["mise à jour", "mises à jour"], en: ["update", "updates"], pl: ["aktualizacja", "aktualizacje", "aktualizacji"] },
+  noeud: { fr: ["nœud", "nœuds"], en: ["node", "nodes"], pl: ["węzeł", "węzły", "węzłów"] },
+  appareil: { fr: ["appareil", "appareils"], en: ["device", "devices"], pl: ["urządzenie", "urządzenia", "urządzeń"] },
+  actif: { fr: ["actif", "actifs"], en: ["active", "active"], pl: ["aktywny", "aktywne", "aktywnych"] },
+  eteint: { fr: ["éteint", "éteints"], en: ["off", "off"], pl: ["wyłączony", "wyłączone", "wyłączonych"] },
+  pile: { fr: ["pile faible", "piles faibles"], en: ["low battery", "low batteries"], pl: ["słaba bateria", "słabe baterie", "słabych baterii"] },
+  serveur: { fr: ["serveur", "serveurs"], en: ["server", "servers"], pl: ["serwer", "serwery", "serwerów"] },
+  connecte: { fr: ["connecté", "connectés"], en: ["connected", "connected"], pl: ["połączony", "połączone", "połączonych"] },
+  disponible: { fr: ["disponible", "disponibles"], en: ["available", "available"], pl: ["dostępny", "dostępne", "dostępnych"] },
+  commentaire: { fr: ["commentaire", "commentaires"], en: ["comment", "comments"], pl: ["komentarz", "komentarze", "komentarzy"] },
+  a_maj: { fr: ["à mettre à jour", "à mettre à jour"], en: ["to update", "to update"], pl: ["do aktualizacji", "do aktualizacji", "do aktualizacji"] },
+  securite: { fr: ["sécurité", "sécurité"], en: ["security update", "security updates"], pl: ["aktualizacja bezpieczeństwa", "aktualizacje bezpieczeństwa", "aktualizacji bezpieczeństwa"] },
+  redemarrage: { fr: ["redémarrage", "redémarrages"], en: ["reboot needed", "reboots needed"], pl: ["wymagany restart", "wymagane restarty", "wymaganych restartów"] },
+  injoignable: { fr: ["injoignable", "injoignables"], en: ["unreachable", "unreachable"], pl: ["nieosiągalny", "nieosiągalne", "nieosiągalnych"] },
+  retenue: { fr: ["retenue", "retenues"], en: ["held back", "held back"], pl: ["wstrzymana", "wstrzymane", "wstrzymanych"] },
+});
+const countWord = (n, key) => {
+  const forms = COUNT_WORDS[key][CURRENT_CARD_LANGUAGE] || COUNT_WORDS[key].fr;
+  if (CURRENT_CARD_LANGUAGE === "pl") return plCountForm(n, forms[0], forms[1], forms[2]);
+  if (CURRENT_CARD_LANGUAGE === "en") return Math.abs(Number(n)) === 1 ? forms[0] : forms[1];
+  return Number(n) > 1 ? forms[1] : forms[0];
+};
+const countText = (n, key) => `${n} ${countWord(n, key)}`;
 // Common relative-time formatting across all cards. For English and Polish
 // Intl.RelativeTimeFormat handles word order and grammar. Retain the compact
 // original French phrasing (including its additional minute precision).
@@ -1652,8 +1704,8 @@ class ServeurHaCard extends HTMLElement {
     const leds = [dot(powerOk, trLabel("Alimentation"), m.power), dot(fanOk, trLabel("Ventilateur"), m.fan), dot(bOk, "Backup", m.backup_event || m.backup_last || m.backup_state)].join("");
 
     // --- sections
-    const sec = (icon, title, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${title}</div>${body}</div>` : "");
-    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => localizeTemplate`<div class="srv-kv"><span>${k}</span><b>${esc(v)}</b></div>`).join("");
+    const sec = (icon, title, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(title)}</div>${body}</div>` : "");
+    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => localizeTemplate`<div class="srv-kv"><span>${exactLabel(k)}</span><b>${esc(exactLabel(v))}</b></div>`).join("");
 
     const infoTiles = [
       ip || ipExt ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(m.ip || m.ip_ext)}"><div class="tile-l"><ha-icon icon="mdi:ip-network-outline"></ha-icon>Adresses IP</div>${kv([[trLabel("Interne"), ip ?? "—"], [trLabel("Externe"), ipExt ?? (m.ip_ext ? trLabel("indisponible") : null)]])}</div>` : "",
@@ -1665,7 +1717,7 @@ class ServeurHaCard extends HTMLElement {
     ].filter(Boolean);
 
     const gauge = (id, icon, label, v, unit, lvl, pct, sub, wide) => (v === null ? "" : localizeTemplate`<div class="srv-g${wide ? " srv-wide" : ""}" data-entity="${esc(id)}">
-        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${v}<small>${unit}</small></b></div>
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(label)}</span><b>${v}<small>${unit}</small></b></div>
         <div class="g-bar ${lvl}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const tempPct = temp === null ? 0 : (temp / Math.max(c.temp_alert + 10, 1)) * 100;
     const ramFreeUnit = this._unit(m.ram_free, "MiB");
@@ -1956,7 +2008,7 @@ class ServeurHaMajCard extends HTMLElement {
       const cls = d === null ? "" : d >= c.ssl_warn ? "ok" : d >= c.ssl_alert ? "warn" : "bad";
       const date = d === null ? "—" : new Date(ssl.state).toLocaleDateString(cardLocale(), { day: "2-digit", month: "2-digit", year: "2-digit" });
       info.push(localizeTemplate`<div class="tile maj-info ${cls}" data-entity="${esc(m.ssl)}"><ha-icon icon="mdi:certificate"></ha-icon><div><div class="tile-l">Certificat SSL</div>
-        <div class="maj-iv">${d === null ? "indisponible" : d < 0 ? trLabel("expiré") : `encore ${d} jour${d > 1 ? "s" : ""}`}</div><div class="tile-n">expire le ${date}</div></div></div>`);
+        <div class="maj-iv">${d === null ? trLabel("indisponible") : d < 0 ? trLabel("expiré") : CURRENT_CARD_LANGUAGE === "en" ? `${countText(d, "jour")} left` : CURRENT_CARD_LANGUAGE === "pl" ? `jeszcze ${countText(d, "jour")}` : `encore ${countText(d, "jour")}`}</div><div class="tile-n">${trLabel("expire le")} ${date}</div></div></div>`);
     }
 
     // Applications
@@ -1974,11 +2026,11 @@ class ServeurHaMajCard extends HTMLElement {
       </div>`;
     });
 
-    const sec = (icon, title, right, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${title}${right ? localizeTemplate`<span class="maj-r">${right}</span>` : ""}</div>${body}</div>` : "");
+    const sec = (icon, title, right, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(title)}${right ? localizeTemplate`<span class="maj-r">${right}</span>` : ""}</div>${body}</div>` : "");
     const body = [
       c.show_system !== false ? sec("mdi:update", trLabel("Mises à jour système"), "", sysTiles.length ? localizeTemplate`<div class="maj-grid3">${sysTiles.join("")}</div>` : "") : "",
       c.show_info !== false ? sec("mdi:information-outline", "Informations", "", info.length ? localizeTemplate`<div class="maj-grid2">${info.join("")}</div>` : "") : "",
-      c.show_apps !== false ? sec("mdi:application-outline", "Applications", apps.length ? (nUpd ? localizeTemplate`<b class="maj-cnt">${nUpd} mise${nUpd > 1 ? "s" : ""} à jour</b>` : trLabel("tout est à jour")) : "", appTiles.length ? localizeTemplate`<div class="maj-apps">${appTiles.join("")}</div>` : "") : "",
+      c.show_apps !== false ? sec("mdi:application-outline", "Applications", apps.length ? (nUpd ? `<b class="maj-cnt">${countText(nUpd, "maj")}</b>` : trLabel("tout est à jour")) : "", appTiles.length ? localizeTemplate`<div class="maj-apps">${appTiles.join("")}</div>` : "") : "",
     ].join("");
 
     const sub = [c.subtitle, ver(core) ? `Core ${ver(core)}` : null].filter(Boolean).map(esc).join(" · ");
@@ -2126,7 +2178,7 @@ const upsBlock = (card, u, c) => {
   const ok = !u.status && !u.status_raw ? null : (raw ? /\bOL\b/.test(raw) && !/\b(OB|LB|RB|OVER)\b/.test(raw) : /online|en ligne/i.test(st || ""));
   const bar = (id, icon, label, max, cls) => {
     const v = card._num(id);
-    return v === null ? "" : localizeTemplate`<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> ${esc(card._unit(id, ""))}</small></b></div>
+    return v === null ? "" : localizeTemplate`<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(label)}</span><b>${fmt(v, 0)}<small> ${esc(card._unit(id, ""))}</small></b></div>
       <div class="g-bar"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div></div>`;
   };
   const batt = card._num(u.battery);
@@ -2373,8 +2425,8 @@ class ServeurHaNasCard extends HTMLElement {
     const title = c.title || dev?.name_by_user || dev?.name || "NAS";
     const sub2 = [ip, vol1State ? `${uiText("storage.volume")} ${fr(vol1State).toLowerCase()}` : null].filter(Boolean).join(" · ");
 
-    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
-    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => localizeTemplate`<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
+    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(t)}</div>${body}</div>` : "");
+    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => localizeTemplate`<div class="srv-kv"><span>${exactLabel(k)}</span><b class="${cls || ""}">${esc(exactLabel(v))}</b></div>`).join("");
 
     // --- informations
     const boot = this._txt(m.last_boot);
@@ -2398,7 +2450,7 @@ class ServeurHaNasCard extends HTMLElement {
       ? localizeTemplate`<div class="nas-panel">${m.drives.map((d) => {
         const flag = (id) => { const s = this._st(id)?.state; return s === undefined ? null : s === "off" ? ["OK", "ok"] : [trLabel("Alerte"), "bad"]; };
         const bad = flag(d.drv_bad), life = flag(d.drv_life);
-        return localizeTemplate`<div class="nas-drv" data-entity="${esc(d.drv_status || d.drv_smart || "")}"><div class="nas-drv-h"><ha-icon icon="mdi:harddisk"></ha-icon>Disque ${d.n}</div>
+        return localizeTemplate`<div class="nas-drv" data-entity="${esc(d.drv_status || d.drv_smart || "")}"><div class="nas-drv-h"><ha-icon icon="mdi:harddisk"></ha-icon>${trLabel("Disque")} ${d.n}</div>
           ${kv([[trLabel("État"), fr(this._txt(d.drv_status)), okWord(this._txt(d.drv_status)) ? "ok" : "bad"], ["SMART", fr(this._txt(d.drv_smart)), okWord(this._txt(d.drv_smart)) ? "ok" : "bad"],
             [trLabel("Secteurs défectueux"), bad?.[0] ?? null, bad?.[1]], [trLabel("Durée de vie"), life?.[0] ?? null, life?.[1]],
             [trLabel("Température"), this._num(d.drv_temp) !== null ? `${fmt(this._num(d.drv_temp), 0)} ${this._unit(d.drv_temp, "°C")}` : null]])}</div>`;
@@ -2407,7 +2459,7 @@ class ServeurHaNasCard extends HTMLElement {
 
     // --- ressources
     const gauge = (id, icon, label, v, digits, unit, lvl, sub) => (v === null ? "" : localizeTemplate`<div class="srv-g" data-entity="${esc(id)}">
-        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(label)}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
         <div class="g-bar ${lvl}"><i style="width:${Math.max(0, Math.min(100, v))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const res = [
       gauge(m.cpu, "mdi:cpu-64-bit", "CPU", this._num(m.cpu), 0, " %", level(this._num(m.cpu), 70, 90)),
@@ -2424,10 +2476,10 @@ class ServeurHaNasCard extends HTMLElement {
       return localizeTemplate`<div class="tile srv-b nas-th ${cls}" data-entity="${esc(id)}"><ha-icon icon="${esc(icon)}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${fmt(v, 0)} ${esc(this._unit(id, "°C"))}</div></div>`;
     };
     const fanSt = this._txt(m.fan);
-    const fanFr = fanSt ? ({ quiet: "Silencieux", cool: "Frais", full_speed: "Vitesse max", full: "Vitesse max", low_power: "Économie" }[fanSt] || fanSt) : null;
+    const fanFr = fanSt ? (((f) => f ? trLabel(f) : fanSt)({ quiet: "Silencieux", cool: "Frais", full_speed: "Vitesse max", full: "Vitesse max", low_power: "Économie" }[fanSt])) : null;
     const thermal = [
       tTile(m.temperature, "mdi:nas", "NAS"),
-      ...m.drives.map((d) => tTile(d.drv_temp, "mdi:harddisk", `Disque ${d.n}`)),
+      ...m.drives.map((d) => tTile(d.drv_temp, "mdi:harddisk", `${trLabel("Disque")} ${d.n}`)),
       m.fan ? localizeTemplate`<div class="tile srv-b" data-entity="${esc(m.fan)}" data-hold="${esc(m.fan)}" title="Appui long : mode suivant"><ha-icon icon="${esc(fanSt === "quiet" ? "mdi:fan-speed-1" : fanSt === "cool" ? "mdi:fan-speed-2" : "mdi:fan-speed-3")}"></ha-icon><div class="tile-l">Ventilateur</div><div class="srv-bv nas-sm">${esc(fanFr || "—")}</div></div>` : "",
     ].filter(Boolean);
 
@@ -2475,7 +2527,7 @@ class ServeurHaNasCard extends HTMLElement {
     if (Object.keys(m.ups).length) {
       const bar = (id, icon, label, max, cls) => {
         const v = this._num(id);
-        return v === null ? "" : localizeTemplate`<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> ${esc(this._unit(id, ""))}</small></b></div>
+        return v === null ? "" : localizeTemplate`<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(label)}</span><b>${fmt(v, 0)}<small> ${esc(this._unit(id, ""))}</small></b></div>
           <div class="g-bar"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div></div>`;
       };
       const batt = this._num(m.ups.battery);
@@ -2600,7 +2652,7 @@ const pveState = (s) => {
   const state = PVE_STATE[String(s ?? "unknown").toLowerCase()];
   return state ? [uiText(state[0]), state[1]] : [String(s), "off"];
 };
-const gib = (v) => (v === null ? null : `${fmt(v, v < 10 ? 1 : 0)} Go`);
+const gib = (v) => (v === null ? null : `${fmt(v, v < 10 ? 1 : 0)} ${byteUnit("Go")}`);
 /** Invité protégé par défaut : la VM qui fait tourner Home Assistant (nom contenant haos ou home assistant). */
 const PVE_PROTECT = /haos|home[\s_-]?assistant|hassos/i;
 
@@ -2820,9 +2872,9 @@ class ServeurHaProxmoxCard extends HTMLElement {
       ups.ok === null ? "" : led(ups.ok, "UPS", m.ups.status || m.ups.status_raw),
     ].join("") : "";
 
-    const sec = (icon, t, body, extra = "") => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}${extra}</div>${body}</div>` : "");
+    const sec = (icon, t, body, extra = "") => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(t)}${extra}</div>${body}</div>` : "");
     const gauge = (id, icon, label, v, sub, warn = 75, alert = 90) => (v === null ? "" : localizeTemplate`<div class="srv-g" data-entity="${esc(id)}">
-        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> %</small></b></div>
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(label)}</span><b>${fmt(v, 0)}<small> %</small></b></div>
         <div class="g-bar ${level(v, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, v))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const btn = (id, icon, label, cls = "") => {
       if (!id || !this._st(id)) return "";
@@ -2910,7 +2962,7 @@ class ServeurHaProxmoxCard extends HTMLElement {
     this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:server-network")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
-          <div><div class="title">${esc(c.title || "Proxmox")}</div><div class="sub">${m.nodes.length ? localizeTextTemplate`${m.nodes.filter((n) => !n.other).length} nœud${m.nodes.filter((n) => !n.other).length > 1 ? "s" : ""} · ${up}/${allGuests.length} invités en marche` : "Proxmox VE"}</div></div></div>
+          <div><div class="title">${esc(c.title || "Proxmox")}</div><div class="sub">${m.nodes.length ? `${countText(m.nodes.filter((n) => !n.other).length, "noeud")} · ${up}/${allGuests.length} ${trLabel("invités en marche")}` : "Proxmox VE"}</div></div></div>
         ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
       ${body}
@@ -3155,17 +3207,17 @@ class ServeurHaOmvCard extends HTMLElement {
     if (sig === this._sig) return;
     this._sig = sig;
 
-    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
-    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => localizeTemplate`<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
+    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(t)}</div>${body}</div>` : "");
+    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => localizeTemplate`<div class="srv-kv"><span>${exactLabel(k)}</span><b class="${cls || ""}">${esc(exactLabel(v))}</b></div>`).join("");
     const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : localizeTemplate`<div class="srv-g" data-entity="${esc(id)}">
-        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(label)}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
         <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const btn = (id, icon, label, cls = "") => {
       if (!id || !this._st(id)) return "";
       const armed = this._armed === id;
       return localizeTemplate`<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${esc(armed ? "mdi:check-bold" : icon)}"></ha-icon>${armed ? localizeStaticHTML("<span>Confirmer</span>") : ""}</button>`;
     };
-    const size = (id) => { const v = this._num(id); if (v === null) return null; const u = this._unit(id, "GB"); return v >= 1000 && /^GB$/i.test(u) ? `${fmt(v / 1000, 2)} To` : `${fmt(v, v < 10 ? 1 : 0)} ${u.replace(/^GB$/i, "Go").replace(/^TB$/i, "To").replace(/^MB$/i, "Mo")}`; };
+    const size = (id) => { const v = this._num(id); if (v === null) return null; const u = this._unit(id, "GB"); return v >= 1000 && /^GB$/i.test(u) ? `${fmt(v / 1000, 2)} ${byteUnit("To")}` : `${fmt(v, v < 10 ? 1 : 0)} ${byteUnit(u.replace(/^GB$/i, "Go").replace(/^TB$/i, "To").replace(/^MB$/i, "Mo"))}`; };
 
     const reach = this._st(r.reachable);
     const online = reach ? reach.state === "on" : this._txt(r.cpu) !== null;
@@ -3185,7 +3237,7 @@ class ServeurHaOmvCard extends HTMLElement {
     const led = (ok, label, id, cls = "") => localizeTemplate`<span class="srv-led ${ok ? "ok" : "bad"} ${cls}" data-entity="${esc(id || "")}"><i></i>${label}</span>`;
     const leds = m.hubId ? [
       led(online, "OMV", r.reachable || r.cpu),
-      m.disks.length ? led(!disksBad, "Disques", m.disks[0].roles.smart || m.disks[0].roles.temp) : "",
+      m.disks.length ? led(!disksBad, trLabel("Disques"), m.disks[0].roles.smart || m.disks[0].roles.temp) : "",
       needUpd ? localizeTemplate`<span class="srv-led upd" data-entity="${esc(r.update || r.pkg || "")}"><i></i>Mise à jour</span>` : "",
       rebootReq ? localizeTemplate`<span class="srv-led upd" data-entity="${esc(r.reboot_req)}"><i></i>Redémarrage requis</span>` : "",
       ups.ok === null ? "" : led(ups.ok, "UPS", m.ups.status || m.ups.status_raw),
@@ -3210,7 +3262,7 @@ class ServeurHaOmvCard extends HTMLElement {
             <div class="omv-load">${loads.map((v, i) => localizeTemplate`<span><b>${v === null ? "—" : fmt(v, 2)}</b><small>${[1, 5, 15][i]} min</small></span>`).join("")}</div></div>` : "",
         ].filter(Boolean);
         const memTotal = this._num(r.mem_total), memUsed = this._num(r.mem_used), memPct = this._num(r.mem) ?? (memUsed !== null && memTotal ? (memUsed / memTotal) * 100 : null);
-        const mo = (v) => (v === null ? null : v >= 1024 ? `${fmt(v / 1024, 1)} Go` : `${fmt(v, 0)} Mo`);
+        const mo = (v) => (v === null ? null : v >= 1024 ? `${fmt(v / 1024, 1)} ${byteUnit("Go")}` : `${fmt(v, 0)} ${byteUnit("Mo")}`);
         const temp = this._num(r.cpu_temp);
         const res = [
           gauge(r.cpu, "mdi:cpu-64-bit", "CPU", this._num(r.cpu), "", 70, 90),
@@ -3274,7 +3326,7 @@ class ServeurHaOmvCard extends HTMLElement {
     }
 
     const alertCls = (m.hubId && !online) || disksBad || ups.ok === false ? "srv-alert" : "";
-    const sub = [online ? "En ligne" : m.hubId ? "Hors ligne" : "OpenMediaVault", version ? `OMV ${(/\d+(?:\.\d+)+(?:-\d+)?/.exec(version) || [version])[0]}` : null].filter(Boolean).join(" · ");
+    const sub = [online ? trLabel("En ligne") : m.hubId ? trLabel("Hors ligne") : "OpenMediaVault", version ? `OMV ${(/\d+(?:\.\d+)+(?:-\d+)?/.exec(version) || [version])[0]}` : null].filter(Boolean).join(" · ");
     const sub2 = [ip, host && host !== ip ? host : null].filter(Boolean).join(" · ");
     this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${OMV_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
@@ -3497,10 +3549,10 @@ class ServeurHaAsusCard extends HTMLElement {
     if (sig === this._sig) return;
     this._sig = sig;
 
-    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
-    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => localizeTemplate`<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
+    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(t)}</div>${body}</div>` : "");
+    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => localizeTemplate`<div class="srv-kv"><span>${exactLabel(k)}</span><b class="${cls || ""}">${esc(exactLabel(v))}</b></div>`).join("");
     const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : localizeTemplate`<div class="srv-g" data-entity="${esc(id)}">
-        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(label)}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
         <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const rate = (id, icon, label, max, sub, cls) => {
       const v = this._num(id);
@@ -3512,7 +3564,7 @@ class ServeurHaAsusCard extends HTMLElement {
       return localizeTemplate`<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${esc(armed ? "mdi:check-bold" : icon)}"></ha-icon>${armed ? localizeStaticHTML("<span>Confirmer</span>") : ""}</button>`;
     };
     const chip = (id, label, on, title = "") => localizeTemplate`<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}" title="${esc(title || (on ? trLabel("Activé") : trLabel("Désactivé")))}"><i></i>${esc(label)}</span>`;
-    const go = (v) => (v === null ? null : v >= 1000 ? `${fmt(v / 1000, 2)} To` : `${fmt(v, v < 10 ? 2 : 1)} Go`);
+    const go = (v) => (v === null ? null : v >= 1000 ? `${fmt(v / 1000, 2)} ${byteUnit("To")}` : `${fmt(v, v < 10 ? 2 : 1)} ${byteUnit("Go")}`);
 
     const dev = m.dev || {};
     const st = (id) => this._st(id);
@@ -3559,7 +3611,7 @@ class ServeurHaAsusCard extends HTMLElement {
         const cpuA = st(r.cpu)?.attributes || {};
         const cores = Object.keys(cpuA).filter((k) => /^core_\d+$/.test(k)).sort((a, b) => a.localeCompare(b, "fr", { numeric: true })).map((k) => `${fmt(cpuA[k], 0)} %`);
         const ramA = st(r.ram)?.attributes || {};
-        const mo = (kb) => (Number.isFinite(Number(kb)) ? `${fmt(Number(kb) / 1024, 0)} Mo` : null);
+        const mo = (kb) => (Number.isFinite(Number(kb)) ? `${fmt(Number(kb) / 1024, 0)} ${byteUnit("Mo")}` : null);
         const temps = [["t_cpu", "Temp."], ["t_24", "2,4 GHz"], ["t_5", "5 GHz"], ["t_52", "5 GHz (2)"], ["t_6", "6 GHz"]]
           .map(([k, label]) => (this._num(r[k]) === null ? "" : gauge(r[k], "mdi:thermometer", label, this._num(r[k]), "", c.temp_warn, c.temp_alert, ` ${esc(this._unit(r[k], "°C"))}`, 110)));
         const res = [
@@ -3595,7 +3647,7 @@ class ServeurHaAsusCard extends HTMLElement {
             const n = count(re);
             // seul le SSID est lu : les autres attributs du Wi-Fi (dont le mot de passe) ne sont jamais affichés
             const ssid = s.attributes?.ssid;
-            return chip(r[k], `${label}${n ? ` · ${n}` : ""}`, s.state === "on", `${ssid ? `${ssid} · ` : ""}${s.state === "on" ? trLabel("Activé") : trLabel("Désactivé")}${n ? ` · ${n} appareil${n > 1 ? "s" : ""}` : ""}`);
+            return chip(r[k], `${label}${n ? ` · ${n}` : ""}`, s.state === "on", `${ssid ? `${ssid} · ` : ""}${s.state === "on" ? trLabel("Activé") : trLabel("Désactivé")}${n ? ` · ${countText(n, "appareil")}` : ""}`);
           });
         const guestOn = m.guests.filter((id) => st(id)?.state === "on");
         const guestName = (id) => {
@@ -3606,7 +3658,7 @@ class ServeurHaAsusCard extends HTMLElement {
         // débits par bande : une ligne par bande, barres réception et envoi
         const mbit = (id) => { const v = this._num(id); return v === null ? null : v; };
         const bar = (id, cls) => { const v = mbit(id); return v === null ? localizeStaticHTML("<span></span>") : localizeTemplate`<span class="asus-r ${cls}" data-entity="${esc(id)}"><b>${fmt(v, v < 10 ? 2 : v < 100 ? 1 : 0)}</b><small>${esc(this._unit(id, "Mbit/s"))}</small><i style="--w:${Math.max(0, Math.min(100, (v / wMax) * 100))}%"></i></span>`; };
-        const rows = [["2,4 GHz", r.w24_rx, r.w24_tx], ["5 GHz", r.w5_rx, r.w5_tx], ["Filaire", r.lan_rx, r.lan_tx]]
+        const rows = [["2,4 GHz", r.w24_rx, r.w24_tx], ["5 GHz", r.w5_rx, r.w5_tx], [trLabel("Filaire"), r.lan_rx, r.lan_tx]]
           .filter(([, rx, tx]) => mbit(rx) !== null || mbit(tx) !== null)
           .map(([label, rx, tx]) => localizeTemplate`<div class="asus-row"><span class="asus-rl">${label}</span>${bar(rx, "in")}${bar(tx, "out")}</div>`);
         // repliés par défaut : le bouton « Débits par bande » les déplie
@@ -3647,7 +3699,7 @@ class ServeurHaAsusCard extends HTMLElement {
         const tiles = [
           ["Wi-Fi 2,4 GHz", count(/^2ghz$/), "mdi:wifi", "2ghz"],
           ["Wi-Fi 5 GHz", count(/^5ghz/), "mdi:wifi", "5ghz"],
-          ["Filaire", count(/^wired$/), "mdi:ethernet", "wired"],
+          [trLabel("Filaire"), count(/^wired$/), "mdi:ethernet", "wired"],
           [trLabel("Invités"), guestsN, "mdi:account-multiple-outline", "guest"],
         ].filter(([, v], i) => v !== null && (v > 0 || i < 3) && (devices.length || i === 3));
         const latestList = Array.isArray(st(r.latest)?.attributes?.list) ? [...st(r.latest).attributes.list] : [];
@@ -3672,7 +3724,7 @@ class ServeurHaAsusCard extends HTMLElement {
         const openName = { all: "Tous les appareils", "2ghz": "Wi-Fi 2,4 GHz", "5ghz": "Wi-Fi 5 GHz", wired: "Filaire", guest: "Invités" }[open];
         // tout est replié par défaut : le bouton déplie les dernières connexions et la liste complète
         const more = devices.length || latest.length
-          ? localizeTemplate`<button class="asus-more ${open ? "on" : ""}" data-devs="${open || "all"}"><ha-icon icon="${esc(open ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${open ? trLabel("Réduire") : devices.length ? `Voir les ${fmt(devices.length, 0)} appareils` : trLabel("Voir les dernières connexions")}</button>`
+          ? localizeTemplate`<button class="asus-more ${open ? "on" : ""}" data-devs="${open || "all"}"><ha-icon icon="${esc(open ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${open ? trLabel("Réduire") : devices.length ? (CURRENT_CARD_LANGUAGE === "en" ? `See all ${countText(devices.length, "appareil")}` : CURRENT_CARD_LANGUAGE === "pl" ? `Pokaż ${countText(devices.length, "appareil")}` : `Voir les ${fmt(devices.length, 0)} appareils`) : trLabel("Voir les dernières connexions")}</button>`
           : "";
         clients = sec("mdi:devices", localizeTemplate`Appareils connectés <small class="pve-n">${total !== null ? fmt(total, 0) : ""}</small>`,
           `${tiles.length ? localizeTemplate`<div class="asus-counts">${tiles.map(([lbl, v, icon, key]) => localizeTemplate`<div class="${open === key ? "on" : ""}" ${devices.length && v ? `data-devs="${key}" title="Voir les appareils : ${lbl}"` : ""}><ha-icon icon="${esc(icon)}"></ha-icon><b>${v === null ? "—" : fmt(v, 0)}</b><small>${lbl}</small></div>`).join("")}</div>` : ""}
@@ -3689,8 +3741,8 @@ class ServeurHaAsusCard extends HTMLElement {
           const v = /_(openvpn|wireguard)_(client|server)_(\d)$/.exec(id);
           return v ? `${v[1] === "openvpn" ? "OpenVPN" : "WireGuard"} ${v[2] === "client" ? "client" : "serveur"} ${v[3]}` : id;
         };
-        const chips = [...on.map((id) => chip(id, name(id), true)), st(r.parental) ? chip(r.parental, "Contrôle parental", st(r.parental).state === "on") : ""].filter(Boolean);
-        vpn = sec("mdi:vpn", localizeTemplate`VPN <small class="pve-n">${m.vpns.length ? `${on.length} actif${on.length > 1 ? "s" : ""}` : ""}</small>`,
+        const chips = [...on.map((id) => chip(id, name(id), true)), st(r.parental) ? chip(r.parental, trLabel("Contrôle parental"), st(r.parental).state === "on") : ""].filter(Boolean);
+        vpn = sec("mdi:vpn", localizeTemplate`VPN <small class="pve-n">${m.vpns.length ? countText(on.length, "actif") : ""}</small>`,
           `${chips.length ? localizeTemplate`<div class="omv-svcs">${chips.join("")}</div>` : ""}${m.vpns.length && !on.length ? localizeTemplate`<div class="asus-note">Aucun VPN actif</div>` : ""}`);
       }
 
@@ -4002,7 +4054,7 @@ class ServeurHaPingCard extends HTMLElement {
       ? localizeTemplate`<div class="empty">Aucun appareil suivi par Ping<span>Ajoutez l'intégration Ping (ICMP) pour chaque appareil dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`
       : localizeTemplate`<div class="ping-sum">
           <div class="${down.length ? "bad" : "ok"}"><b>${upN}<small>/${hosts.length}</small></b><span>en ligne</span></div>
-          <div class="${down.length ? "bad" : ""}"><b>${down.length}</b><span>hors ligne${offN ? localizeTextTemplate` · ${offN} éteint${offN > 1 ? "s" : ""}` : ""}</span></div>
+          <div class="${down.length ? "bad" : ""}"><b>${down.length}</b><span>hors ligne${offN ? ` · ${countText(offN, "eteint")}` : ""}</span></div>
           <div class="${lat(mean)}"><b>${mean === null ? "—" : fmt(mean, mean < 10 ? 1 : 0)}<small> ms</small></b><span>latence moyenne</span></div>
           <div class="${lossy.length ? "warn" : ""}"><b>${lossy.length}</b><span>perte de paquets</span></div>
         </div>${downHtml}<div class="srv-sec ping-groups">${groupsHtml}</div>`;
@@ -4242,7 +4294,7 @@ class ServeurHaZigbeeCard extends HTMLElement {
         <span class="ping-dots"></span><b class="ok">${list.length}</b><ha-icon class="ping-chev" icon="${on ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
         ${on ? localizeTemplate`<div class="zb-list zb-in">${list.map(line).join("")}</div>` : ""}</div>`;
     };
-    const sec = (list, icon, label, cls) => (list.length ? localizeTemplate`<div class="srv-sec"><div class="srv-h ${cls}"><ha-icon icon="${icon}"></ha-icon>${label} <small class="pve-n">${list.length}</small></div><div class="zb-list">${list.map(line).join("")}</div></div>` : "");
+    const sec = (list, icon, label, cls) => (list.length ? localizeTemplate`<div class="srv-sec"><div class="srv-h ${cls}"><ha-icon icon="${icon}"></ha-icon>${exactLabel(label)} <small class="pve-n">${list.length}</small></div><div class="zb-list">${list.map(line).join("")}</div></div>` : "");
 
     const bridgeSt = this._st(m.bridge)?.state;
     const bridgeOk = bridgeSt === "on" ? true : bridgeSt === "off" ? false : null;
@@ -4250,8 +4302,8 @@ class ServeurHaZigbeeCard extends HTMLElement {
       ? localizeTemplate`<div class="empty">Aucun appareil à pile ni appareil Zigbee trouvé<span>La carte lit les capteurs de batterie (en %) de vos appareils, et les appareils Zigbee2MQTT ou ZHA. Vérifiez que leurs capteurs de batterie sont activés.</span></div>`
       : localizeTemplate`<div class="ping-sum">
           <div class="${off.length ? "bad" : "ok"}"><b>${rows.length - off.length}<small>/${rows.length}</small></b><span>en ligne${zb ? ` · ${zb} Zigbee` : ""}</span></div>
-          <div class="${alert.length ? "bad" : warn.length ? "warn" : "ok"}"><b>${alert.length + warn.length}</b><span>pile${alert.length + warn.length > 1 ? "s" : ""} faible${alert.length + warn.length > 1 ? "s" : ""}</span></div>
-          <div class="${batCls(lowest?.s.bat ?? null)}" ${lowest ? `data-entity="${esc(lowest.it.roles.battery)}"` : ""}><b>${lowest ? localizeTemplate`${fmt(lowest.s.bat, 0)}<small> %</small>` : "—"}</b><span>${lowest ? `plus faible : ${esc(lowest.it.name)}` : "aucune pile"}</span></div>
+          <div class="${alert.length ? "bad" : warn.length ? "warn" : "ok"}"><b>${alert.length + warn.length}</b><span>${countWord(alert.length + warn.length, "pile")}</span></div>
+          <div class="${batCls(lowest?.s.bat ?? null)}" ${lowest ? `data-entity="${esc(lowest.it.roles.battery)}"` : ""}><b>${lowest ? localizeTemplate`${fmt(lowest.s.bat, 0)}<small> %</small>` : "—"}</b><span>${lowest ? `${trLabel("plus faible")} : ${esc(lowest.it.name)}` : "aucune pile"}</span></div>
           <div class="${weak.length ? "warn" : ""}"><b>${weak.length}</b><span>signal faible ou silencieux</span></div>
         </div>
         ${bridgeOk === false ? localizeTemplate`<div class="zb-alert" data-entity="${esc(m.bridge)}"><ha-icon icon="mdi:zigbee"></ha-icon>Pont Zigbee2MQTT déconnecté : aucun appareil Zigbee ne répond.</div>` : ""}
@@ -4259,7 +4311,7 @@ class ServeurHaZigbeeCard extends HTMLElement {
         ${sec(alert, "mdi:battery-alert-variant-outline", trLabel("Piles à changer"), "ping-bad")}
         ${sec(warn, "mdi:battery-low", "Piles faibles", "zb-warn")}
         ${sec(weak, "mdi:signal-cellular-1", "Signal faible ou silencieux", "zb-warn")}
-        ${okBat.length || okMains.length ? localizeTemplate`<div class="srv-sec ping-groups">${fold("bat", "mdi:battery-high", trLabel("Piles en bon état"), okBat)}${fold("mains", "mdi:power-plug-outline", "Sur secteur", okMains)}</div>` : ""}`;
+        ${okBat.length || okMains.length ? localizeTemplate`<div class="srv-sec ping-groups">${fold("bat", "mdi:battery-high", trLabel("Piles en bon état"), okBat)}${fold("mains", "mdi:power-plug-outline", trLabel("Sur secteur"), okMains)}</div>` : ""}`;
 
     const nbBad = off.length + alert.length;
     const leds = [
@@ -4438,7 +4490,7 @@ class ServeurHaWireguardCard extends HTMLElement {
     this._sig = sig;
 
     const open = (k) => this._open.has("*") || this._open.has(k);
-    const go = (v) => (v === null ? "—" : v >= 1000 ? `${fmt(v / 1000, 2)} To` : v >= 1 ? `${fmt(v, v < 10 ? 2 : 1)} Go` : `${fmt(v * 1000, 0)} Mo`);
+    const go = (v) => (v === null ? "—" : v >= 1000 ? `${fmt(v / 1000, 2)} ${byteUnit("To")}` : v >= 1 ? `${fmt(v, v < 10 ? 2 : 1)} ${byteUnit("Go")}` : `${fmt(v * 1000, 0)} ${byteUnit("Mo")}`);
     const gb = (id) => {
       const v = this._num(id);
       if (v === null) return null;
@@ -4484,11 +4536,11 @@ class ServeurHaWireguardCard extends HTMLElement {
       ? localizeTemplate`<div class="empty">Aucun serveur WireGuard trouvé<span>Installez l'intégration WGDashboard Monitor (HACS) et ajoutez votre WGDashboard dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`
       : localizeTemplate`<div class="ping-sum">
           <div class="${upN ? "ok" : ""}"><b>${upN}<small>/${all.length}</small></b><span>pairs connectés</span></div>
-          <div><b>${m.servers.length}</b><span>serveur${m.servers.length > 1 ? "s" : ""}</span></div>
+          <div><b>${m.servers.length}</b><span>${countWord(m.servers.length, "serveur")}</span></div>
           <div><b>${go(rxT)}</b><span>reçu</span></div>
           <div><b>${go(txT)}</b><span>envoyé</span></div>
         </div><div class="srv-sec ping-groups">${serversHtml}</div>`;
-    const leds = m.servers.length ? localizeTemplate`<span class="srv-led ${upN ? "ok" : "na"}"><i></i>${upN ? localizeTextTemplate`${upN} connecté${upN > 1 ? "s" : ""}` : trLabel("Aucun pair connecté")}</span>` : "";
+    const leds = m.servers.length ? localizeTemplate`<span class="srv-led ${upN ? "ok" : "na"}"><i></i>${upN ? countText(upN, "connecte") : trLabel("Aucun pair connecté")}</span>` : "";
     this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${PVE_STYLE}${OMV_STYLE}${PING_STYLE}${WG_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:vpn")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
@@ -4674,11 +4726,11 @@ class ServeurHaGlancesCard extends HTMLElement {
 
     const tw = Number(c.temp_warn) || 70, ta = Number(c.temp_alert) || 85;
     const open = (k) => this._open.has("*") || this._open.has(k);
-    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="gl-sub"><div class="gl-subh"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
+    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="gl-sub"><div class="gl-subh"><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(t)}</div>${body}</div>` : "");
     const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : localizeTemplate`<div class="srv-g" data-entity="${esc(id)}">
-        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(label)}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
         <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
-    const go = (id) => { const v = this._num(id); if (v === null) return null; const u = this._unit(id, "GiB"); const g = /^TiB|^TB/i.test(u) ? v * 1024 : /^MiB|^MB/i.test(u) ? v / 1024 : v; return g >= 1024 ? `${fmt(g / 1024, 2)} To` : `${fmt(g, g < 10 ? 1 : 0)} Go`; };
+    const go = (id) => { const v = this._num(id); if (v === null) return null; const u = this._unit(id, "GiB"); const g = /^TiB|^TB/i.test(u) ? v * 1024 : /^MiB|^MB/i.test(u) ? v / 1024 : v; return g >= 1024 ? `${fmt(g / 1024, 2)} ${byteUnit("To")}` : `${fmt(g, g < 10 ? 1 : 0)} ${byteUnit("Go")}`; };
     const tcls = (v) => (v === null ? "" : v >= ta ? "bad" : v >= tw ? "warn" : "ok");
     const pcls = (v, w, a) => (v === null ? "" : v >= a ? "bad" : v >= w ? "warn" : "ok");
 
@@ -4695,14 +4747,14 @@ class ServeurHaGlancesCard extends HTMLElement {
       const up = this._st(r.uptime)?.state;
       const upTxt = up && !/unknown|unavailable/.test(up) ? since(up) : null;
       const isOpen = open(h.key);
-      const chip = (label, v, cls, unit = "%") => (v === null || v < 0 ? "" : localizeTemplate`<span class="gl-c ${cls}"><small>${label}</small>${fmt(v, 0)}${unit === "%" ? localizeStaticHTML("<small>%</small>") : localizeTemplate`<small>${unit}</small>`}</span>`);
+      const chip = (label, v, cls, unit = "%") => (v === null || v < 0 ? "" : localizeTemplate`<span class="gl-c ${cls}"><small>${exactLabel(label)}</small>${fmt(v, 0)}${unit === "%" ? localizeStaticHTML("<small>%</small>") : localizeTemplate`<small>${unit}</small>`}</span>`);
       const chips = online
-        ? [chip("CPU", cpu, pcls(cpu, 70, 90)), chip("RAM", mem, pcls(mem, 80, 92)), chip("Disque", diskMax, pcls(diskMax, 80, 90)), t ? chip("Temp.", t.v, tcls(t.v), "°C") : ""].join("")
+        ? [chip("CPU", cpu, pcls(cpu, 70, 90)), chip("RAM", mem, pcls(mem, 80, 92)), chip(trLabel("Disque"), diskMax, pcls(diskMax, 80, 90)), t ? chip("Temp.", t.v, tcls(t.v), "°C") : ""].join("")
         : localizeTemplate`<span class="gl-c bad">Injoignable</span>`;
 
       let detail = "";
       if (isOpen && online) {
-        const memUsed = go(r.mem_used), memTot = (() => { const u = this._num(r.mem_used), f = this._num(r.mem_free); return u !== null && f !== null ? `${fmt(u + f, 1)} Go` : null; })();
+        const memUsed = go(r.mem_used), memTot = (() => { const u = this._num(r.mem_used), f = this._num(r.mem_free); return u !== null && f !== null ? `${fmt(u + f, 1)} ${byteUnit("Go")}` : null; })();
         const swap = this._num(r.swap);
         const tiles = [
           upTxt ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(r.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(upTxt)}</div></div>` : "",
@@ -4746,7 +4798,7 @@ class ServeurHaGlancesCard extends HTMLElement {
     const body = !m.hosts.length
       ? localizeTemplate`<div class="empty">Aucun serveur Glances trouvé<span>Installez Glances (mode web, glances -w) sur vos serveurs, puis ajoutez l'intégration Glances dans Paramètres › Appareils et services.</span></div>`
       : localizeTemplate`<div class="srv-sec ping-groups">${hostsHtml}</div>`;
-    const leds = m.hosts.length ? localizeTemplate`<span class="srv-led ${alerts ? "bad" : "ok"}"><i></i>${alerts ? localizeTextTemplate`${alerts} à surveiller` : "Tout va bien"}</span>` : "";
+    const leds = m.hosts.length ? localizeTemplate`<span class="srv-led ${alerts ? "bad" : "ok"}"><i></i>${alerts ? localizeTextTemplate`${alerts} à surveiller` : trLabel("Tout va bien")}</span>` : "";
     this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${PING_STYLE}${GL_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alerts ? "srv-alert" : ""}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:monitor-dashboard")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
@@ -5315,7 +5367,7 @@ class ServeurHaMediaCard extends HTMLElement {
       const panel = this._br?.srv === s.key ? this._brPanel(s) : "";
       const isOpen = this._open.has(s.key);
       const known = s.players.filter((id) => !this._deviceOff(id));
-      const clients = c.show_clients !== false && s.players.length ? localizeTemplate`<button class="md-more" data-fold="${esc(s.key)}"><ha-icon icon="${esc(isOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${isOpen ? trLabel("Réduire") : localizeTextTemplate`Lecteurs (${known.length} disponible${known.length > 1 ? "s" : ""} sur ${s.players.length})`}</button>
+      const clients = c.show_clients !== false && s.players.length ? localizeTemplate`<button class="md-more" data-fold="${esc(s.key)}"><ha-icon icon="${esc(isOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${isOpen ? trLabel("Réduire") : `${trLabel("Lecteurs")} (${countText(known.length, "disponible")} ${trLabel("sur")} ${s.players.length})`}</button>
           ${isOpen ? localizeTemplate`<div class="md-cl">${s.players.map((id) => { const o = this._st(id); const on = !this._deviceOff(id); return localizeTemplate`<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}"><i></i>${esc(mediaPlayerName(o?.attributes?.friendly_name) || id)}</span>`; }).join("")}</div>` : ""}` : "";
       return localizeTemplate`<div class="md-srv">
           <div class="md-h" data-entity="${esc(s.count || s.update || "")}">
@@ -5641,7 +5693,7 @@ class ServeurHaDnsCard extends HTMLElement {
       led(!off.length, apps.includes("pi_hole") && !apps.includes("adguard") ? trLabel("Blocage") : trLabel("Protection"), guardOf(off[0] || list[0]) || ""),
       updates.length ? localizeTemplate`<span class="srv-led upd" data-entity="${esc(upd(updates[0])[0])}"><i></i>Mise à jour</span>` : "",
     ].join("") : "";
-    const sub = list.length ? `${list.length} ${CURRENT_CARD_LANGUAGE === "pl" ? (list.length === 1 ? "serwer" : "serwery") : CURRENT_CARD_LANGUAGE === "en" ? `server${list.length === 1 ? "" : "s"}` : `serveur${list.length > 1 ? "s" : ""}`} · ${off.length ? `${off.length} ${trLabel("sans protection")}` : trLabel("protection active")}` : "";
+    const sub = list.length ? `${countText(list.length, "serveur")} · ${off.length ? `${off.length} ${trLabel("sans protection")}` : trLabel("protection active")}` : "";
 
     let body = "";
     if (!srv) {
@@ -5657,7 +5709,7 @@ class ServeurHaDnsCard extends HTMLElement {
       // anneau : part des requêtes bloquées
       const R = 36, C = 2 * Math.PI * R, p = Math.max(0, Math.min(100, ratio ?? 0));
       const ring = localizeTemplate`<svg viewBox="0 0 90 90" class="dns-ring" aria-hidden="true"><circle cx="45" cy="45" r="${R}" class="bg"/><circle cx="45" cy="45" r="${R}" class="fg" stroke-dasharray="${(p / 100) * C} ${C}" transform="rotate(-90 45 45)"/></svg>`;
-      const stat = (id, label, v, unit = "") => (v === null ? "" : localizeTemplate`<div class="dns-kv" data-entity="${esc(id)}"><span>${label}</span><b>${v}${unit ? localizeTemplate`<small> ${unit}</small>` : ""}</b></div>`);
+      const stat = (id, label, v, unit = "") => (v === null ? "" : localizeTemplate`<div class="dns-kv" data-entity="${esc(id)}"><span>${exactLabel(label)}</span><b>${v}${unit ? localizeTemplate`<small> ${unit}</small>` : ""}</b></div>`);
       const hero = c.show_stats === false ? "" : localizeTemplate`<div class="dns-hero ${on === false ? "off" : ""}" data-entity="${esc(r.ratio || r.queries || "")}">
           <div class="dns-rw">${ring}<div class="dns-rv"><b>${ratio === null ? "—" : fmt(ratio, ratio < 10 ? 1 : 0)}<small> %</small></b><span>bloqué</span></div></div>
           <div class="dns-hs">
@@ -5668,7 +5720,7 @@ class ServeurHaDnsCard extends HTMLElement {
           </div></div>`;
 
       // détails : ce que chaque application fournit
-      const tile = (id, ic, label, v) => (v === null ? "" : localizeTemplate`<div class="tile srv-b" data-entity="${esc(id)}"><ha-icon icon="${esc(ic)}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${v}</div></div>`);
+      const tile = (id, ic, label, v) => (v === null ? "" : localizeTemplate`<div class="tile srv-b" data-entity="${esc(id)}"><ha-icon icon="${esc(ic)}"></ha-icon><div class="tile-l">${exactLabel(label)}</div><div class="srv-bv">${v}</div></div>`);
       const n = (id) => { const v = this._num(id); return v === null ? null : fmt(v, 0); };
       const det = c.show_details === false ? [] : [
         tile(r.clients, "mdi:devices", "Clients actifs", n(r.clients)),
@@ -5704,7 +5756,7 @@ class ServeurHaDnsCard extends HTMLElement {
           <div class="srv-kv"><span>État</span><b class="${u.state === "on" ? "bad" : "ok"}">${u.state === "on" ? trLabel("À installer") : trLabel("À jour")}</b></div></div>`;
       });
 
-      const sec = (ic, t, inner) => (inner ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(ic)}"></ha-icon>${t}</div>${inner}</div>` : "");
+      const sec = (ic, t, inner) => (inner ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(ic)}"></ha-icon>${exactLabel(t)}</div>${inner}</div>` : "");
       body = tabs + (hero ? localizeTemplate`<div class="srv-sec">${hero}</div>` : "")
         + sec("mdi:chart-box-outline", trLabel("Détails"), det.length ? localizeTemplate`<div class="srv-bk dns-det">${det.join("")}</div>` : "")
         + sec("mdi:toggle-switch-outline", trLabel("Réglages"), sw.length || pauses.length ? localizeTemplate`<div class="srv-bk dns-sws">${sw.join("")}${pauses.join("")}</div>` : "")
@@ -5787,7 +5839,7 @@ const upFr = (v) => {
   if (!/^up\b/i.test(txt)) return txt && txt !== "—" ? txt : null;
   const n = (re) => Number((re.exec(txt) || [])[1] || 0);
   const d = n(/(\d+)\s*year/) * 365 + n(/(\d+)\s*month/) * 30 + n(/(\d+)\s*week/) * 7 + n(/(\d+)\s*day/), h = n(/(\d+)\s*hour/), m = n(/(\d+)\s*minute/);
-  return d ? `${d} ${CURRENT_CARD_LANGUAGE === "en" ? "d" : "j"}${h ? ` ${h} h` : ""}` : h ? `${h} h${m ? ` ${String(m).padStart(2, "0")} min` : ""}` : `${m} min`;
+  return d ? `${d} ${CURRENT_CARD_LANGUAGE === "fr" ? "j" : "d"}${h ? ` ${h} h` : ""}` : h ? `${h} h${m ? ` ${String(m).padStart(2, "0")} min` : ""}` : `${m} min`;
 };
 
 class ServeurHaLinuxCard extends HTMLElement {
@@ -5891,9 +5943,9 @@ class ServeurHaLinuxCard extends HTMLElement {
     const nBoot = systems.filter((x) => A(x).needs_reboot === true).length;
     const nOff = systems.filter(off).length;
     const leds = [
-      nSec ? localizeTemplate`<span class="srv-led bad"><i></i>${plural(nSec, trLabel("sécurité"), trLabel("sécurité"))}</span>` : "",
-      nBoot ? localizeTemplate`<span class="srv-led upd"><i></i>${plural(nBoot, trLabel("redémarrage"))}</span>` : "",
-      nOff ? localizeTemplate`<span class="srv-led na"><i></i>${plural(nOff, "injoignable")}</span>` : "",
+      nSec ? localizeTemplate`<span class="srv-led bad"><i></i>${countText(nSec, "securite")}</span>` : "",
+      nBoot ? localizeTemplate`<span class="srv-led upd"><i></i>${countText(nBoot, "redemarrage")}</span>` : "",
+      nOff ? localizeTemplate`<span class="srv-led na"><i></i>${countText(nOff, "injoignable")}</span>` : "",
     ].join("");
 
     const shown = c.show_uptodate === false ? systems.filter((x) => off(x) || (Number(A(x).update_count) || 0) > 0 || A(x).needs_reboot) : systems;
@@ -5909,9 +5961,9 @@ class ServeurHaLinuxCard extends HTMLElement {
       const badges = [
         down ? localizeTemplate`<span class="lnx-b na">injoignable${sys.last_seen_at ? `${CURRENT_CARD_LANGUAGE === "en" ? " · last seen " : CURRENT_CARD_LANGUAGE === "pl" ? " · ostatnio widziany " : " · vu "}${esc(relTime(sys.last_seen_at) || "")}` : ""}</span>` : "",
         busy ? localizeTemplate`<span class="lnx-b run">mise à jour en cours…</span>` : "",
-        !down && upd ? localizeTemplate`<span class="lnx-b upd">${plural(upd, trLabel("mise à jour"), trLabel("mises à jour"))}</span>` : "",
-        sec ? localizeTemplate`<span class="lnx-b bad">${plural(sec, trLabel("sécurité"), trLabel("sécurité"))}</span>` : "",
-        kept ? localizeTemplate`<span class="lnx-b">${plural(kept, "retenue")}</span>` : "",
+        !down && upd ? localizeTemplate`<span class="lnx-b upd">${countText(upd, "maj")}</span>` : "",
+        sec ? localizeTemplate`<span class="lnx-b bad">${countText(sec, "securite")}</span>` : "",
+        kept ? localizeTemplate`<span class="lnx-b">${countText(kept, "retenue")}</span>` : "",
         a.needs_reboot ? localizeTemplate`<span class="lnx-b upd">redémarrage requis</span>` : "",
         !down && !upd && !a.needs_reboot && !busy ? localizeTemplate`<span class="lnx-b ok">à jour</span>` : "",
       ].join("");
@@ -5944,7 +5996,7 @@ class ServeurHaLinuxCard extends HTMLElement {
           <span>Linux Update Dashboard <b>${esc(appS.attributes.installed_version || "")} → ${esc(appS.attributes.latest_version || "")}</b> disponible</span></div></div>` : "";
 
     const sub = systems.length
-      ? [plural(systems.length, "serveur"), nUpd ? localizeTextTemplate`${nUpd} à mettre à jour` : trLabel("tout est à jour")].join(" · ")
+      ? [countText(systems.length, "serveur"), nUpd ? countText(nUpd, "a_maj") : trLabel("tout est à jour")].join(" · ")
       : "";
     const body = systems.length
       ? localizeTemplate`<div class="srv-sec">${rows ? localizeTemplate`<div class="lnx-list">${rows}</div>` : localizeTemplate`<div class="lnx-all">Tous les serveurs sont à jour.</div>`}</div>${appRow}`
@@ -6323,7 +6375,7 @@ class ServeurHaGithubCard extends HTMLElement {
         <div class="gh-t"><span>${isNew(it) ? localizeStaticHTML('<b class="gh-new">nouveau</b>') : ""}${esc(it.title)}</span>
           <small>#${it.n}${it.draft ? ` · ${uiText("github.draft")}` : ""} · ${esc(it.author)} · ${esc(ago(it.created))}${it.updated !== it.created ? localizeTextTemplate` · activité ${esc(ago(it.updated))}` : ""}</small>
           ${labels ? localizeTemplate`<div class="gh-ls">${labels}</div>` : ""}</div>
-        ${it.comments ? localizeTemplate`<span class="gh-c" title="${it.comments} commentaire${it.comments > 1 ? "s" : ""}"><ha-icon icon="mdi:comment-outline"></ha-icon>${it.comments}</span>` : ""}
+        ${it.comments ? localizeTemplate`<span class="gh-c" title="${countText(it.comments, "commentaire")}"><ha-icon icon="mdi:comment-outline"></ha-icon>${it.comments}</span>` : ""}
       </a>`;
     };
     const groups = repos.map((r) => {
