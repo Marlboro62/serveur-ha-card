@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.17.0-beta.8";
+const CARD_VERSION = "0.17.0-beta.9";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3702,7 +3702,7 @@ class ServeurHaMediaCard extends HTMLElement {
     if (!item) return;
     if (act === "open") { b.stack.push({ id: item.id, type: item.type, title: item.title }); this._brLoad(item); return; }
     if (act === "play") {
-      if (!b.player) { b.msg = "Aucun lecteur allumé : allumez la TV et ouvrez Plex (ou Jellyfin), puis réessayez."; this._brRedraw(); return; }
+      if (!b.player) return;
       const name = mediaPlayerName(this._st(b.player)?.attributes?.friendly_name) || b.player;
       b.msg = `Lecture de « ${item.title} » sur ${name}…`;
       this._brRedraw();
@@ -3727,10 +3727,14 @@ class ServeurHaMediaCard extends HTMLElement {
       return `<div class="br-it">
           <span class="br-th">${img(x)}</span>
           ${x.open ? `<button class="br-t" data-br="open" data-i="${i}" title="Ouvrir">${esc(x.title)}<ha-icon icon="mdi:chevron-right"></ha-icon></button>` : `<span class="br-t">${esc(x.title)}</span>`}
-          ${x.play ? `<button class="md-b" data-br="play" data-i="${i}" title="Lire" aria-label="Lire ${esc(x.title)}"><ha-icon icon="mdi:play"></ha-icon></button>` : ""}
+          ${x.play && b.player ? `<button class="md-b" data-br="play" data-i="${i}" title="Lire" aria-label="Lire ${esc(x.title)}"><ha-icon icon="mdi:play"></ha-icon></button>` : ""}
         </div>`;
     }).join("");
     const pname = (id) => mediaPlayerName(this._st(id)?.attributes?.friendly_name) || id;
+    // TV éteinte : bouton pour l'allumer si son lecteur (Cast, Android TV…) le permet
+    const wake = b.player ? "" : [...new Set(s.players.map((id) => this._twin(id)).filter(Boolean))]
+      .filter((t) => { const o = this._st(t); return o && o.state !== "unavailable" && ((Number(o.attributes?.supported_features) || 0) & 128); })
+      .map((t) => `<button class="md-chip" data-mp="${esc(t)}" data-mp-act="turn_on"><ha-icon icon="mdi:power"></ha-icon> Allumer ${esc(pname(t))}</button>`).join("");
     return `<div class="br">
         <div class="br-h">
           <button class="md-b" data-br="back" title="Retour" aria-label="Retour"><ha-icon icon="mdi:arrow-left"></ha-icon></button>
@@ -3738,7 +3742,7 @@ class ServeurHaMediaCard extends HTMLElement {
           <button class="md-b" data-br="close" title="Fermer" aria-label="Fermer"><ha-icon icon="mdi:close"></ha-icon></button>
         </div>
         ${players.length > 1 ? `<div class="br-pl"><small>Lire sur</small>${players.map((id) => `<button class="md-chip ${id === b.player ? "on" : ""}" data-br="player" data-id="${esc(id)}">${esc(pname(id))}</button>`).join("")}</div>`
-          : b.player ? `<div class="br-pl"><small>Lire sur ${esc(pname(b.player))}</small></div>` : `<div class="br-pl"><small>Aucun lecteur allumé : allumez la TV et ouvrez Plex pour lancer une lecture.</small></div>`}
+          : b.player ? `<div class="br-pl"><small>Lire sur ${esc(pname(b.player))}</small></div>` : `<div class="br-pl"><small>Aucun lecteur allumé : allumez la TV et ouvrez Plex pour lancer une lecture.</small>${wake}</div>`}
         ${b.items.length > 12 ? `<input class="br-q" type="search" placeholder="Rechercher…" aria-label="Rechercher" value="${esc(b.filter)}">` : ""}
         ${b.msg ? `<div class="br-msg">${esc(b.msg)}</div>` : ""}
         ${b.error ? `<div class="br-msg err">${esc(b.error)}</div>` : b.loading ? `<div class="br-msg">Chargement…</div>` : !b.items.length ? `<div class="br-msg">Rien à afficher.</div>` : `<div class="br-ls">${rows}</div>`}
@@ -4059,6 +4063,7 @@ const MEDIA_STYLE = `<style>
 button.md-lib { all: unset; box-sizing: border-box; cursor: pointer; display: grid; justify-items: center; padding: 6px 4px; border-radius: 10px; background: var(--med-surface); font-size: .7rem; color: var(--med-muted); text-align: center; }
 .md-lib.br:hover, .md-lib.br.on { outline: 1px solid var(--med-accent, var(--med-blue)); }
 .md-lib.br:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
+.md-chip ha-icon { --mdc-icon-size: 14px; vertical-align: -2px; }
 .md-chip.on { border-color: var(--med-accent, var(--med-blue)); color: var(--med-accent, var(--med-blue)); }
 .br { border: 1px solid var(--med-line); border-radius: 12px; padding: 8px; display: grid; gap: 8px; }
 .br-h { display: flex; align-items: center; gap: 8px; }
