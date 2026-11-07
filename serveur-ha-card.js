@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.17.0-beta.6";
+const CARD_VERSION = "0.17.0-beta.7";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3609,7 +3609,7 @@ class ServeurHaMediaCard extends HTMLElement {
   _brPlayers(s) {
     return s.players.filter((id) => {
       const o = this._st(id), f = Number(o?.attributes?.supported_features) || 0;
-      return o && o.state !== "unavailable" && (f & MP.BROWSE) && (f & MP.PLAY_MEDIA);
+      return o && !this._deviceOff(id) && (f & MP.BROWSE) && (f & MP.PLAY_MEDIA);
     });
   }
 
@@ -3626,7 +3626,7 @@ class ServeurHaMediaCard extends HTMLElement {
     b.loading = true; b.error = ""; b.items = []; b.filter = ""; b.limit = BROWSE_PAGE;
     this._brRedraw();
     try {
-      const ws = (id, type) => this._hass.callWS(id ? { type: "media_player/browse_media", entity_id: b.player, media_content_id: id, media_content_type: type } : { type: "media_player/browse_media", entity_id: b.player });
+      const ws = (id, type) => this._hass.callWS(id ? { type: "media_player/browse_media", entity_id: b.browser, media_content_id: id, media_content_type: type } : { type: "media_player/browse_media", entity_id: b.browser });
       let res = await ws(node?.id, node?.type);
       // première ouverture : on descend jusqu'à la bibliothèque demandée (Films, Séries TV, Musique…)
       if (!node?.id && b.lib) {
@@ -3678,11 +3678,13 @@ class ServeurHaMediaCard extends HTMLElement {
       if (!s) return;
       if (b && b.srv === s.key && b.lib === el.dataset.lib) { this._br = null; this._brRedraw(); return; }
       const players = this._brPlayers(s);
+      // pour parcourir seulement, n'importe quel lecteur du serveur qui sait naviguer suffit
+      const browser = players[0] || s.players.find((id) => this._st(id) && this._st(id).state !== "unavailable" && ((Number(this._st(id).attributes?.supported_features) || 0) & MP.BROWSE));
       const now = players.find((id) => /^(playing|paused|buffering)$/.test(this._st(id)?.state || ""));
       const player = players.includes(this._config.browse_player) ? this._config.browse_player : now || players[0];
       // sans capteurs de bibliothèque : on part de la liste des bibliothèques du serveur
-      this._br = { srv: s.key, lib: el.dataset.lib, player, stack: el.dataset.lib ? [] : [{ id: "", type: "", title: "Bibliothèques" }], items: [], filter: "", limit: BROWSE_PAGE, msg: "" };
-      if (!player) { this._br.error = "Aucun lecteur disponible : ouvrez Plex (ou Jellyfin) sur la TV, puis réessayez."; this._brRedraw(); return; }
+      this._br = { srv: s.key, lib: el.dataset.lib, player, browser, stack: el.dataset.lib ? [] : [{ id: "", type: "", title: "Bibliothèques" }], items: [], filter: "", limit: BROWSE_PAGE, msg: "" };
+      if (!browser) { this._br.error = "Aucun lecteur disponible : allumez la TV et ouvrez Plex (ou Jellyfin), puis réessayez."; this._brRedraw(); return; }
       this._brLoad(null);
       return;
     }
@@ -3700,6 +3702,7 @@ class ServeurHaMediaCard extends HTMLElement {
     if (!item) return;
     if (act === "open") { b.stack.push({ id: item.id, type: item.type, title: item.title }); this._brLoad(item); return; }
     if (act === "play") {
+      if (!b.player) { b.msg = "Aucun lecteur allumé : allumez la TV et ouvrez Plex (ou Jellyfin), puis réessayez."; this._brRedraw(); return; }
       const name = mediaPlayerName(this._st(b.player)?.attributes?.friendly_name) || b.player;
       b.msg = `Lecture de « ${item.title} » sur ${name}…`;
       this._brRedraw();
@@ -3711,6 +3714,8 @@ class ServeurHaMediaCard extends HTMLElement {
 
   _brPanel(s) {
     const b = this._br, players = this._brPlayers(s);
+    if (b.player && !players.includes(b.player)) b.player = players[0] || "";
+    else if (!b.player && players.length) b.player = players[0];
     const title = b.stack.length ? b.stack[b.stack.length - 1].title : b.lib || "Bibliothèques";
     const vis = this._brVisible(), total = this._brMatches().length;
     const img = (x) => {
@@ -3733,7 +3738,7 @@ class ServeurHaMediaCard extends HTMLElement {
           <button class="md-b" data-br="close" title="Fermer" aria-label="Fermer"><ha-icon icon="mdi:close"></ha-icon></button>
         </div>
         ${players.length > 1 ? `<div class="br-pl"><small>Lire sur</small>${players.map((id) => `<button class="md-chip ${id === b.player ? "on" : ""}" data-br="player" data-id="${esc(id)}">${esc(pname(id))}</button>`).join("")}</div>`
-          : b.player ? `<div class="br-pl"><small>Lire sur ${esc(pname(b.player))}</small></div>` : ""}
+          : b.player ? `<div class="br-pl"><small>Lire sur ${esc(pname(b.player))}</small></div>` : `<div class="br-pl"><small>Aucun lecteur allumé : allumez la TV et ouvrez Plex pour lancer une lecture.</small></div>`}
         ${b.items.length > 12 ? `<input class="br-q" type="search" placeholder="Rechercher…" aria-label="Rechercher" value="${esc(b.filter)}">` : ""}
         ${b.msg ? `<div class="br-msg">${esc(b.msg)}</div>` : ""}
         ${b.error ? `<div class="br-msg err">${esc(b.error)}</div>` : b.loading ? `<div class="br-msg">Chargement…</div>` : !b.items.length ? `<div class="br-msg">Rien à afficher.</div>` : `<div class="br-ls">${rows}</div>`}
@@ -3743,6 +3748,25 @@ class ServeurHaMediaCard extends HTMLElement {
 
   /** Lecteur qui commande une session : la session elle-même si elle accepte la pause, sinon celui indiqué
    *  dans control_players, sinon un lecteur d'une autre intégration qui porte le même nom (ex. la TV). */
+  /** Lecteur de l'appareil lui-même (TV, box), d'une autre intégration : indiqué dans control_players ou de même nom. */
+  _twin(id) {
+    const st = this._hass?.states || {}, reg = this._hass?.entities || {};
+    if (MEDIA_APPS[reg[id]?.platform] === undefined) return null;
+    const map = this._config.control_players && typeof this._config.control_players === "object" ? this._config.control_players : {};
+    if (map[id] && st[map[id]]) return map[id];
+    const name = normTitle(mediaPlayerName(st[id]?.attributes?.friendly_name));
+    if (!name) return null;
+    return Object.keys(st).find((x) => x.startsWith("media_player.") && x !== id && !MEDIA_APPS[reg[x]?.platform] && normTitle(st[x].attributes?.friendly_name) === name) || null;
+  }
+
+  /** Lecteur Plex/Jellyfin dont l'appareil est éteint ou injoignable : session restée affichée par le serveur. */
+  _deviceOff(id) {
+    if (this._st(id)?.state === "unavailable") return true;
+    const t = this._twin(id);
+    // « off » est ambigu (l'appli Plex ferme sa session Cast à la pause, TV allumée) : seule l'indisponibilité compte
+    return !!t && /^(unavailable|standby)$/.test(this._st(t)?.state || "");
+  }
+
   _controller(id) {
     const st = this._hass?.states || {}, reg = this._hass?.entities || {};
     const feat = (x) => Number(st[x]?.attributes?.supported_features) || 0;
@@ -3825,12 +3849,13 @@ class ServeurHaMediaCard extends HTMLElement {
     const m = this._resolve();
     const ids = m.servers.flatMap((s) => [s.count, s.update, ...s.libs, ...s.players]);
     if (c.show_controls !== false) for (const id of m.servers.flatMap((s) => s.players)) { const k = this._controller(id); if (k && !ids.includes(k)) ids.push(k); }
+    for (const id of m.servers.flatMap((s) => s.players)) { const t = this._twin(id); if (t && !ids.includes(t)) ids.push(t); }
     if (c.sleep_timer) ids.push(c.sleep_timer);
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|${[...this._open].join(",")}|${Math.floor(Date.now() / 30000)}|` + ids.map((id) => { const o = this._st(id); return o ? `${o.state}|${o.attributes?.media_title}|${o.attributes?.media_position}|${o.attributes?.volume_level}|${o.attributes?.is_volume_muted}|${o.attributes?.finishes_at}` : "-"; }).join("|");
     if (sig === this._sig) return;
     this._sig = sig;
 
-    const playing = (id) => /^(playing|paused|buffering)$/.test(this._st(id)?.state || "");
+    const playing = (id) => /^(playing|paused|buffering)$/.test(this._st(id)?.state || "") && !this._deviceOff(id);
     const clock = (s) => { if (!Number.isFinite(s)) return ""; s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), mn = Math.floor((s % 3600) / 60); return h ? `${h} h ${String(mn).padStart(2, "0")}` : `${mn} min`; };
     // titre affiché : série et épisode, artiste et morceau, ou film
     const titleOf = (a) => {
@@ -3947,9 +3972,9 @@ class ServeurHaMediaCard extends HTMLElement {
       }).filter(Boolean) : [];
       const panel = this._br?.srv === s.key ? this._brPanel(s) : "";
       const isOpen = this._open.has(s.key);
-      const known = s.players.filter((id) => this._st(id)?.state !== "unavailable");
+      const known = s.players.filter((id) => !this._deviceOff(id));
       const clients = c.show_clients !== false && s.players.length ? `<button class="md-more" data-fold="${esc(s.key)}"><ha-icon icon="${esc(isOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${isOpen ? "Réduire" : `Lecteurs (${known.length} disponible${known.length > 1 ? "s" : ""} sur ${s.players.length})`}</button>
-          ${isOpen ? `<div class="md-cl">${s.players.map((id) => { const o = this._st(id); const on = o?.state !== "unavailable"; return `<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}"><i></i>${esc(mediaPlayerName(o?.attributes?.friendly_name) || id)}</span>`; }).join("")}</div>` : ""}` : "";
+          ${isOpen ? `<div class="md-cl">${s.players.map((id) => { const o = this._st(id); const on = !this._deviceOff(id); return `<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}"><i></i>${esc(mediaPlayerName(o?.attributes?.friendly_name) || id)}</span>`; }).join("")}</div>` : ""}` : "";
       return `<div class="md-srv">
           <div class="md-h" data-entity="${esc(s.count || s.update || "")}">
             <span class="md-app" style="--app:${appColor}"><ha-icon icon="${esc(appIcon)}"></ha-icon></span>
