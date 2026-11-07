@@ -643,9 +643,11 @@
   let toastTimer;
   // bibliothèque Plex fictive pour la navigation de la carte multimédia
   function demoBrowse(id) {
-    const it = (cid, title, type, play, open) => ({ media_content_id: cid, media_content_type: type, title, can_play: play, can_expand: open, thumbnail: null });
+    const poster = (t, i) => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 150"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="hsl(${(i * 47) % 360},55%,45%)"/><stop offset="1" stop-color="#111"/></linearGradient></defs><rect width="100" height="150" fill="url(#g)"/><text x="50" y="84" font-size="34" text-anchor="middle" fill="#fff" font-family="Arial" font-weight="700">${t.slice(0, 2).toUpperCase()}</text></svg>`);
+    let n = 0;
+    const it = (cid, title, type, play, open) => ({ media_content_id: cid, media_content_type: type, title, can_play: play, can_expand: open, thumbnail: type === "library" ? null : poster(title, n++) });
     if (!id) return { title: "Plex", children: [it("lib/films", "Films", "library", false, true), it("lib/series", "Séries TV", "library", false, true), it("lib/musique", "Musique", "library", false, true)] };
-    if (id === "lib/films") return { title: "Films", children: ["Horizon bleu", "La forêt d'argent", "Le grand départ", "Minuit à Lisbonne", "Nuages de sel", "Opération Colibri", "Port d'attache", "Quatre saisons", "Rivages", "Sous la lune", "Train de nuit", "Une île en hiver", "Vents contraires", "Zénith"].map((t, i) => it(`film/${i}`, t, "movie", true, false)) };
+    if (id === "lib/films") return { title: "Films", children: ["Horizon bleu", "La forêt d'argent", "Le grand départ", "Minuit à Lisbonne", "Nuages de sel", "Opération Colibri", "Port d'attache", "Quatre saisons", "Rivages", "Sous la lune", "Train de nuit", "Une île en hiver", "Vents contraires", "Zénith"].map((t, i) => it(`film/${i}`, `${t} (${2010 + i})`, "movie", true, false)) };
     if (id === "lib/series") return { title: "Séries TV", children: [it("show/1", "Les Voyageurs du ciel", "show", true, true), it("show/2", "Brigade du port", "show", true, true)] };
     if (id.startsWith("show/") && !id.includes("/s")) return { title: "Saisons", children: [1, 2].map((n) => it(`${id}/s${n}`, `Saison ${n}`, "season", true, true)) };
     if (id.includes("/s")) return { title: "Épisodes", children: [1, 2, 3, 4].map((n) => it(`${id}/e${n}`, `Épisode ${n}`, "episode", true, false)) };

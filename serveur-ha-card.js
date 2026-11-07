@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.17.0-beta.9";
+const CARD_VERSION = "0.17.0-beta.10";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3623,7 +3623,7 @@ class ServeurHaMediaCard extends HTMLElement {
   async _brLoad(node) {
     const b = this._br;
     if (!b) return;
-    b.loading = true; b.error = ""; b.items = []; b.filter = ""; b.limit = BROWSE_PAGE;
+    b.loading = true; b.error = ""; b.items = []; b.card = null; b.filter = ""; b.limit = BROWSE_PAGE;
     this._brRedraw();
     try {
       const ws = (id, type) => this._hass.callWS(id ? { type: "media_player/browse_media", entity_id: b.browser, media_content_id: id, media_content_type: type } : { type: "media_player/browse_media", entity_id: b.browser });
@@ -3690,9 +3690,11 @@ class ServeurHaMediaCard extends HTMLElement {
     }
     if (!b) return;
     if (act === "close") { this._br = null; this._brRedraw(); return; }
+    if (act === "uncard") { b.card = null; this._brRedraw(); return; }
     if (act === "player") { b.player = el.dataset.id; b.msg = ""; this._brRedraw(); return; }
     if (act === "more") { b.limit += BROWSE_PAGE; this._brRedraw(); this._brThumbs(); return; }
     if (act === "back") {
+      if (b.card != null) { b.card = null; this._brRedraw(); return; }
       if (b.stack.length < 2) { this._br = null; this._brRedraw(); return; }
       b.stack.pop();
       this._brLoad(b.stack[b.stack.length - 1]);
@@ -3700,7 +3702,8 @@ class ServeurHaMediaCard extends HTMLElement {
     }
     const item = b.items[Number(el.dataset.i)];
     if (!item) return;
-    if (act === "open") { b.stack.push({ id: item.id, type: item.type, title: item.title }); this._brLoad(item); return; }
+    if (act === "card") { b.card = Number(el.dataset.i); this._brRedraw(); return; }
+    if (act === "open") { b.card = null; b.stack.push({ id: item.id, type: item.type, title: item.title }); this._brLoad(item); return; }
     if (act === "play") {
       if (!b.player) return;
       const name = mediaPlayerName(this._st(b.player)?.attributes?.friendly_name) || b.player;
@@ -3725,12 +3728,30 @@ class ServeurHaMediaCard extends HTMLElement {
     const rows = vis.map((x) => {
       const i = b.items.indexOf(x);
       return `<div class="br-it">
-          <span class="br-th">${img(x)}</span>
+          <button class="br-th" data-br="card" data-i="${i}" title="Voir la fiche" aria-label="Fiche de ${esc(x.title)}">${img(x)}</button>
           ${x.open ? `<button class="br-t" data-br="open" data-i="${i}" title="Ouvrir">${esc(x.title)}<ha-icon icon="mdi:chevron-right"></ha-icon></button>` : `<span class="br-t">${esc(x.title)}</span>`}
           ${x.play && b.player ? `<button class="md-b" data-br="play" data-i="${i}" title="Lire" aria-label="Lire ${esc(x.title)}"><ha-icon icon="mdi:play"></ha-icon></button>` : ""}
         </div>`;
     }).join("");
     const pname = (id) => mediaPlayerName(this._st(id)?.attributes?.friendly_name) || id;
+    // fiche agrandie d'un élément (clic sur la jaquette)
+    const cardItem = b.card != null ? b.items[b.card] : null;
+    const TYPES = { movie: "Film", show: "Série", tvshow: "Série", season: "Saison", episode: "Épisode", artist: "Artiste", album: "Album", track: "Morceau", playlist: "Liste de lecture" };
+    const fiche = cardItem ? (() => {
+      const x = cardItem, i = b.card;
+      const m = String(x.title).match(/^(.*?)\s*\((\d{4})\)\s*$/);
+      const u = x.thumb ? (x.thumb.startsWith("/") ? this._thumbs?.get(x.thumb) : x.thumb) : "";
+      const meta = [TYPES[String(x.type).toLowerCase()], m?.[2]].filter(Boolean).join(" · ");
+      return `<div class="br-card">
+          <div class="br-big">${u ? `<img src="${esc(u)}" alt="">` : `<ha-icon icon="mdi:movie-open-outline"></ha-icon>`}</div>
+          <div class="br-ci"><b>${esc(m ? m[1] : x.title)}</b>${meta ? `<small>${esc(meta)}</small>` : ""}
+            <div class="br-ca">
+              ${x.play && b.player ? `<button class="br-go" data-br="play" data-i="${i}"><ha-icon icon="mdi:play"></ha-icon>Lire sur ${esc(pname(b.player))}</button>` : ""}
+              ${x.open ? `<button class="md-chip" data-br="open" data-i="${i}"><ha-icon icon="mdi:folder-open-outline"></ha-icon> Ouvrir</button>` : ""}
+              <button class="md-chip" data-br="uncard"><ha-icon icon="mdi:arrow-left"></ha-icon> Retour à la liste</button>
+            </div></div>
+        </div>`;
+    })() : "";
     // TV éteinte : bouton pour l'allumer si son lecteur (Cast, Android TV…) le permet
     const wake = b.player ? "" : [...new Set(s.players.map((id) => this._twin(id)).filter(Boolean))]
       .filter((t) => { const o = this._st(t); return o && o.state !== "unavailable" && ((Number(o.attributes?.supported_features) || 0) & 128); })
@@ -3743,10 +3764,10 @@ class ServeurHaMediaCard extends HTMLElement {
         </div>
         ${players.length > 1 ? `<div class="br-pl"><small>Lire sur</small>${players.map((id) => `<button class="md-chip ${id === b.player ? "on" : ""}" data-br="player" data-id="${esc(id)}">${esc(pname(id))}</button>`).join("")}</div>`
           : b.player ? `<div class="br-pl"><small>Lire sur ${esc(pname(b.player))}</small></div>` : `<div class="br-pl"><small>Aucun lecteur allumé : allumez la TV et ouvrez Plex pour lancer une lecture.</small>${wake}</div>`}
-        ${b.items.length > 12 ? `<input class="br-q" type="search" placeholder="Rechercher…" aria-label="Rechercher" value="${esc(b.filter)}">` : ""}
+        ${!fiche && b.items.length > 12 ? `<input class="br-q" type="search" placeholder="Rechercher…" aria-label="Rechercher" value="${esc(b.filter)}">` : ""}
         ${b.msg ? `<div class="br-msg">${esc(b.msg)}</div>` : ""}
-        ${b.error ? `<div class="br-msg err">${esc(b.error)}</div>` : b.loading ? `<div class="br-msg">Chargement…</div>` : !b.items.length ? `<div class="br-msg">Rien à afficher.</div>` : `<div class="br-ls">${rows}</div>`}
-        ${vis.length < total ? `<button class="md-more" data-br="more">Afficher plus (${total - vis.length} de plus)</button>` : ""}
+        ${b.error ? `<div class="br-msg err">${esc(b.error)}</div>` : b.loading ? `<div class="br-msg">Chargement…</div>` : !b.items.length ? `<div class="br-msg">Rien à afficher.</div>` : fiche || `<div class="br-ls">${rows}</div>`}
+        ${!fiche && vis.length < total ? `<button class="md-more" data-br="more">Afficher plus (${total - vis.length} de plus)</button>` : ""}
       </div>`;
   }
 
@@ -4079,6 +4100,19 @@ button.md-lib { all: unset; box-sizing: border-box; cursor: pointer; display: gr
 .br-it:hover { background: var(--med-bg); }
 .br-th { flex: 0 0 auto; width: 30px; height: 44px; border-radius: 5px; overflow: hidden; display: grid; place-items: center; background: var(--med-bg); color: var(--med-muted); }
 .br-th img { width: 100%; height: 100%; object-fit: cover; }
+button.br-th { all: unset; box-sizing: border-box; flex: 0 0 auto; width: 30px; height: 44px; border-radius: 5px; overflow: hidden; display: grid; place-items: center; background: var(--med-bg); color: var(--med-muted); cursor: zoom-in; }
+button.br-th:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
+.br-card { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.br-big { flex: 0 0 auto; width: 150px; aspect-ratio: 2 / 3; border-radius: 10px; overflow: hidden; background: var(--med-bg); display: grid; place-items: center; color: var(--med-muted); box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+.br-big img { width: 100%; height: 100%; object-fit: cover; }
+.br-big ha-icon { --mdc-icon-size: 40px; }
+.br-ci { flex: 1; min-width: 150px; display: grid; gap: 6px; align-content: start; }
+.br-ci b { font-size: 1rem; color: var(--med-text); }
+.br-ci small { color: var(--med-muted); font-size: .75rem; }
+.br-ca { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.br-go { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; font-size: .8rem; font-weight: 600; background: var(--med-accent, var(--med-blue)); color: var(--text-primary-color, #fff); }
+.br-go ha-icon { --mdc-icon-size: 18px; }
+.br-go:focus-visible { outline: 2px solid var(--med-text); outline-offset: 2px; }
 .br-th ha-icon { --mdc-icon-size: 18px; }
 .br-t { flex: 1; min-width: 0; font-size: .8rem; color: var(--med-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button.br-t { all: unset; flex: 1; min-width: 0; cursor: pointer; display: flex; align-items: center; gap: 2px; font-size: .8rem; color: var(--med-text); }
