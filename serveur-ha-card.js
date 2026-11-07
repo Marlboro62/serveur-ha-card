@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.17.2-fr-en-pl";
+const CARD_VERSION = "0.17.0";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -30,6 +30,7 @@ const CARD_VERSION = "0.17.2-fr-en-pl";
  * HA languages fall back to English.  The existing French presentation remains the FR source of truth.
  */
 let CURRENT_CARD_LANGUAGE = "fr";
+let CURRENT_CARD_CONTEXT = "";
 const cardLanguage = (config, hass) => {
   const explicit = String(config?.language || "auto").toLowerCase().split("-")[0];
   if (["fr", "en", "pl"].includes(explicit)) return explicit;
@@ -39,6 +40,15 @@ const cardLanguage = (config, hass) => {
 const cardLocale = () => CURRENT_CARD_LANGUAGE === "en" ? "en-GB" : CURRENT_CARD_LANGUAGE === "pl" ? "pl-PL" : "fr-FR";
 
 const EN_TEXT = {
+  "Protection active": "Protection enabled", "protection active": "protection enabled", "sans protection": "unprotected", "Blocage actif": "Blocking active", "Filtrage": "Filtering",
+  "NOUVEAU": "NEW", "nouveau": "new", "nouv.": "new", "vu": "seen", "signal": "signal",
+  "Dernier handshake": "Last handshake", "Handshake": "Handshake", "Dernière nouvelle": "Last seen",
+  "Dernière activité": "Last activity", "mise à jour en cours…": "updating…", "injoignable": "unreachable",
+  "activité": "activity", "brouillon": "draft", "reçu": "received", "sur": "of",
+  "Issues et pull requests": "Issues and pull requests", "Compte GitHub introuvable.": "GitHub account not found.",
+  "En cache": "Cached", "Domaines uniques": "Unique domains", "Recherche sécurisée": "Safe search", "Journal des requêtes": "Query log",
+  "Cliquer pour couper": "Click to turn off", "Cliquer pour activer": "Click to enable", "Cliquez encore pour couper": "Click again to turn off",
+
   // Shared card sections, statuses, commands and units
   "Serveur": "Server", "Serveurs": "Servers", "Serveur Home Assistant": "Home Assistant server",
   "Serveur domotique": "Home automation server", "Serveurs multimédia": "Media servers",
@@ -295,6 +305,15 @@ Object.assign(EN_TEXT, {
  * deliberately never translated.
  */
 const PL_TEXT = {
+  "Protection active": "Ochrona aktywna", "protection active": "ochrona aktywna", "sans protection": "bez ochrony", "Blocage actif": "Blokowanie aktywne", "Filtrage": "Filtrowanie",
+  "NOUVEAU": "NOWE", "nouveau": "nowe", "nouv.": "nowe", "vu": "widziano", "signal": "sygnał",
+  "Dernier handshake": "Ostatnie uzgodnienie", "Handshake": "Uzgodnienie", "Dernière nouvelle": "Ostatnio widziano",
+  "Dernière activité": "Ostatnia aktywność", "mise à jour en cours…": "trwa aktualizacja…", "injoignable": "nieosiągalny",
+  "activité": "aktywność", "brouillon": "wersja robocza", "reçu": "odebrano", "sur": "z",
+  "Issues et pull requests": "Zgłoszenia i pull requesty", "Compte GitHub introuvable.": "Nie znaleziono konta GitHub.",
+  "En cache": "W pamięci podręcznej", "Domaines uniques": "Unikatowe domeny", "Recherche sécurisée": "Bezpieczne wyszukiwanie", "Journal des requêtes": "Dziennik zapytań",
+  "Cliquer pour couper": "Kliknij, aby wyłączyć", "Cliquer pour activer": "Kliknij, aby włączyć", "Cliquez encore pour couper": "Kliknij ponownie, aby wyłączyć",
+
   "Serveur": "Serwer",
   "Serveurs": "Serwery",
   "Serveur Home Assistant": "Serwer Home Assistant",
@@ -401,8 +420,8 @@ const PL_TEXT = {
   "Noyau": "Jądro systemu",
   "Nœuds": "Węzły",
   "Nœud": "Węzeł",
-  "Invités": "Maszyny wirtualne",
-  "Invité": "Maszyna wirtualna",
+  "Invités": "Goście",
+  "Invité": "Gość",
   "VM et conteneurs": "Maszyny wirtualne i kontenery",
   "Conteneurs": "Kontenery",
   "Tout démarrer": "Uruchom wszystkie",
@@ -1032,46 +1051,204 @@ const translatePolish = (original) => {
 };
 const translateByLanguage = (original, lang) =>
   lang === "pl" ? translatePolish(original) : lang === "en" ? translateEnglish(original) : original;
-const localizeCardDOM = (root, lang) => {
-  if (!root || lang === "fr") return;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      return /^(STYLE|SCRIPT|CODE|PRE|TEXTAREA)$/i.test(node.parentElement?.tagName || "")
-        ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
-    }
-  });
-  const textNodes = [];
-  while (walker.nextNode()) textNodes.push(walker.currentNode);
-  for (const node of textNodes) {
-    const value = translateByLanguage(node.nodeValue, lang);
-    if (node.nodeValue !== value) node.nodeValue = value;
-  }
-  for (const el of root.querySelectorAll("[title],[aria-label],[placeholder]")) {
-    for (const attr of ["title", "aria-label", "placeholder"]) {
-      if (el.hasAttribute(attr)) {
-        const old = el.getAttribute(attr), next = translateByLanguage(old, lang);
-        if (old !== next) el.setAttribute(attr, next);
-      }
-    }
-  }
+/* ---------------------------------------------------------------- static UI localization
+ * Template literals belonging to the cards are explicitly tagged with `localizeTemplate`.
+ * Only the static portions of the template (and explicitly authored UI string
+ * literals passed through `t`) are translated. HA state, device names, Plex
+ * metadata, area names, GitHub issue text and user configuration are NEVER
+ * inspected or changed by this mechanism.
+ *
+ * Each translated template is cached by literal identity + language + card
+ * context, so the regex dictionaries run once, not for every HA state update.
+ */
+/* Shared semantic UI messages: same meaning = same wording across every card.
+ * Explicit separate keys are used when the meaning differs (NAS storage
+ * volumes versus media loudness, Proxmox guests versus Plex guest users).
+ * These are UI-owned strings only, never values supplied by Home Assistant.
+ */
+const UI_MESSAGES = Object.freeze({
+  "backup.section": { fr: "Sauvegardes", en: "Backups", pl: "Kopie zapasowe" },
+  "backup.completed": { fr: "Terminé", en: "Completed", pl: "Zakończono" },
+  "backup.failed": { fr: "Échoué", en: "Failed", pl: "Niepowodzenie" },
+  "backup.progress": { fr: "En cours", en: "In progress", pl: "W toku" },
+  "github.draft": { fr: "brouillon", en: "draft", pl: "wersja robocza" },
+  "time.seen": { fr: "vu", en: "seen", pl: "widziano" },
+  "state.online": { fr: "En ligne", en: "Online", pl: "Online" },
+  "state.offline": { fr: "Hors ligne", en: "Offline", pl: "Offline" },
+  "state.running": { fr: "En marche", en: "Running", pl: "Uruchomiony" },
+  "state.stopped": { fr: "Arrêté", en: "Stopped", pl: "Zatrzymany" },
+  "state.paused": { fr: "En pause", en: "Paused", pl: "Wstrzymany" },
+  "state.suspended": { fr: "Suspendu", en: "Suspended", pl: "Zawieszony" },
+  "state.starting": { fr: "Démarrage", en: "Starting", pl: "Uruchamianie" },
+  "state.unknown": { fr: "Inconnu", en: "Unknown", pl: "Nieznany" },
+  "state.unavailable": { fr: "Indisponible", en: "Unavailable", pl: "Niedostępny" },
+  "state.alert": { fr: "Alerte", en: "Alert", pl: "Alarm" },
+  "state.danger": { fr: "Danger", en: "Danger", pl: "Niebezpieczeństwo" },
+  "smart.good": { fr: "Bon", en: "Good", pl: "Dobry" },
+  "smart.bad": { fr: "Mauvais", en: "Bad", pl: "Zły" },
+  "smart.failed": { fr: "En échec", en: "Failed", pl: "Błąd" },
+  "smart.warning": { fr: "Attention", en: "Warning", pl: "Ostrzeżenie" },
+  "storage.volume": { fr: "Volume", en: "Volume", pl: "Wolumin" },
+  "media.volume": { fr: "Volume", en: "Volume", pl: "Głośność" },
+  "media.muted": { fr: "muet", en: "muted", pl: "wyciszono" },
+  "proxmox.guest": { fr: "Invité", en: "Guest", pl: "Maszyna wirtualna" },
+  "media.guest": { fr: "Invité", en: "Guest user", pl: "Gość" },
+});
+const uiText = (key, lang = CURRENT_CARD_LANGUAGE) => {
+  const entry = UI_MESSAGES[key];
+  if (!entry) throw new Error(`Unknown UI message: ${key}`);
+  return entry[lang] || entry.fr;
 };
-// Wrapping the synchronous render function centralizes locale selection and
-// avoids touching sensor discovery, actions, event handlers and the HTML layout.
+
+const CONTEXT_TEXT = {
+  pl: {
+    ServeurHaNasCard: { Volume: "Wolumin", Volumes: "Woluminy", Invité: "Gość", Invités: "Goście" },
+    ServeurHaOmvCard: { Volume: "Wolumin", Volumes: "Woluminy" },
+    ServeurHaMediaCard: { Volume: "Głośność", Invité: "Gość", Invités: "Goście" },
+    ServeurHaAsusCard: { Invité: "Gość", Invités: "Goście" },
+    ServeurHaProxmoxCard: { Invité: "Gość (VM/LXC)", Invités: "Maszyny i kontenery" },
+  },
+  en: {
+    ServeurHaNasCard: { Volume: "Volume" },
+    ServeurHaMediaCard: { Invité: "Guest user", Invités: "Guest users" },
+  },
+};
+const TEXT_TRANSLATION_CACHE = new Map();
+const scopedText = (text, lang = CURRENT_CARD_LANGUAGE, scope = CURRENT_CARD_CONTEXT) => {
+  if (lang === "fr") return String(text ?? "");
+  const raw = String(text ?? "");
+  const cacheKey = `${lang}\u0000${scope}\u0000${raw}`;
+  if (TEXT_TRANSLATION_CACHE.has(cacheKey)) return TEXT_TRANSLATION_CACHE.get(cacheKey);
+  const overrides = CONTEXT_TEXT[lang]?.[scope] || {};
+  // Whole-key lookup avoids Proxmox guests becoming Plex guests and NAS
+  // volumes being translated as audio volume.
+  if (Object.prototype.hasOwnProperty.call(overrides, raw)) {
+    TEXT_TRANSLATION_CACHE.set(cacheKey, overrides[raw]);
+    return overrides[raw];
+  }
+  const replacements = [];
+  let source = raw;
+  for (const [fr, translation] of Object.entries(overrides)) {
+    const re = new RegExp(`(?<![\\p{L}\\p{N}_])${safeRegExp(fr)}(?![\\p{L}\\p{N}_])`, "gu");
+    source = source.replace(re, () => {
+      const placeholder = `\uE110${replacements.length}\uE111`;
+      replacements.push(translation);
+      return placeholder;
+    });
+  }
+  const localized = translateByLanguage(source, lang);
+  const result = localized.replace(/\uE110(\d+)\uE111/g, (_, index) => replacements[Number(index)]);
+  TEXT_TRANSLATION_CACHE.set(cacheKey, result);
+  return result;
+};
+// `t` is called exclusively on strings authored by the card, not HA values.
+const COMMON_MESSAGE_KEYS = Object.freeze({
+  "En ligne": "state.online", "Hors ligne": "state.offline", "En marche": "state.running",
+  "Arrêté": "state.stopped", "En pause": "state.paused", "Suspendu": "state.suspended",
+  "Inconnu": "state.unknown", "Indisponible": "state.unavailable",
+  "Alerte": "state.alert", "Danger": "state.danger",
+});
+const trLabel = (label) => COMMON_MESSAGE_KEYS[label] ? uiText(COMMON_MESSAGE_KEYS[label]) : scopedText(label);
+const STATIC_TEMPLATE_CACHE = new WeakMap();
+const STATIC_STRING_CACHE = new Map();
+const PLACEHOLDER = /\uE000(\d+)\uE001/g;
+const localizeOwnedParts = (value, lang, scope) => String(value).split(/(\uE000\d+\uE001)/g)
+  .map((piece) => /^\uE000\d+\uE001$/.test(piece) ? piece : scopedText(piece, lang, scope)).join("");
+const localizeHTMLStatic = (source, lang, scope) => {
+  if (lang === "fr") return source;
+  // This parser handles HTML tag boundaries, quoted attributes, and text;
+  // the tagged template's dynamic placeholders are always preserved verbatim.
+  let out = "", i = 0, literal = "", skip = 0;
+  const emitText = () => {
+    if (!literal) return;
+    out += skip ? literal : localizeOwnedParts(literal, lang, scope);
+    literal = "";
+  };
+  while (i < source.length) {
+    if (source[i] !== "<") { literal += source[i++]; continue; }
+    emitText();
+    const start = i++;
+    let quote = "";
+    while (i < source.length) {
+      const c = source[i++];
+      if (quote) { if (c === quote) quote = ""; }
+      else if (c === "'" || c === '"') quote = c;
+      else if (c === ">") break;
+    }
+    const tag = source.slice(start, i);
+    const match = /^<\s*(\/?)\s*([a-z][\w-]*)/i.exec(tag);
+    const name = match?.[2]?.toLowerCase();
+    if (match?.[1] && ["style", "script", "code", "pre"].includes(name)) skip = Math.max(0, skip - 1);
+    const updated = skip ? tag : tag.replace(/\b(title|aria-label|placeholder)=(['"])([\s\S]*?)\2/g,
+      (all, attribute, quoteChar, value) => `${attribute}=${quoteChar}${localizeOwnedParts(value, lang, scope)}${quoteChar}`);
+    out += updated;
+    if (match && !match[1] && ["style", "script", "code", "pre"].includes(name)) skip++;
+  }
+  emitText();
+  return out;
+};
+const localizeTemplate = (strings, ...values) => {
+  const lang = CURRENT_CARD_LANGUAGE, scope = CURRENT_CARD_CONTEXT;
+  let entry = STATIC_TEMPLATE_CACHE.get(strings);
+  if (!entry) { entry = new Map(); STATIC_TEMPLATE_CACHE.set(strings, entry); }
+  const cacheKey = `${lang}:${scope}`;
+  let parts = entry.get(cacheKey);
+  if (!parts) {
+    const source = strings.map((chunk, i) => chunk + (i < values.length ? `\uE000${i}\uE001` : "")).join("");
+    const localized = localizeHTMLStatic(source, lang, scope);
+    parts = localized.split(PLACEHOLDER);
+    entry.set(cacheKey, parts);
+  }
+  let result = parts[0] || "";
+  for (let i = 1; i < parts.length; i += 2) result += String(values[Number(parts[i])]) + (parts[i + 1] || "");
+  return result;
+};
+const STATIC_TEXT_CACHE = new WeakMap();
+const localizeTextTemplate = (strings, ...values) => {
+  const lang = CURRENT_CARD_LANGUAGE, scope = CURRENT_CARD_CONTEXT;
+  let entry = STATIC_TEXT_CACHE.get(strings);
+  if (!entry) { entry = new Map(); STATIC_TEXT_CACHE.set(strings, entry); }
+  const key = `${lang}:${scope}`;
+  let parts = entry.get(key);
+  if (!parts) { parts = strings.map((part) => scopedText(part, lang, scope)); entry.set(key, parts); }
+  let result = parts[0];
+  for (let i = 0; i < values.length; i++) result += String(values[i]) + parts[i + 1];
+  return result;
+};
+const localizeStaticHTML = (source) => {
+  if (CURRENT_CARD_LANGUAGE === "fr") return source;
+  const key = `${CURRENT_CARD_LANGUAGE}:${CURRENT_CARD_CONTEXT}:${source}`;
+  if (!STATIC_STRING_CACHE.has(key)) STATIC_STRING_CACHE.set(key, localizeHTMLStatic(source, CURRENT_CARD_LANGUAGE, CURRENT_CARD_CONTEXT));
+  return STATIC_STRING_CACHE.get(key);
+};
+// No DOM traversal: this wrapper only establishes locale/context during render.
 const enableCardLocalization = (CardType) => {
   const originalRender = CardType.prototype._render;
   CardType.prototype._render = function (...args) {
     const lang = cardLanguage(this._config, this._hass);
-    // All cards memoize the render signature: a locale change must invalidate it.
     if (this._lastRenderedLanguage !== lang) this._sig = null;
     this._lastRenderedLanguage = lang;
     const previousLanguage = CURRENT_CARD_LANGUAGE;
+    const previousContext = CURRENT_CARD_CONTEXT;
     CURRENT_CARD_LANGUAGE = lang;
+    CURRENT_CARD_CONTEXT = CardType.name;
+    const originalConfig = this._config;
+    if (lang !== "fr" && originalConfig) {
+      const defaultsLocalized = { ...originalConfig };
+      // Only internally supplied defaults can be translated. Explicitly
+      // configured titles, subtitles and volume labels remain untouched.
+      for (const key of ["title", "subtitle", "backup_title", "volume_name"]) {
+        if (!this._originalConfigFields?.has(key) && typeof originalConfig[key] === "string")
+          defaultsLocalized[key] = scopedText(originalConfig[key], lang, CURRENT_CARD_CONTEXT);
+      }
+      this._config = defaultsLocalized;
+    }
     try {
-      const result = originalRender.apply(this, args);
-      if (lang !== "fr") localizeCardDOM(this.shadowRoot, lang);
-      return result;
+      return originalRender.apply(this, args);
     } finally {
+      this._config = originalConfig;
       CURRENT_CARD_LANGUAGE = previousLanguage;
+      CURRENT_CARD_CONTEXT = previousContext;
     }
   };
 };
@@ -1153,20 +1330,57 @@ const toMbit = (v, unit) => {
   return f === undefined ? null : v * f;
 };
 
-/** Durée écoulée ou restante, en français. */
+/** One Intl formatter per locale (not one allocation per sensor/render). */
+const RELATIVE_TIME_FORMATTERS = new Map();
+/** Relative time for card-owned UI, preserving the original French wording. */
 const relTime = (iso) => {
   if (!iso) return null;
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return null;
-  const s = (t - Date.now()) / 1000;
-  const a = Math.abs(s);
-  const txt = a < 90 ? "moins d'une minute" : a < 3600 ? `${Math.round(a / 60)} min` : a < 86400 ? `${Math.round(a / 3600)} h` : `${Math.round(a / 86400)} j`;
-  if (CURRENT_CARD_LANGUAGE === "pl") {
-    const plTxt = a < 90 ? "mniej niż minutę" : a < 3600 ? `${Math.round(a / 60)} min` : a < 86400 ? `${Math.round(a / 3600)} godz.` : `${Math.round(a / 86400)} ${plCountForm(Math.round(a / 86400), "dzień", "dni", "dni")}`;
-    return s >= 0 ? `za ${plTxt}` : `${plTxt} temu`;
+  const date = new Date(iso).getTime();
+  if (!Number.isFinite(date)) return null;
+  const seconds = (date - Date.now()) / 1000;
+  const abs = Math.abs(seconds);
+  if (CURRENT_CARD_LANGUAGE === "fr") {
+    const txt = abs < 90 ? "moins d'une minute" : abs < 3600 ? `${Math.round(abs / 60)} min` : abs < 86400 ? `${Math.round(abs / 3600)} h` : `${Math.round(abs / 86400)} j`;
+    return seconds >= 0 ? `dans ${txt}` : `il y a ${txt}`;
   }
-  return CURRENT_CARD_LANGUAGE === "en" ? (s >= 0 ? `in ${a < 90 ? "less than a minute" : txt}` : `${a < 90 ? "less than a minute" : txt} ago`) : s >= 0 ? `dans ${txt}` : `il y a ${txt}`;
+  if (abs < 90) return CURRENT_CARD_LANGUAGE === "pl" ? (seconds >= 0 ? "za mniej niż minutę" : "mniej niż minutę temu") : (seconds >= 0 ? "in less than a minute" : "less than a minute ago");
+  const [unit, value] = abs < 3600 ? ["minute", Math.round(abs / 60)] : abs < 86400 ? ["hour", Math.round(abs / 3600)] : ["day", Math.round(abs / 86400)];
+  const locale = cardLocale();
+  let formatter = RELATIVE_TIME_FORMATTERS.get(locale);
+  if (!formatter) {
+    formatter = new Intl.RelativeTimeFormat(locale, { numeric: "always", style: "long" });
+    RELATIVE_TIME_FORMATTERS.set(locale, formatter);
+  }
+  return formatter.format(seconds >= 0 ? value : -value, unit);
 };
+const countUi = (count, kind) => {
+  const plWord = (one, few, many) => plCountForm(count, one, few, many);
+  if (kind === "file") return CURRENT_CARD_LANGUAGE === "en" ? `${count} file${count === 1 ? "" : "s"}`
+    : CURRENT_CARD_LANGUAGE === "pl" ? `${count} ${plWord("plik", "pliki", "plików")}`
+    : `${count} fichier${count > 1 ? "s" : ""}`;
+  if (kind === "ping") return CURRENT_CARD_LANGUAGE === "en" ? `${count} device${count === 1 ? "" : "s"} monitored by Ping`
+    : CURRENT_CARD_LANGUAGE === "pl" ? `${count} ${plWord("urządzenie", "urządzenia", "urządzeń")} monitorowane przez Ping`
+    : `${count} appareil${count > 1 ? "s" : ""} suivi${count > 1 ? "s" : ""} par Ping`;
+  if (kind === "device") return CURRENT_CARD_LANGUAGE === "en" ? `${count} device${count === 1 ? "" : "s"}`
+    : CURRENT_CARD_LANGUAGE === "pl" ? `${count} ${plWord("urządzenie", "urządzenia", "urządzeń")}`
+    : `${count} appareil${count > 1 ? "s" : ""}`;
+  return CURRENT_CARD_LANGUAGE === "en" ? `${count} server${count === 1 ? "" : "s"}`
+    : CURRENT_CARD_LANGUAGE === "pl" ? `${count} ${plWord("serwer", "serwery", "serwerów")}`
+    : `${count} serveur${count > 1 ? "s" : ""}`;
+};
+// Common relative-time formatting across all cards. For English and Polish
+// Intl.RelativeTimeFormat handles word order and grammar. Retain the compact
+// original French phrasing (including its additional minute precision).
+const relativeAgo = (iso) => {
+  if (!iso) return null;
+  if (CURRENT_CARD_LANGUAGE === "fr") {
+    const elapsed = since(iso);
+    return elapsed === null ? null : `il y a ${elapsed}`;
+  }
+  return relTime(iso);
+};
+const formatSeenAgo = (iso) => iso && relativeAgo(iso) ? `${uiText("time.seen")} ${relativeAgo(iso)}` : "";
+
 
 /** Durée depuis une date, compacte : « 12 j 4 h », « 3 h 05 min ». */
 const since = (iso) => {
@@ -1197,6 +1411,7 @@ class ServeurHaCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...SRV_DEFAULTS, ...(config || {}) };
     this._map = null;
     this._sig = null;
@@ -1360,7 +1575,7 @@ class ServeurHaCard extends HTMLElement {
     const segs = [];
     for (let i = 0; i < 24; i++) {
       if (!h || h.error) {
-        segs.push(`<i title="${esc(h?.error ? `Historique indisponible : ${h.error}` : "Chargement de l'historique…")}"></i>`);
+        segs.push(localizeTemplate`<i title="${esc(h?.error ? `Historique indisponible : ${h.error}` : "Chargement de l'historique…")}"></i>`);
         continue;
       }
       const a = h.start + (i * (h.end - h.start)) / 24;
@@ -1379,9 +1594,9 @@ class ServeurHaCard extends HTMLElement {
       const dur = new Map();
       for (const p of merged) dur.set(p.s, (dur.get(p.s) || 0) + (p.b - p.a));
       const tip = `${fmtT(a)} → ${fmtT(b)} · ${[...dur].map(([st, d]) => `${LBL[st] || "Inconnu"} : ${fmtD(d)}`).join(" · ")}`;
-      segs.push(`<i style="background:${bg}" title="${esc(tip)}"></i>`);
+      segs.push(localizeTemplate`<i style="background:${bg}" title="${esc(tip)}"></i>`);
     }
-    return `<div class="srv-tl" aria-label="Historique de l'alimentation sur 24 heures">${segs.join("")}</div>`;
+    return localizeTemplate`<div class="srv-tl" aria-label="Historique de l'alimentation sur 24 heures">${segs.join("")}</div>`;
   }
 
   _render() {
@@ -1432,35 +1647,35 @@ class ServeurHaCard extends HTMLElement {
 
     // --- en-tête
     const head = [ip, temp !== null ? `CPU ${fmt(temp, 1)} ${esc(tempUnit)}` : null].filter(Boolean).join(" · ");
-    const dot = (ok, label, id) => (ok === null && !id ? "" : `<span class="srv-led ${ok === null ? "na" : ok ? "ok" : "bad"}" data-entity="${esc(id || "")}"><i></i>${label}</span>`);
+    const dot = (ok, label, id) => (ok === null && !id ? "" : localizeTemplate`<span class="srv-led ${ok === null ? "na" : ok ? "ok" : "bad"}" data-entity="${esc(id || "")}"><i></i>${label}</span>`);
     const fanOk = m.fan ? fanOn : null;
-    const leds = [dot(powerOk, "Alimentation", m.power), dot(fanOk, "Ventilateur", m.fan), dot(bOk, "Backup", m.backup_event || m.backup_last || m.backup_state)].join("");
+    const leds = [dot(powerOk, trLabel("Alimentation"), m.power), dot(fanOk, trLabel("Ventilateur"), m.fan), dot(bOk, "Backup", m.backup_event || m.backup_last || m.backup_state)].join("");
 
     // --- sections
-    const sec = (icon, title, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${title}</div>${body}</div>` : "");
-    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => `<div class="srv-kv"><span>${k}</span><b>${esc(v)}</b></div>`).join("");
+    const sec = (icon, title, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${title}</div>${body}</div>` : "");
+    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => localizeTemplate`<div class="srv-kv"><span>${k}</span><b>${esc(v)}</b></div>`).join("");
 
     const infoTiles = [
-      ip || ipExt ? `<div class="tile srv-t" data-entity="${esc(m.ip || m.ip_ext)}"><div class="tile-l"><ha-icon icon="mdi:ip-network-outline"></ha-icon>Adresses IP</div>${kv([["Interne", ip ?? "—"], ["Externe", ipExt ?? (m.ip_ext ? "indisponible" : null)]])}</div>` : "",
-      boot || haStart ? `<div class="tile srv-t" data-entity="${esc(m.last_boot || m.ha_start)}"><div class="tile-l"><ha-icon icon="mdi:timer-outline"></ha-icon>Uptime</div>${kv([["Reboot", boot ? since(boot) : null], ["Restart", haStart ? since(haStart) : null]])}</div>` : "",
-      m.fan ? `<div class="tile srv-t srv-fan ${fanOn === true ? "on" : fanOn === false ? "off" : ""}" data-entity="${esc(m.fan)}"${fanIsEntity ? ` data-hold="${esc(m.fan)}" title="Appui long : marche / arrêt"` : ""}>
+      ip || ipExt ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(m.ip || m.ip_ext)}"><div class="tile-l"><ha-icon icon="mdi:ip-network-outline"></ha-icon>Adresses IP</div>${kv([[trLabel("Interne"), ip ?? "—"], [trLabel("Externe"), ipExt ?? (m.ip_ext ? trLabel("indisponible") : null)]])}</div>` : "",
+      boot || haStart ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(m.last_boot || m.ha_start)}"><div class="tile-l"><ha-icon icon="mdi:timer-outline"></ha-icon>Uptime</div>${kv([["Reboot", boot ? since(boot) : null], ["Restart", haStart ? since(haStart) : null]])}</div>` : "",
+      m.fan ? localizeTemplate`<div class="tile srv-t srv-fan ${fanOn === true ? "on" : fanOn === false ? "off" : ""}" data-entity="${esc(m.fan)}"${fanIsEntity ? ` data-hold="${esc(m.fan)}" title="Appui long : marche / arrêt"` : ""}>
         <div class="tile-l"><ha-icon icon="mdi:fan"></ha-icon>Ventilateur</div>
-        <div class="tile-v">${fanOn === null && fan === null ? "—" : fanOn === false ? "Éteint" : fan !== null ? `${fmt(fan, 0)}<span>${esc(fanUnit)}</span>` : "Allumé"}</div>
-        <div class="tile-n">${fanOn === null ? "indisponible" : fanOn ? (fanIsEntity ? "allumé" : "en marche") : "à l'arrêt"}</div></div>` : "",
+        <div class="tile-v">${fanOn === null && fan === null ? "—" : fanOn === false ? trLabel("Éteint") : fan !== null ? localizeTemplate`${fmt(fan, 0)}<span>${esc(fanUnit)}</span>` : trLabel("Allumé")}</div>
+        <div class="tile-n">${fanOn === null ? trLabel("indisponible") : fanOn ? (fanIsEntity ? trLabel("allumé") : trLabel("en marche")) : trLabel("à l'arrêt")}</div></div>` : "",
     ].filter(Boolean);
 
-    const gauge = (id, icon, label, v, unit, lvl, pct, sub, wide) => (v === null ? "" : `<div class="srv-g${wide ? " srv-wide" : ""}" data-entity="${esc(id)}">
+    const gauge = (id, icon, label, v, unit, lvl, pct, sub, wide) => (v === null ? "" : localizeTemplate`<div class="srv-g${wide ? " srv-wide" : ""}" data-entity="${esc(id)}">
         <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${v}<small>${unit}</small></b></div>
-        <div class="g-bar ${lvl}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
+        <div class="g-bar ${lvl}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const tempPct = temp === null ? 0 : (temp / Math.max(c.temp_alert + 10, 1)) * 100;
     const ramFreeUnit = this._unit(m.ram_free, "MiB");
     const gauges = [
       gauge(m.cpu, "mdi:cpu-64-bit", "CPU", cpu !== null ? fmt(cpu, 0) : null, " %", level(cpu, c.cpu_warn, c.cpu_alert), cpu),
-      gauge(m.temperature, "mdi:thermometer", "Température", temp !== null ? fmt(temp, 1) : null, ` ${esc(tempUnit)}`, level(temp, c.temp_warn, c.temp_alert), tempPct),
+      gauge(m.temperature, "mdi:thermometer", trLabel("Température"), temp !== null ? fmt(temp, 1) : null, ` ${esc(tempUnit)}`, level(temp, c.temp_warn, c.temp_alert), tempPct),
       gauge(m.ram, "mdi:memory", "RAM", ram !== null ? fmt(ram, 0) : null, " %", level(ram, c.ram_warn, c.ram_alert), ram),
       ramFree !== null ? gauge(m.ram_free, "mdi:memory-arrow-down", "RAM libre", fmt(ramFree, ramFree < 10 ? 1 : 0), ` ${esc(ramFreeUnit)}`, "srv-free",
-        c.ram_total ? (ramFree / Number(c.ram_total)) * 100 : ram !== null ? 100 - ram : 0, c.ram_total ? `sur ${fmt(Number(c.ram_total), 0)} ${esc(ramFreeUnit)}` : "") : "",
-      gauge(m.disk || m.disk_used, "mdi:harddisk", "Disque", disk !== null ? fmt(disk, 1) : null, " %", level(disk, c.disk_warn, c.disk_alert), disk,
+        c.ram_total ? (ramFree / Number(c.ram_total)) * 100 : ram !== null ? 100 - ram : 0, c.ram_total ? localizeTextTemplate`sur ${fmt(Number(c.ram_total), 0)} ${esc(ramFreeUnit)}` : "") : "",
+      gauge(m.disk || m.disk_used, "mdi:harddisk", trLabel("Disque"), disk !== null ? fmt(disk, 1) : null, " %", level(disk, c.disk_warn, c.disk_alert), disk,
         dUsed !== null && dTotal !== null ? `${fmt(dUsed, 1)} / ${fmt(dTotal, 1)} ${esc(this._unit(m.disk_total, "GB"))}` : "", true),
     ].filter(Boolean);
 
@@ -1469,48 +1684,51 @@ class ServeurHaCard extends HTMLElement {
       if (!id) return "";
       const unit = this._unit(id, "");
       const mb = v === null ? null : toMbit(v, unit);
-      return `<div class="srv-g ${cls}" data-entity="${esc(id)}">
+      return localizeTemplate`<div class="srv-g ${cls}" data-entity="${esc(id)}">
         <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${v !== null ? fmt(v, v < 10 ? 2 : 1) : "—"}<small> ${esc(unit)}</small></b></div>
         <div class="g-bar"><i style="width:${mb === null ? 0 : Math.min(100, (mb / netMax) * 100)}%"></i></div></div>`;
     };
     const nets = [net(m.net_in, "mdi:download", "Download", netIn, "srv-in"), net(m.net_out, "mdi:upload", "Upload", netOut, "srv-out")].filter(Boolean);
 
     const power = m.power
-      ? `<div class="srv-state srv-pw ${powerOk === null ? "" : powerOk ? "ok" : "bad"}" data-entity="${esc(m.power)}">
-          <div class="srv-pwh"><ha-icon icon="${esc(powerOk === false ? "mdi:flash-alert" : c.icon || "mdi:power-plug-outline")}"></ha-icon><span>${powerOk === false ? "Sous-tension détectée : vérifiez l'alimentation" : "État de l'alimentation sur 24 h"}</span><b>${powerOk === null ? "—" : powerOk ? "OK" : "Danger"}</b></div>
+      ? localizeTemplate`<div class="srv-state srv-pw ${powerOk === null ? "" : powerOk ? "ok" : "bad"}" data-entity="${esc(m.power)}">
+          <div class="srv-pwh"><ha-icon icon="${esc(powerOk === false ? "mdi:flash-alert" : c.icon || "mdi:power-plug-outline")}"></ha-icon><span>${powerOk === false ? trLabel("Sous-tension détectée : vérifiez l'alimentation") : trLabel("État de l'alimentation sur 24 h")}</span><b>${powerOk === null ? "—" : powerOk ? "OK" : trLabel("Danger")}</b></div>
           ${this._timeline(m.power)}</div>`
       : "";
 
-    const bTile = (id, icon, label, v, n, cls = "") => (v === null ? "" : `<div class="tile srv-b ${cls}" data-entity="${esc(id || "")}"><ha-icon icon="${esc(icon)}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${esc(v)}</div>${n ? `<div class="tile-n">${esc(n)}</div>` : ""}</div>`);
-    const stateFr = bState ? ({ idle: "Inactif", create_backup: "Sauvegarde…", receive_backup: "Réception…", restore_backup: "Restauration…", blocked: "Bloqué" }[bState] || bState) : null;
+    const bTile = (id, icon, label, v, n, cls = "") => (v === null ? "" : localizeTemplate`<div class="tile srv-b ${cls}" data-entity="${esc(id || "")}"><ha-icon icon="${esc(icon)}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${esc(v)}</div>${n ? localizeTemplate`<div class="tile-n">${esc(n)}</div>` : ""}</div>`);
+    const stateFr = bState ? (() => {
+      const known = { idle: "Inactif", create_backup: "Sauvegarde…", receive_backup: "Réception…", restore_backup: "Restauration…", blocked: "Bloqué" }[bState];
+      return known ? trLabel(known) : bState;
+    })() : null;
     const backups = [
-      bTile(m.drive_size || m.drive_count, "mdi:folder-google-drive", "Sauvegardes", drSize !== null ? `${fmt(drSize, drSize < 10 ? 1 : 0)} ${this._unit(m.drive_size, "")}` : drCount !== null ? fmt(drCount, 0) : null, drSize !== null && drCount !== null ? `${fmt(drCount, 0)} fichiers` : ""),
-      bEvent ? bTile(m.backup_event, "mdi:cloud-sync-outline", "État", { completed: "Terminé", failed: "Échoué", in_progress: "En cours", started: "En cours" }[bEvent] || bEvent, "", bEvent === "failed" ? "bad" : bEvent === "completed" ? "good" : "") :
-      bTile(m.backup_state, "mdi:cloud-check-outline", "État", stateFr, /fail|error|échec|erreur/i.test(bState || "") ? "en erreur" : "", /fail|error|échec|erreur/i.test(bState || "") ? "warn" : ""),
-      bTile(m.drive_used, "mdi:google-drive", "Utilisé", drUsed !== null ? `${fmt(drUsed, drUsed < 10 ? 1 : 0)} ${this._unit(m.drive_used, "")}` : null, drTotal !== null ? `sur ${fmt(drTotal, 0)} ${this._unit(m.drive_total, "")}` : ""),
-      bTile(m.backup_last, "mdi:history", "Dernière", bLast ? dayMonth(bLast) : null, bLast ? relTime(bLast) : "", bAge !== null && bAge >= 2 ? "warn" : "last"),
-      bTile(m.backup_next, "mdi:calendar-clock", "Prochaine", bNext ? dayMonth(bNext) : null, bNext ? relTime(bNext) : "", "next"),
+      bTile(m.drive_size || m.drive_count, "mdi:folder-google-drive", uiText("backup.section"), drSize !== null ? `${fmt(drSize, drSize < 10 ? 1 : 0)} ${this._unit(m.drive_size, "")}` : drCount !== null ? fmt(drCount, 0) : null, drSize !== null && drCount !== null ? countUi(drCount, "file") : ""),
+      bEvent ? bTile(m.backup_event, "mdi:cloud-sync-outline", trLabel("État"), { completed: uiText("backup.completed"), failed: uiText("backup.failed"), in_progress: uiText("backup.progress"), started: uiText("backup.progress") }[bEvent] || bEvent, "", bEvent === "failed" ? "bad" : bEvent === "completed" ? "good" : "") :
+      bTile(m.backup_state, "mdi:cloud-check-outline", trLabel("État"), stateFr, /fail|error|échec|erreur/i.test(bState || "") ? trLabel("en erreur") : "", /fail|error|échec|erreur/i.test(bState || "") ? "warn" : ""),
+      bTile(m.drive_used, "mdi:google-drive", trLabel("Utilisé"), drUsed !== null ? `${fmt(drUsed, drUsed < 10 ? 1 : 0)} ${this._unit(m.drive_used, "")}` : null, drTotal !== null ? localizeTextTemplate`sur ${fmt(drTotal, 0)} ${this._unit(m.drive_total, "")}` : ""),
+      bTile(m.backup_last, "mdi:history", trLabel("Dernière"), bLast ? dayMonth(bLast) : null, bLast ? relTime(bLast) : "", bAge !== null && bAge >= 2 ? "warn" : "last"),
+      bTile(m.backup_next, "mdi:calendar-clock", trLabel("Prochaine"), bNext ? dayMonth(bNext) : null, bNext ? relTime(bNext) : "", "next"),
     ].filter(Boolean);
 
     const empty = !infoTiles.length && !gauges.length && !nets.length && !power && !backups.length;
     const body = empty
-      ? `<div class="empty">Aucun capteur trouvé<span>Ajoutez l'intégration System Monitor (Paramètres → Appareils et services) ou indiquez vos capteurs dans <code>entities:</code> (voir le README).</span></div>`
+      ? localizeTemplate`<div class="empty">Aucun capteur trouvé<span>Ajoutez l'intégration System Monitor (Paramètres → Appareils et services) ou indiquez vos capteurs dans <code>entities:</code> (voir le README).</span></div>`
       : [
-        c.show_info !== false ? sec("mdi:information-outline", "Informations", infoTiles.length ? `<div class="tiles srv-tiles">${infoTiles.join("")}</div>` : "") : "",
-        c.show_resources !== false ? sec("mdi:speedometer", "Ressources", gauges.length ? `<div class="srv-grid">${gauges.join("")}</div>` : "") : "",
-        c.show_network !== false ? sec("mdi:swap-vertical", "Débits réseau", nets.length ? `<div class="srv-grid">${nets.join("")}</div>` : "") : "",
-        c.show_power !== false ? sec("mdi:power-plug-outline", "Alimentation", power) : "",
-        c.show_backup !== false ? sec(m.drive_used || m.drive_size ? "mdi:google-drive" : "mdi:cloud-upload-outline", esc(c.backup_title || (m.drive_used || m.drive_size ? "Google Drive Backup" : "Sauvegardes")), backups.length ? `<div class="srv-bk">${backups.join("")}</div>` : "") : "",
+        c.show_info !== false ? sec("mdi:information-outline", trLabel("Informations"), infoTiles.length ? localizeTemplate`<div class="tiles srv-tiles">${infoTiles.join("")}</div>` : "") : "",
+        c.show_resources !== false ? sec("mdi:speedometer", trLabel("Ressources"), gauges.length ? localizeTemplate`<div class="srv-grid">${gauges.join("")}</div>` : "") : "",
+        c.show_network !== false ? sec("mdi:swap-vertical", trLabel("Débits réseau"), nets.length ? localizeTemplate`<div class="srv-grid">${nets.join("")}</div>` : "") : "",
+        c.show_power !== false ? sec("mdi:power-plug-outline", trLabel("Alimentation"), power) : "",
+        c.show_backup !== false ? sec(m.drive_used || m.drive_size ? "mdi:google-drive" : "mdi:cloud-upload-outline", esc(c.backup_title || (m.drive_used || m.drive_size ? "Google Drive Backup" : uiText("backup.section"))), backups.length ? localizeTemplate`<div class="srv-bk">${backups.join("")}</div>` : "") : "",
       ].join("");
 
     const alertCls = powerOk === false || (temp !== null && temp >= c.temp_alert) ? "srv-alert" : "";
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
         <div class="brand"${c.navigation_path ? ` data-nav="${esc(c.navigation_path)}" style="cursor:pointer"` : m.ip ? ` data-entity="${esc(m.ip)}" style="cursor:pointer"` : ""}>
-          ${c.icon ? `<ha-icon class="srv-icon" icon="${esc(c.icon)}" style="color:${esc(c.icon_color || "var(--med-green)")}"></ha-icon>` : `<svg viewBox="0 0 32 32" aria-hidden="true"><rect class="srv-box" x="5" y="5" width="22" height="22" rx="4"/><path class="bolt" d="M17.5 9 11 18h4.5l-1.5 8 7-10h-4.6z"/></svg>`}
-          <div><div class="title">${esc(c.title)}</div>${c.subtitle ? `<div class="sub">${esc(c.subtitle)}</div>` : ""}${head ? `<div class="sub srv-head">${esc(head)}</div>` : ""}</div>
+          ${c.icon ? localizeTemplate`<ha-icon class="srv-icon" icon="${esc(c.icon)}" style="color:${esc(c.icon_color || "var(--med-green)")}"></ha-icon>` : localizeTemplate`<svg viewBox="0 0 32 32" aria-hidden="true"><rect class="srv-box" x="5" y="5" width="22" height="22" rx="4"/><path class="bolt" d="M17.5 9 11 18h4.5l-1.5 8 7-10h-4.6z"/></svg>`}
+          <div><div class="title">${esc(c.title)}</div>${c.subtitle ? localizeTemplate`<div class="sub">${esc(c.subtitle)}</div>` : ""}${head ? localizeTemplate`<div class="sub srv-head">${esc(head)}</div>` : ""}</div>
         </div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>${body}</ha-card>`;
   }
 }
@@ -1622,6 +1840,7 @@ class ServeurHaMajCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...MAJ_DEFAULTS, ...(config || {}) };
     this._map = null;
     this._sig = null;
@@ -1706,7 +1925,7 @@ class ServeurHaMajCard extends HTMLElement {
       const s = this._st(id);
       if (!s) return "";
       const cls = s.state === "on" ? "upd" : s.state === "off" ? "ok" : "na";
-      return `<span class="srv-led ${cls}" data-entity="${esc(id)}"><i></i>${label}</span>`;
+      return localizeTemplate`<span class="srv-led ${cls}" data-entity="${esc(id)}"><i></i>${label}</span>`;
     };
     const leds = MAJ_SYSTEM.map((x) => led(x.label.replace("HA ", ""), m.system[x.id])).join("");
 
@@ -1716,10 +1935,10 @@ class ServeurHaMajCard extends HTMLElement {
       if (!s) return "";
       const on = s.state === "on";
       const busy = s.attributes?.in_progress;
-      return `<div class="tile maj-sys ${on ? "upd" : ""}" data-entity="${esc(m.system[x.id])}">
+      return localizeTemplate`<div class="tile maj-sys ${on ? "upd" : ""}" data-entity="${esc(m.system[x.id])}">
         <div class="tile-l">${x.label}</div>
         <div class="maj-v">${esc(ver(s) || "—")}</div>
-        <div class="tile-n">${busy ? "installation…" : on ? `→ <b>${esc(latest(s) || "?")}</b> disponible` : "à jour"}</div>
+        <div class="tile-n">${busy ? "installation…" : on ? localizeTemplate`→ <b>${esc(latest(s) || "?")}</b> disponible` : trLabel("à jour")}</div>
       </div>`;
     }).filter(Boolean);
 
@@ -1728,7 +1947,7 @@ class ServeurHaMajCard extends HTMLElement {
     const db = this._st(m.database);
     if (db) {
       const n = Number(db.state);
-      info.push(`<div class="tile maj-info" data-entity="${esc(m.database)}"><ha-icon icon="mdi:database"></ha-icon><div><div class="tile-l">Base de données</div>
+      info.push(localizeTemplate`<div class="tile maj-info" data-entity="${esc(m.database)}"><ha-icon icon="mdi:database"></ha-icon><div><div class="tile-l">Base de données</div>
         <div class="maj-iv">${Number.isFinite(n) ? `${fmt(n, n < 10 ? 2 : 1)} ${esc(db.attributes?.unit_of_measurement || "MB")}` : "indisponible"}</div></div></div>`);
     }
     const ssl = this._st(m.ssl);
@@ -1736,8 +1955,8 @@ class ServeurHaMajCard extends HTMLElement {
       const d = daysUntil(ssl.state);
       const cls = d === null ? "" : d >= c.ssl_warn ? "ok" : d >= c.ssl_alert ? "warn" : "bad";
       const date = d === null ? "—" : new Date(ssl.state).toLocaleDateString(cardLocale(), { day: "2-digit", month: "2-digit", year: "2-digit" });
-      info.push(`<div class="tile maj-info ${cls}" data-entity="${esc(m.ssl)}"><ha-icon icon="mdi:certificate"></ha-icon><div><div class="tile-l">Certificat SSL</div>
-        <div class="maj-iv">${d === null ? "indisponible" : d < 0 ? "expiré" : `encore ${d} jour${d > 1 ? "s" : ""}`}</div><div class="tile-n">expire le ${date}</div></div></div>`);
+      info.push(localizeTemplate`<div class="tile maj-info ${cls}" data-entity="${esc(m.ssl)}"><ha-icon icon="mdi:certificate"></ha-icon><div><div class="tile-l">Certificat SSL</div>
+        <div class="maj-iv">${d === null ? "indisponible" : d < 0 ? trLabel("expiré") : `encore ${d} jour${d > 1 ? "s" : ""}`}</div><div class="tile-n">expire le ${date}</div></div></div>`);
     }
 
     // Applications
@@ -1748,30 +1967,30 @@ class ServeurHaMajCard extends HTMLElement {
       const on = a.s.state === "on";
       const pic = a.picture || a.s.attributes?.entity_picture;
       const name = a.name || appName(a.s);
-      return `<div class="maj-app ${on ? "upd" : ""}" data-entity="${esc(a.entity)}" title="${esc(name)} ${esc(ver(a.s) || "")}${on ? ` → ${esc(latest(a.s) || "")}` : ""}">
-        <div class="maj-ico">${pic ? `<img src="${esc(pic)}" alt="" loading="lazy">` : `<ha-icon icon="${esc(a.icon || "mdi:puzzle-outline")}"></ha-icon>`}<span class="maj-badge">${on ? "↑" : "✓"}</span></div>
+      return localizeTemplate`<div class="maj-app ${on ? "upd" : ""}" data-entity="${esc(a.entity)}" title="${esc(name)} ${esc(ver(a.s) || "")}${on ? ` → ${esc(latest(a.s) || "")}` : ""}">
+        <div class="maj-ico">${pic ? localizeTemplate`<img src="${esc(pic)}" alt="" loading="lazy">` : localizeTemplate`<ha-icon icon="${esc(a.icon || "mdi:puzzle-outline")}"></ha-icon>`}<span class="maj-badge">${on ? "↑" : "✓"}</span></div>
         <div class="maj-an">${esc(name)}</div>
         <div class="maj-av">${esc(on ? latest(a.s) || "" : ver(a.s) || "")}</div>
       </div>`;
     });
 
-    const sec = (icon, title, right, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${title}${right ? `<span class="maj-r">${right}</span>` : ""}</div>${body}</div>` : "");
+    const sec = (icon, title, right, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${title}${right ? localizeTemplate`<span class="maj-r">${right}</span>` : ""}</div>${body}</div>` : "");
     const body = [
-      c.show_system !== false ? sec("mdi:update", "Mises à jour système", "", sysTiles.length ? `<div class="maj-grid3">${sysTiles.join("")}</div>` : "") : "",
-      c.show_info !== false ? sec("mdi:information-outline", "Informations", "", info.length ? `<div class="maj-grid2">${info.join("")}</div>` : "") : "",
-      c.show_apps !== false ? sec("mdi:application-outline", "Applications", apps.length ? (nUpd ? `<b class="maj-cnt">${nUpd} mise${nUpd > 1 ? "s" : ""} à jour</b>` : "tout est à jour") : "", appTiles.length ? `<div class="maj-apps">${appTiles.join("")}</div>` : "") : "",
+      c.show_system !== false ? sec("mdi:update", trLabel("Mises à jour système"), "", sysTiles.length ? localizeTemplate`<div class="maj-grid3">${sysTiles.join("")}</div>` : "") : "",
+      c.show_info !== false ? sec("mdi:information-outline", "Informations", "", info.length ? localizeTemplate`<div class="maj-grid2">${info.join("")}</div>` : "") : "",
+      c.show_apps !== false ? sec("mdi:application-outline", "Applications", apps.length ? (nUpd ? localizeTemplate`<b class="maj-cnt">${nUpd} mise${nUpd > 1 ? "s" : ""} à jour</b>` : trLabel("tout est à jour")) : "", appTiles.length ? localizeTemplate`<div class="maj-apps">${appTiles.join("")}</div>` : "") : "",
     ].join("");
 
     const sub = [c.subtitle, ver(core) ? `Core ${ver(core)}` : null].filter(Boolean).map(esc).join(" · ");
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${MAJ_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${MAJ_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
       <header>
         <div class="brand" data-entity="${esc(m.system.core || "")}" style="cursor:pointer">
           <svg viewBox="0 0 32 32" aria-hidden="true"><path class="house" d="M4 14.5 16 4l12 10.5V27a1.5 1.5 0 0 1-1.5 1.5h-21A1.5 1.5 0 0 1 4 27z"/><circle class="bolt" cx="16" cy="17" r="3"/><path class="house" d="M16 20v6M16 17l-5 4M16 17l5-3"/></svg>
-          <div><div class="title">${esc(c.title)}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>
+          <div><div class="title">${esc(c.title)}</div>${sub ? localizeTemplate`<div class="sub">${sub}</div>` : ""}</div>
         </div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
-      ${body || `<div class="empty">Aucune entité trouvée<span>Cette carte lit les entités <code>update.*</code> de Home Assistant (intégration Supervisor). Indiquez-les dans <code>entities:</code> et <code>apps:</code> si besoin (voir le README).</span></div>`}
+      ${body || localizeTemplate`<div class="empty">Aucune entité trouvée<span>Cette carte lit les entités <code>update.*</code> de Home Assistant (intégration Supervisor). Indiquez-les dans <code>entities:</code> et <code>apps:</code> si besoin (voir le README).</span></div>`}
     </ha-card>`;
   }
 }
@@ -1878,7 +2097,11 @@ const NAS_FR = {
   online: "Secteur", "on battery": "Sur batterie", "on battery discharging": "Sur batterie", "online charging": "Secteur · en charge",
   "low battery": "Batterie faible", "replace battery": "Batterie à remplacer", overload: "Surcharge",
 };
-const fr = (s) => (s == null ? s : NAS_FR[String(s).trim().toLowerCase()] || s);
+const fr = (s) => {
+  if (s == null) return s;
+  const known = NAS_FR[String(s).trim().toLowerCase()];
+  return known ? trLabel(known) : s;
+};
 
 /** Capteurs NUT d'un onduleur : appareil choisi (ups_device), sinon le premier trouvé. */
 const nutMap = (hass, c) => {
@@ -1903,7 +2126,7 @@ const upsBlock = (card, u, c) => {
   const ok = !u.status && !u.status_raw ? null : (raw ? /\bOL\b/.test(raw) && !/\b(OB|LB|RB|OVER)\b/.test(raw) : /online|en ligne/i.test(st || ""));
   const bar = (id, icon, label, max, cls) => {
     const v = card._num(id);
-    return v === null ? "" : `<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> ${esc(card._unit(id, ""))}</small></b></div>
+    return v === null ? "" : localizeTemplate`<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> ${esc(card._unit(id, ""))}</small></b></div>
       <div class="g-bar"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div></div>`;
   };
   const batt = card._num(u.battery);
@@ -1911,14 +2134,14 @@ const upsBlock = (card, u, c) => {
   const dev = hass.devices?.[hass.entities?.[u.status || u.status_raw || u.battery]?.device_id];
   const name = c.ups_name || [dev?.manufacturer, dev?.model].filter(Boolean).join(" ") || dev?.name || "Onduleur";
   const run = card._num(u.runtime);
-  const html = `<div class="srv-state ${ok === null ? "" : ok ? "ok" : "bad"} nas-ups" data-entity="${esc(u.status || u.status_raw || "")}">
+  const html = localizeTemplate`<div class="srv-state ${ok === null ? "" : ok ? "ok" : "bad"} nas-ups" data-entity="${esc(u.status || u.status_raw || "")}">
       <ha-icon icon="mdi:power-plug-battery-outline"></ha-icon><span>${esc(name)}</span><b>${esc([fr(st), raw].filter(Boolean).join(" · ") || "—")}</b></div>
     <div class="srv-grid nas-ups-g">${[
       bar(u.input, "mdi:transmission-tower-import", "Entrée", 250, "nas-in"),
       bar(u.output, "mdi:transmission-tower-export", "Sortie", 250, "srv-in"),
       bar(u.load, "mdi:gauge", "Charge", 100, "nas-load"),
-      batt === null ? "" : `<div class="srv-g" data-entity="${esc(u.battery)}"><div class="srv-gt"><span><ha-icon icon="mdi:battery"></ha-icon>Batterie</span><b>${fmt(batt, 0)}<small> %</small></b></div>
-        <div class="g-bar ${batt >= 50 ? "b-ok" : batt >= 20 ? "b-warn" : "b-alert"}"><i style="width:${batt}%"></i></div>${run !== null && card._unit(u.runtime, "s") === "s" ? `<div class="srv-gs">Autonomie ${Math.round(run / 60)} min</div>` : ""}</div>`,
+      batt === null ? "" : localizeTemplate`<div class="srv-g" data-entity="${esc(u.battery)}"><div class="srv-gt"><span><ha-icon icon="mdi:battery"></ha-icon>Batterie</span><b>${fmt(batt, 0)}<small> %</small></b></div>
+        <div class="g-bar ${batt >= 50 ? "b-ok" : batt >= 20 ? "b-warn" : "b-alert"}"><i style="width:${batt}%"></i></div>${run !== null && card._unit(u.runtime, "s") === "s" ? localizeTemplate`<div class="srv-gs">Autonomie ${Math.round(run / 60)} min</div>` : ""}</div>`,
     ].join("")}</div>`;
   return { html, ok };
 };
@@ -1935,6 +2158,7 @@ class ServeurHaNasCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...NAS_DEFAULTS, ...(config || {}) };
     this._map = null;
     this._sig = null;
@@ -2143,14 +2367,14 @@ class ServeurHaNasCard extends HTMLElement {
     const upsSt = this._txt(m.ups.status);
     const upsRaw = this._txt(m.ups.status_raw);
     const upsOk = !m.ups.status && !m.ups.status_raw ? null : (upsRaw ? /\bOL\b/.test(upsRaw) && !/\b(OB|LB|RB|OVER)\b/.test(upsRaw) : /online|en ligne/i.test(upsSt || ""));
-    const led = (ok, label, id) => (ok === null ? "" : `<span class="srv-led ${ok ? "ok" : "bad"}" data-entity="${esc(id || "")}"><i></i>${label}</span>`);
-    const leds = [led(online, "NAS", m.tracker || m.cpu), led(hddOk, "HDD", vol1?.status), led(secOk, "Sécurité", m.security), led(upsOk, "UPS", m.ups.status || m.ups.status_raw)].join("");
+    const led = (ok, label, id) => (ok === null ? "" : localizeTemplate`<span class="srv-led ${ok ? "ok" : "bad"}" data-entity="${esc(id || "")}"><i></i>${label}</span>`);
+    const leds = [led(online, "NAS", m.tracker || m.cpu), led(hddOk, "HDD", vol1?.status), led(secOk, trLabel("Sécurité"), m.security), led(upsOk, "UPS", m.ups.status || m.ups.status_raw)].join("");
     const dev = Object.values(this._hass.devices || {}).find((d) => d.id === this._hass.entities?.[m.cpu]?.device_id);
     const title = c.title || dev?.name_by_user || dev?.name || "NAS";
-    const sub2 = [ip, vol1State ? `Volume ${fr(vol1State).toLowerCase()}` : null].filter(Boolean).join(" · ");
+    const sub2 = [ip, vol1State ? `${uiText("storage.volume")} ${fr(vol1State).toLowerCase()}` : null].filter(Boolean).join(" · ");
 
-    const sec = (icon, t, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
-    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => `<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
+    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
+    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => localizeTemplate`<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
 
     // --- informations
     const boot = this._txt(m.last_boot);
@@ -2158,38 +2382,38 @@ class ServeurHaNasCard extends HTMLElement {
     const upd = this._st(m.dsm_update);
     const short = (v) => (/\d+(?:\.\d+)+/.exec(v || "") || [v || null])[0]; // « DSM 7.2.2-72806 Update 3 » → « 7.2.2 »
     const inst = upd?.attributes?.installed_version, last = upd?.attributes?.latest_version;
-    const dsmTile = upd && upd.state !== "unavailable" ? `<div class="tile srv-t nas-dsm ${upd.state === "on" ? "up" : ""}" data-entity="${esc(m.dsm_update)}" title="${esc([inst, upd.state === "on" ? `→ ${last}` : ""].filter(Boolean).join(" "))}"><div class="tile-l"><ha-icon icon="${esc(upd.state === "on" ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>DSM</div>
-        ${kv([["Version", short(inst)], upd.state === "on" ? ["Dispo", short(last) || "Oui", "bad"] : ["État", "À jour", "ok"]])}</div>` : "";
+    const dsmTile = upd && upd.state !== "unavailable" ? localizeTemplate`<div class="tile srv-t nas-dsm ${upd.state === "on" ? "up" : ""}" data-entity="${esc(m.dsm_update)}" title="${esc([inst, upd.state === "on" ? `→ ${last}` : ""].filter(Boolean).join(" "))}"><div class="tile-l"><ha-icon icon="${esc(upd.state === "on" ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>DSM</div>
+        ${kv([["Version", short(inst)], upd.state === "on" ? ["Dispo", short(last) || "Oui", "bad"] : [trLabel("État"), "À jour", "ok"]])}</div>` : "";
     const info = [
-      ip || ipExt ? `<div class="tile srv-t" data-entity="${esc(m.tracker || "")}"><div class="tile-l"><ha-icon icon="mdi:ip-network-outline"></ha-icon>Réseau</div>${kv([["Interne", ip || "—"], ["Externe", ipExt || null]])}</div>` : "",
-      m.volumes.length || m.security ? `<div class="tile srv-t nas-health ${hddOk === false || secOk === false ? "bad" : ""}" data-panel="1" title="Afficher l'état des disques">
+      ip || ipExt ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(m.tracker || "")}"><div class="tile-l"><ha-icon icon="mdi:ip-network-outline"></ha-icon>Réseau</div>${kv([["Interne", ip || "—"], ["Externe", ipExt || null]])}</div>` : "",
+      m.volumes.length || m.security ? localizeTemplate`<div class="tile srv-t nas-health ${hddOk === false || secOk === false ? "bad" : ""}" data-panel="1" title="Afficher l'état des disques">
         <div class="tile-l"><ha-icon icon="${esc(hddOk === false ? "mdi:shield-alert-outline" : "mdi:shield-check-outline")}"></ha-icon>Santé<ha-icon class="nas-chev" icon="mdi:chevron-${this._open ? "up" : "down"}"></ha-icon></div>
-        ${kv([["Volume", fr(vol1State), okWord(vol1State) ? "ok" : "bad"], ["Sécurité", secSt === undefined ? null : secOk ? "Sécurisé" : "Alerte", secOk ? "ok" : "bad"]])}</div>` : "",
-      boot ? `<div class="tile srv-t" data-entity="${esc(m.last_boot)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
+        ${kv([[uiText("storage.volume"), fr(vol1State), okWord(vol1State) ? "ok" : "bad"], [trLabel("Sécurité"), secSt === undefined ? null : secOk ? trLabel("Sécurisé") : trLabel("Alerte"), secOk ? "ok" : "bad"]])}</div>` : "",
+      boot ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(m.last_boot)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
       dsmTile,
     ].filter(Boolean);
 
     // Panneau « État des disques » (remplace la fenêtre browser_mod du modèle)
     const panel = this._open && m.drives.length
-      ? `<div class="nas-panel">${m.drives.map((d) => {
-        const flag = (id) => { const s = this._st(id)?.state; return s === undefined ? null : s === "off" ? ["OK", "ok"] : ["Alerte", "bad"]; };
+      ? localizeTemplate`<div class="nas-panel">${m.drives.map((d) => {
+        const flag = (id) => { const s = this._st(id)?.state; return s === undefined ? null : s === "off" ? ["OK", "ok"] : [trLabel("Alerte"), "bad"]; };
         const bad = flag(d.drv_bad), life = flag(d.drv_life);
-        return `<div class="nas-drv" data-entity="${esc(d.drv_status || d.drv_smart || "")}"><div class="nas-drv-h"><ha-icon icon="mdi:harddisk"></ha-icon>Disque ${d.n}</div>
-          ${kv([["État", fr(this._txt(d.drv_status)), okWord(this._txt(d.drv_status)) ? "ok" : "bad"], ["SMART", fr(this._txt(d.drv_smart)), okWord(this._txt(d.drv_smart)) ? "ok" : "bad"],
-            ["Secteurs défectueux", bad?.[0] ?? null, bad?.[1]], ["Durée de vie", life?.[0] ?? null, life?.[1]],
-            ["Température", this._num(d.drv_temp) !== null ? `${fmt(this._num(d.drv_temp), 0)} ${this._unit(d.drv_temp, "°C")}` : null]])}</div>`;
+        return localizeTemplate`<div class="nas-drv" data-entity="${esc(d.drv_status || d.drv_smart || "")}"><div class="nas-drv-h"><ha-icon icon="mdi:harddisk"></ha-icon>Disque ${d.n}</div>
+          ${kv([[trLabel("État"), fr(this._txt(d.drv_status)), okWord(this._txt(d.drv_status)) ? "ok" : "bad"], ["SMART", fr(this._txt(d.drv_smart)), okWord(this._txt(d.drv_smart)) ? "ok" : "bad"],
+            [trLabel("Secteurs défectueux"), bad?.[0] ?? null, bad?.[1]], [trLabel("Durée de vie"), life?.[0] ?? null, life?.[1]],
+            [trLabel("Température"), this._num(d.drv_temp) !== null ? `${fmt(this._num(d.drv_temp), 0)} ${this._unit(d.drv_temp, "°C")}` : null]])}</div>`;
       }).join("")}</div>`
       : "";
 
     // --- ressources
-    const gauge = (id, icon, label, v, digits, unit, lvl, sub) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
+    const gauge = (id, icon, label, v, digits, unit, lvl, sub) => (v === null ? "" : localizeTemplate`<div class="srv-g" data-entity="${esc(id)}">
         <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
-        <div class="g-bar ${lvl}"><i style="width:${Math.max(0, Math.min(100, v))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
+        <div class="g-bar ${lvl}"><i style="width:${Math.max(0, Math.min(100, v))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const res = [
       gauge(m.cpu, "mdi:cpu-64-bit", "CPU", this._num(m.cpu), 0, " %", level(this._num(m.cpu), 70, 90)),
       gauge(m.ram, "mdi:memory", "RAM", this._num(m.ram), 0, " %", level(this._num(m.ram), 80, 92)),
-      ...m.volumes.map((v, i) => gauge(v.used, "mdi:harddisk", i === 0 && c.volume_name ? esc(c.volume_name) : `Volume ${v.n}`, this._num(v.used), 1, " %", level(this._num(v.used), 75, 90))),
-      ...m.usb.map((u, i) => gauge(u.entity, u.icon || "mdi:usb-flash-drive", esc(u.name || (m.usb.length > 1 ? `USB ${i + 1}` : "USB")), this._num(u.entity), 1, " %", level(this._num(u.entity), 75, 90))),
+      ...m.volumes.map((v, i) => gauge(v.used, "mdi:harddisk", i === 0 && c.volume_name ? esc(c.volume_name) : `${uiText("storage.volume")} ${v.n}`, this._num(v.used), 1, " %", level(this._num(v.used), 75, 90))),
+      ...m.usb.map((u, i) => gauge(u.entity, u.icon || "mdi:usb-flash-drive", esc(u.name || (m.usb.length > 1 ? `USB ${i + 1}` : trLabel("USB"))), this._num(u.entity), 1, " %", level(this._num(u.entity), 75, 90))),
     ].filter(Boolean);
 
     // --- températures et ventilation
@@ -2197,14 +2421,14 @@ class ServeurHaNasCard extends HTMLElement {
       const v = this._num(id);
       if (v === null) return "";
       const cls = v >= c.temp_alert ? "bad" : v >= c.temp_warn ? "warn" : "";
-      return `<div class="tile srv-b nas-th ${cls}" data-entity="${esc(id)}"><ha-icon icon="${esc(icon)}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${fmt(v, 0)} ${esc(this._unit(id, "°C"))}</div></div>`;
+      return localizeTemplate`<div class="tile srv-b nas-th ${cls}" data-entity="${esc(id)}"><ha-icon icon="${esc(icon)}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${fmt(v, 0)} ${esc(this._unit(id, "°C"))}</div></div>`;
     };
     const fanSt = this._txt(m.fan);
     const fanFr = fanSt ? ({ quiet: "Silencieux", cool: "Frais", full_speed: "Vitesse max", full: "Vitesse max", low_power: "Économie" }[fanSt] || fanSt) : null;
     const thermal = [
       tTile(m.temperature, "mdi:nas", "NAS"),
       ...m.drives.map((d) => tTile(d.drv_temp, "mdi:harddisk", `Disque ${d.n}`)),
-      m.fan ? `<div class="tile srv-b" data-entity="${esc(m.fan)}" data-hold="${esc(m.fan)}" title="Appui long : mode suivant"><ha-icon icon="${esc(fanSt === "quiet" ? "mdi:fan-speed-1" : fanSt === "cool" ? "mdi:fan-speed-2" : "mdi:fan-speed-3")}"></ha-icon><div class="tile-l">Ventilateur</div><div class="srv-bv nas-sm">${esc(fanFr || "—")}</div></div>` : "",
+      m.fan ? localizeTemplate`<div class="tile srv-b" data-entity="${esc(m.fan)}" data-hold="${esc(m.fan)}" title="Appui long : mode suivant"><ha-icon icon="${esc(fanSt === "quiet" ? "mdi:fan-speed-1" : fanSt === "cool" ? "mdi:fan-speed-2" : "mdi:fan-speed-3")}"></ha-icon><div class="tile-l">Ventilateur</div><div class="srv-bv nas-sm">${esc(fanFr || "—")}</div></div>` : "",
     ].filter(Boolean);
 
     // --- actions : redémarrage (2 clics) et interrupteurs (appui long)
@@ -2213,11 +2437,11 @@ class ServeurHaNasCard extends HTMLElement {
     const pwr = online ? (this._st(m.shutdown) ? m.shutdown : null) : (this._st(m.power_on) ? m.power_on : null);
     if (pwr) {
       const armed = this._armed === pwr;
-      acts.push(`<div class="tile srv-b nas-act nas-power ${online ? "good" : "bad"} ${armed ? "armed" : ""}" data-press="${esc(pwr)}"><ha-icon icon="mdi:power"></ha-icon><div class="tile-l">${armed ? "Confirmer ?" : online ? "Éteindre" : "Allumer"}</div><div class="tile-n">${online ? "Allumé" : "Éteint"}</div></div>`);
+      acts.push(localizeTemplate`<div class="tile srv-b nas-act nas-power ${online ? "good" : "bad"} ${armed ? "armed" : ""}" data-press="${esc(pwr)}"><ha-icon icon="mdi:power"></ha-icon><div class="tile-l">${armed ? "Confirmer ?" : online ? trLabel("Éteindre") : trLabel("Allumer")}</div><div class="tile-n">${online ? trLabel("Allumé") : trLabel("Éteint")}</div></div>`);
     }
     if (online && m.reboot && this._st(m.reboot)) {
       const armed = this._armed === m.reboot;
-      acts.push(`<div class="tile srv-b nas-act nas-reboot ${armed ? "armed" : ""}" data-press="${esc(m.reboot)}"><ha-icon icon="mdi:restart"></ha-icon><div class="tile-l">${armed ? "Confirmer ?" : "Redémarrer"}</div><div class="tile-n">${esc(title)}</div></div>`);
+      acts.push(localizeTemplate`<div class="tile srv-b nas-act nas-reboot ${armed ? "armed" : ""}" data-press="${esc(m.reboot)}"><ha-icon icon="mdi:restart"></ha-icon><div class="tile-l">${armed ? "Confirmer ?" : trLabel("Redémarrer")}</div><div class="tile-n">${esc(title)}</div></div>`);
     }
     for (const a of m.actions) {
       const s = this._st(a.entity);
@@ -2226,11 +2450,11 @@ class ServeurHaNasCard extends HTMLElement {
       const domain = a.entity.split(".")[0];
       if (domain === "button") {
         const armed = this._armed === a.entity;
-        acts.push(`<div class="tile srv-b nas-act ${armed ? "armed" : ""}" data-press="${esc(a.entity)}"><ha-icon icon="${esc(a.icon || "mdi:gesture-tap-button")}"></ha-icon><div class="tile-l">${armed ? "Confirmer ?" : esc(a.name || s.attributes?.friendly_name || a.entity)}</div></div>`);
+        acts.push(localizeTemplate`<div class="tile srv-b nas-act ${armed ? "armed" : ""}" data-press="${esc(a.entity)}"><ha-icon icon="${esc(a.icon || "mdi:gesture-tap-button")}"></ha-icon><div class="tile-l">${armed ? "Confirmer ?" : esc(a.name || s.attributes?.friendly_name || a.entity)}</div></div>`);
       } else {
         const on = s.state === "on";
-        acts.push(`<div class="tile srv-b nas-act ${on ? "good" : s.state === "off" ? "bad" : ""}" data-entity="${esc(a.entity)}" data-hold="${esc(a.entity)}" title="Appui long : marche / arrêt">
-          <ha-icon icon="${esc(a.icon || s.attributes?.icon || "mdi:power")}"></ha-icon><div class="tile-l">${esc(a.name || s.attributes?.friendly_name || a.entity)}</div><div class="tile-n">${on ? "Allumé" : s.state === "off" ? "Éteint" : "Indisponible"}</div></div>`);
+        acts.push(localizeTemplate`<div class="tile srv-b nas-act ${on ? "good" : s.state === "off" ? "bad" : ""}" data-entity="${esc(a.entity)}" data-hold="${esc(a.entity)}" title="Appui long : marche / arrêt">
+          <ha-icon icon="${esc(a.icon || s.attributes?.icon || "mdi:power")}"></ha-icon><div class="tile-l">${esc(a.name || s.attributes?.friendly_name || a.entity)}</div><div class="tile-n">${on ? trLabel("Allumé") : s.state === "off" ? trLabel("Éteint") : "Indisponible"}</div></div>`);
       }
     }
 
@@ -2241,7 +2465,7 @@ class ServeurHaNasCard extends HTMLElement {
       const v = this._num(id);
       const unit = this._unit(id, "");
       const mb = v === null ? null : toMbit(v, unit);
-      return `<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${v !== null ? fmt(v, v < 10 ? 1 : 0) : "—"}<small> ${esc(unit)}</small></b></div>
+      return localizeTemplate`<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${v !== null ? fmt(v, v < 10 ? 1 : 0) : "—"}<small> ${esc(unit)}</small></b></div>
         <div class="g-bar"><i style="width:${mb === null ? 0 : Math.min(100, (mb / netMax) * 100)}%"></i></div></div>`;
     };
     const nets = [net(m.net_down, "mdi:download", "Download", "srv-in"), net(m.net_up, "mdi:upload", "Upload", "srv-out")].filter(Boolean);
@@ -2251,42 +2475,42 @@ class ServeurHaNasCard extends HTMLElement {
     if (Object.keys(m.ups).length) {
       const bar = (id, icon, label, max, cls) => {
         const v = this._num(id);
-        return v === null ? "" : `<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> ${esc(this._unit(id, ""))}</small></b></div>
+        return v === null ? "" : localizeTemplate`<div class="srv-g ${cls}" data-entity="${esc(id)}"><div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> ${esc(this._unit(id, ""))}</small></b></div>
           <div class="g-bar"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div></div>`;
       };
       const batt = this._num(m.ups.battery);
       const upsDev = Object.values(this._hass.devices || {}).find((d) => d.id === this._hass.entities?.[m.ups.status || m.ups.status_raw]?.device_id);
       const upsName = c.ups_name || [upsDev?.manufacturer, upsDev?.model].filter(Boolean).join(" ") || upsDev?.name || "Onduleur";
-      ups = `<div class="srv-state ${upsOk === null ? "" : upsOk ? "ok" : "bad"} nas-ups" data-entity="${esc(m.ups.status || m.ups.status_raw)}">
+      ups = localizeTemplate`<div class="srv-state ${upsOk === null ? "" : upsOk ? "ok" : "bad"} nas-ups" data-entity="${esc(m.ups.status || m.ups.status_raw)}">
           <ha-icon icon="mdi:power-plug-battery-outline"></ha-icon><span>${esc(upsName)}</span><b>${esc([fr(upsSt), upsRaw].filter(Boolean).join(" · ") || "—")}</b></div>
         <div class="srv-grid nas-ups-g">${[
           bar(m.ups.input, "mdi:transmission-tower-import", "Entrée", 250, "nas-in"),
           bar(m.ups.output, "mdi:transmission-tower-export", "Sortie", 250, "srv-in"),
           bar(m.ups.load, "mdi:gauge", "Charge", 100, "nas-load"),
-          batt === null ? "" : `<div class="srv-g" data-entity="${esc(m.ups.battery)}"><div class="srv-gt"><span><ha-icon icon="mdi:battery"></ha-icon>Batterie</span><b>${fmt(batt, 0)}<small> %</small></b></div>
+          batt === null ? "" : localizeTemplate`<div class="srv-g" data-entity="${esc(m.ups.battery)}"><div class="srv-gt"><span><ha-icon icon="mdi:battery"></ha-icon>Batterie</span><b>${fmt(batt, 0)}<small> %</small></b></div>
             <div class="g-bar ${batt >= 50 ? "b-ok" : batt >= 20 ? "b-warn" : "b-alert"}"><i style="width:${batt}%"></i></div></div>`,
         ].join("")}</div>`;
     }
 
     const body = [
-      c.show_info !== false ? sec("mdi:information-outline", "Informations", info.length ? `<div class="tiles srv-tiles">${info.join("")}</div>${panel}` : "") : "",
-      c.show_resources !== false ? sec("mdi:speedometer", "Ressources", res.length ? `<div class="srv-grid nas-res">${res.join("")}</div>` : "") : "",
-      c.show_thermal !== false ? sec("mdi:thermometer-lines", "Températures et ventilation", thermal.length ? `<div class="srv-bk">${thermal.join("")}</div>` : "") : "",
-      c.show_actions !== false ? sec("mdi:gesture-tap-button", "Actions", acts.length ? `<div class="srv-bk">${acts.join("")}</div>` : "") : "",
-      c.show_network !== false ? sec("mdi:swap-vertical", "Débits réseau", nets.length ? `<div class="srv-grid">${nets.join("")}</div>` : "") : "",
+      c.show_info !== false ? sec("mdi:information-outline", "Informations", info.length ? localizeTemplate`<div class="tiles srv-tiles">${info.join("")}</div>${panel}` : "") : "",
+      c.show_resources !== false ? sec("mdi:speedometer", "Ressources", res.length ? localizeTemplate`<div class="srv-grid nas-res">${res.join("")}</div>` : "") : "",
+      c.show_thermal !== false ? sec("mdi:thermometer-lines", trLabel("Températures et ventilation"), thermal.length ? localizeTemplate`<div class="srv-bk">${thermal.join("")}</div>` : "") : "",
+      c.show_actions !== false ? sec("mdi:gesture-tap-button", "Actions", acts.length ? localizeTemplate`<div class="srv-bk">${acts.join("")}</div>` : "") : "",
+      c.show_network !== false ? sec("mdi:swap-vertical", trLabel("Débits réseau"), nets.length ? localizeTemplate`<div class="srv-grid">${nets.join("")}</div>` : "") : "",
       c.show_ups !== false ? sec("mdi:power-plug-battery-outline", "Onduleur", ups) : "",
     ].join("");
 
     const alertCls = online === false || hddOk === false || secOk === false || upsOk === false ? "srv-alert" : "";
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${NAS_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
         <div class="brand" ${c.navigation_path ? `data-nav="${esc(c.navigation_path)}"` : `data-entity="${esc(m.tracker || m.cpu || "")}"`} style="cursor:pointer">
           <ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:nas")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
-          <div><div class="title">${esc(title)}</div><div class="sub">${online === false ? "NAS indisponible" : "NAS disponible"}</div>${sub2 ? `<div class="sub srv-head">${esc(sub2)}</div>` : ""}</div>
+          <div><div class="title">${esc(title)}</div><div class="sub">${online === false ? trLabel("NAS indisponible") : trLabel("NAS disponible")}</div>${sub2 ? localizeTemplate`<div class="sub srv-head">${esc(sub2)}</div>` : ""}</div>
         </div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
-      ${body || `<div class="empty">Aucune entité Synology trouvée<span>Ajoutez l'intégration Synology DSM, ou indiquez le préfixe de vos entités (<code>prefix: diskstation</code>) dans la configuration.</span></div>`}
+      ${body || localizeTemplate`<div class="empty">Aucune entité Synology trouvée<span>Ajoutez l'intégration Synology DSM, ou indiquez le préfixe de vos entités (<code>prefix: diskstation</code>) dans la configuration.</span></div>`}
     </ha-card>`;
   }
 }
@@ -2368,10 +2592,14 @@ const pveRole = (id, ent) => {
   return null;
 };
 const PVE_STATE = {
-  online: ["En ligne", "ok"], offline: ["Hors ligne", "bad"], running: ["En marche", "ok"], stopped: ["Arrêté", "off"],
-  paused: ["En pause", "warn"], suspended: ["Suspendu", "warn"], prelaunch: ["Démarrage", "warn"], unknown: ["Inconnu", "off"], unavailable: ["Indisponible", "bad"],
+  online: ["state.online", "ok"], offline: ["state.offline", "bad"], running: ["state.running", "ok"], stopped: ["state.stopped", "off"],
+  paused: ["state.paused", "warn"], suspended: ["state.suspended", "warn"], prelaunch: ["state.starting", "warn"],
+  unknown: ["state.unknown", "off"], unavailable: ["state.unavailable", "bad"],
 };
-const pveState = (s) => PVE_STATE[String(s ?? "unknown").toLowerCase()] || [String(s), "off"];
+const pveState = (s) => {
+  const state = PVE_STATE[String(s ?? "unknown").toLowerCase()];
+  return state ? [uiText(state[0]), state[1]] : [String(s), "off"];
+};
 const gib = (v) => (v === null ? null : `${fmt(v, v < 10 ? 1 : 0)} Go`);
 /** Invité protégé par défaut : la VM qui fait tourner Home Assistant (nom contenant haos ou home assistant). */
 const PVE_PROTECT = /haos|home[\s_-]?assistant|hassos/i;
@@ -2386,6 +2614,7 @@ class ServeurHaProxmoxCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...PVE_DEFAULTS, ...(config || {}) };
     this._map = null;
     this._sig = null;
@@ -2583,31 +2812,31 @@ class ServeurHaProxmoxCard extends HTMLElement {
     const up = allGuests.filter(running).length;
     const updates = m.nodes.filter((n) => this._st(n.roles.update)?.state === "on");
     const down = m.nodes.filter((n) => !nodeUp(n));
-    const led = (ok, label, id, cls = "") => `<span class="srv-led ${ok ? "ok" : "bad"} ${cls}" data-entity="${esc(id || "")}"><i></i>${label}</span>`;
+    const led = (ok, label, id, cls = "") => localizeTemplate`<span class="srv-led ${ok ? "ok" : "bad"} ${cls}" data-entity="${esc(id || "")}"><i></i>${label}</span>`;
     const ups = upsBlock(this, m.ups || {}, c);
     const leds = m.nodes.length ? [
-      led(!down.length, `Nœuds ${m.nodes.filter((n) => !n.other).length - down.length}/${m.nodes.filter((n) => !n.other).length}`, (down[0] || m.nodes[0]).roles.status),
-      updates.length ? `<span class="srv-led upd" data-entity="${esc(updates[0].roles.update)}"><i></i>Mise à jour</span>` : "",
+      led(!down.length, localizeTextTemplate`Nœuds ${m.nodes.filter((n) => !n.other).length - down.length}/${m.nodes.filter((n) => !n.other).length}`, (down[0] || m.nodes[0]).roles.status),
+      updates.length ? localizeTemplate`<span class="srv-led upd" data-entity="${esc(updates[0].roles.update)}"><i></i>Mise à jour</span>` : "",
       ups.ok === null ? "" : led(ups.ok, "UPS", m.ups.status || m.ups.status_raw),
     ].join("") : "";
 
-    const sec = (icon, t, body, extra = "") => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}${extra}</div>${body}</div>` : "");
-    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
+    const sec = (icon, t, body, extra = "") => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}${extra}</div>${body}</div>` : "");
+    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90) => (v === null ? "" : localizeTemplate`<div class="srv-g" data-entity="${esc(id)}">
         <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, 0)}<small> %</small></b></div>
-        <div class="g-bar ${level(v, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, v))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
+        <div class="g-bar ${level(v, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, v))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const btn = (id, icon, label, cls = "") => {
       if (!id || !this._st(id)) return "";
       const armed = this._armed === id;
       // armé : coche orange (petits boutons), « Confirmer » sur les grands boutons du nœud
-      return `<button class="pve-btn ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${esc(armed ? "mdi:check-bold" : icon)}"></ha-icon>${armed && /wide/.test(cls) ? "<span>Confirmer</span>" : ""}</button>`;
+      return localizeTemplate`<button class="pve-btn ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${esc(armed ? "mdi:check-bold" : icon)}"></ha-icon>${armed && /wide/.test(cls) ? localizeStaticHTML("<span>Confirmer</span>") : ""}</button>`;
     };
 
     let body = "";
     if (!node) {
-      body = `<div class="empty">Aucun nœud Proxmox VE trouvé<span>Ajoutez l'intégration Proxmox VE (Paramètres › Appareils et services), puis rechargez la page.</span></div>`;
+      body = localizeTemplate`<div class="empty">Aucun nœud Proxmox VE trouvé<span>Ajoutez l'intégration Proxmox VE (Paramètres › Appareils et services), puis rechargez la page.</span></div>`;
     } else {
-      const tabs = m.nodes.length > 1 ? `<div class="pve-tabs" role="tablist">${m.nodes.map((n) => `<button class="pve-tab ${n.id === node.id ? "on" : ""}" role="tab" aria-selected="${n.id === node.id}" data-tab="${esc(n.id)}">
-          <i class="pve-dot ${nodeUp(n) ? "ok" : "bad"}"></i>${esc(n.name)}<small>${n.guests.filter(running).length}/${n.guests.length}</small>${this._st(n.roles.update)?.state === "on" ? `<ha-icon class="pve-up" icon="mdi:arrow-up-circle"></ha-icon>` : ""}</button>`).join("")}</div>` : "";
+      const tabs = m.nodes.length > 1 ? localizeTemplate`<div class="pve-tabs" role="tablist">${m.nodes.map((n) => localizeTemplate`<button class="pve-tab ${n.id === node.id ? "on" : ""}" role="tab" aria-selected="${n.id === node.id}" data-tab="${esc(n.id)}">
+          <i class="pve-dot ${nodeUp(n) ? "ok" : "bad"}"></i>${esc(n.name)}<small>${n.guests.filter(running).length}/${n.guests.length}</small>${this._st(n.roles.update)?.state === "on" ? localizeTemplate`<ha-icon class="pve-up" icon="mdi:arrow-up-circle"></ha-icon>` : ""}</button>`).join("")}</div>` : "";
 
       // --- nœud
       let nodeHtml = "";
@@ -2618,17 +2847,17 @@ class ServeurHaProxmoxCard extends HTMLElement {
         const inst = upd?.attributes?.installed_version, last = upd?.attributes?.latest_version;
         const memMax = this._num(node.roles.mem_max), memPct = this._num(node.roles.mem);
         const tiles = [
-          `<div class="tile srv-t" data-entity="${esc(node.roles.status || node.roles.running || "")}"><div class="tile-l"><ha-icon icon="mdi:server"></ha-icon>${esc(node.name)}</div><div class="pve-st ${stCls}"><i></i>${esc(stTxt)}</div></div>`,
-          boot && since(boot) ? `<div class="tile srv-t" data-entity="${esc(node.roles.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
-          upd ? `<div class="tile srv-t nas-dsm ${upd.state === "on" ? "up" : ""}" data-entity="${esc(node.roles.update)}" title="${esc([inst, upd.state === "on" ? `→ ${last}` : ""].filter(Boolean).join(" "))}"><div class="tile-l"><ha-icon icon="${esc(upd.state === "on" ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>Proxmox</div>
+          localizeTemplate`<div class="tile srv-t" data-entity="${esc(node.roles.status || node.roles.running || "")}"><div class="tile-l"><ha-icon icon="mdi:server"></ha-icon>${esc(node.name)}</div><div class="pve-st ${stCls}"><i></i>${esc(stTxt)}</div></div>`,
+          boot && since(boot) ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(node.roles.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
+          upd ? localizeTemplate`<div class="tile srv-t nas-dsm ${upd.state === "on" ? "up" : ""}" data-entity="${esc(node.roles.update)}" title="${esc([inst, upd.state === "on" ? `→ ${last}` : ""].filter(Boolean).join(" "))}"><div class="tile-l"><ha-icon icon="${esc(upd.state === "on" ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>Proxmox</div>
             <div class="srv-kv"><span>${upd.state === "on" ? "Dispo" : "Version"}</span><b class="${upd.state === "on" ? "bad" : ""}">${esc((upd.state === "on" ? last : inst) || "—")}</b></div>
-            <div class="srv-kv"><span>État</span><b class="${upd.state === "on" ? "bad" : "ok"}">${upd.state === "on" ? "À installer" : "À jour"}</b></div></div>` : "",
+            <div class="srv-kv"><span>État</span><b class="${upd.state === "on" ? "bad" : "ok"}">${upd.state === "on" ? trLabel("À installer") : trLabel("À jour")}</b></div></div>` : "",
         ].filter(Boolean);
         const res = [
           gauge(node.roles.cpu, "mdi:cpu-64-bit", "CPU", this._num(node.roles.cpu), "", 70, 90),
           gauge(node.roles.mem, "mdi:memory", "RAM", memPct, memMax !== null && memPct !== null ? `${gib((memPct / 100) * memMax)} / ${gib(memMax)}` : "", 80, 92),
         ].filter(Boolean);
-        nodeHtml = sec("mdi:server", "Nœud", `<div class="tiles srv-tiles">${tiles.join("")}</div>${res.length ? `<div class="srv-grid pve-res">${res.join("")}</div>` : ""}`);
+        nodeHtml = sec("mdi:server", trLabel("Nœud"), localizeTemplate`<div class="tiles srv-tiles">${tiles.join("")}</div>${res.length ? localizeTemplate`<div class="srv-grid pve-res">${res.join("")}</div>` : ""}`);
       }
 
       // --- stockages
@@ -2651,38 +2880,38 @@ class ServeurHaProxmoxCard extends HTMLElement {
         const boot = on ? this._st(g.roles.uptime)?.state : null;
         const meta = [stTxt, on && boot && since(boot) ? since(boot) : null].filter(Boolean).join(" · ");
         const acts = !canAct ? "" : on
-          ? (g.protected ? `<span class="pve-lock" title="Protégé : pas d'arrêt ni de redémarrage depuis la carte"><ha-icon icon="mdi:shield-lock-outline"></ha-icon></span>`
-            : btn(g.roles.reboot, "mdi:restart", `Redémarrer ${g.name}`) + btn(g.roles.shutdown || g.roles.stop, "mdi:stop", `Arrêter ${g.name}`, "stop"))
-          : btn(g.roles.start, "mdi:play", `Démarrer ${g.name}`, "go");
-        return `<div class="pve-g ${on ? "" : "off"}" data-entity="${esc(g.roles.status || g.roles.running || g.roles.cpu || "")}">
+          ? (g.protected ? localizeTemplate`<span class="pve-lock" title="Protégé : pas d'arrêt ni de redémarrage depuis la carte"><ha-icon icon="mdi:shield-lock-outline"></ha-icon></span>`
+            : btn(g.roles.reboot, "mdi:restart", localizeTextTemplate`Redémarrer ${g.name}`) + btn(g.roles.shutdown || g.roles.stop, "mdi:stop", localizeTextTemplate`Arrêter ${g.name}`, "stop"))
+          : btn(g.roles.start, "mdi:play", localizeTextTemplate`Démarrer ${g.name}`, "go");
+        return localizeTemplate`<div class="pve-g ${on ? "" : "off"}" data-entity="${esc(g.roles.status || g.roles.running || g.roles.cpu || "")}">
           <ha-icon class="pve-gi" icon="${esc(g.vm ? "mdi:monitor" : "mdi:cube-outline")}" title="${g.vm ? "Machine virtuelle" : "Conteneur LXC"}"></ha-icon>
           <div class="pve-gn"><b>${esc(g.name)}</b><span><i class="pve-dot ${stCls}"></i>${esc(meta)}</span></div>
-          ${on ? `<div class="pve-gm"><span title="CPU">${cpu === null ? "—" : `${fmt(cpu, cpu < 10 ? 1 : 0)} %`}</span><span title="RAM${memMax !== null ? ` sur ${gib(memMax)}` : ""}">${mem === null ? "—" : `${fmt(Math.min(mem, 999), 0)} %`}</span></div>` : `<div class="pve-gm"></div>`}
+          ${on ? localizeTemplate`<div class="pve-gm"><span title="CPU">${cpu === null ? "—" : `${fmt(cpu, cpu < 10 ? 1 : 0)} %`}</span><span title="RAM${memMax !== null ? localizeTextTemplate` sur ${gib(memMax)}` : ""}">${mem === null ? "—" : `${fmt(Math.min(mem, 999), 0)} %`}</span></div>` : localizeTemplate`<div class="pve-gm"></div>`}
           <div class="pve-ga">${acts}</div></div>`;
       }) : [];
-      const head = rows.length ? `<div class="pve-gh"><span></span><span></span><div class="pve-gm"><span>CPU</span><span>RAM</span></div><span></span></div>` : "";
+      const head = rows.length ? localizeTemplate`<div class="pve-gh"><span></span><span></span><div class="pve-gm"><span>CPU</span><span>RAM</span></div><span></span></div>` : "";
 
       // --- actions du nœud (rien d'arrêtable s'il porte un invité protégé en marche)
       const guard = node.guests.some((g) => g.protected && running(g));
       const nodeActs = !node.other && canAct ? [
         btn(node.roles.start_all, "mdi:play-box-multiple-outline", "Tout démarrer", "go wide"),
-        guard ? "" : btn(node.roles.reboot, "mdi:restart", `Redémarrer ${node.name}`, "wide"),
-        guard ? "" : btn(node.roles.shutdown, "mdi:power", `Arrêter ${node.name}`, "stop wide"),
+        guard ? "" : btn(node.roles.reboot, "mdi:restart", localizeTextTemplate`Redémarrer ${node.name}`, "wide"),
+        guard ? "" : btn(node.roles.shutdown, "mdi:power", localizeTextTemplate`Arrêter ${node.name}`, "stop wide"),
       ].filter(Boolean) : [];
 
       body = tabs + nodeHtml
-        + sec("mdi:harddisk", "Stockage", stor.length ? `<div class="srv-grid pve-res">${stor.join("")}</div>` : "")
-        + sec(node.other ? "mdi:help-circle-outline" : "mdi:cube-outline", `Invités <small class="pve-n">${node.guests.filter(running).length}/${node.guests.length} en marche</small>`, rows.length ? `<div class="pve-list">${head}${rows.join("")}</div>` : "")
+        + sec("mdi:harddisk", "Stockage", stor.length ? localizeTemplate`<div class="srv-grid pve-res">${stor.join("")}</div>` : "")
+        + sec(node.other ? "mdi:help-circle-outline" : "mdi:cube-outline", localizeTemplate`Invités <small class="pve-n">${node.guests.filter(running).length}/${node.guests.length} en marche</small>`, rows.length ? localizeTemplate`<div class="pve-list">${head}${rows.join("")}</div>` : "")
         + sec("mdi:power-plug-battery-outline", "Onduleur", ups.html)
-        + sec("mdi:gesture-tap-button", "Actions du nœud", nodeActs.length ? `<div class="pve-na">${nodeActs.join("")}</div>${guard ? `<div class="srv-gs pve-guard"><ha-icon icon="mdi:shield-lock-outline"></ha-icon>Redémarrage et arrêt masqués : ce nœud fait tourner Home Assistant.</div>` : ""}` : "");
+        + sec("mdi:gesture-tap-button", trLabel("Actions du nœud"), nodeActs.length ? localizeTemplate`<div class="pve-na">${nodeActs.join("")}</div>${guard ? localizeTemplate`<div class="srv-gs pve-guard"><ha-icon icon="mdi:shield-lock-outline"></ha-icon>Redémarrage et arrêt masqués : ce nœud fait tourner Home Assistant.</div>` : ""}` : "");
     }
 
     const alertCls = down.length || ups.ok === false ? "srv-alert" : "";
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:server-network")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
-          <div><div class="title">${esc(c.title || "Proxmox")}</div><div class="sub">${m.nodes.length ? `${m.nodes.filter((n) => !n.other).length} nœud${m.nodes.filter((n) => !n.other).length > 1 ? "s" : ""} · ${up}/${allGuests.length} invités en marche` : "Proxmox VE"}</div></div></div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+          <div><div class="title">${esc(c.title || "Proxmox")}</div><div class="sub">${m.nodes.length ? localizeTextTemplate`${m.nodes.filter((n) => !n.other).length} nœud${m.nodes.filter((n) => !n.other).length > 1 ? "s" : ""} · ${up}/${allGuests.length} invités en marche` : "Proxmox VE"}</div></div></div>
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
       ${body}
     </ha-card>`;
@@ -2772,7 +3001,10 @@ const OMV_HUB = [
   ["update", "update", /./],
 ];
 /** État SMART d'OpenMediaVault en français. */
-const OMV_SMART = { good: ["Bon", "ok"], passed: ["Bon", "ok"], ok: ["Bon", "ok"], bad: ["Mauvais", "bad"], failed: ["En échec", "bad"], warning: ["Attention", "warn"] };
+const OMV_SMART = {
+  good: ["smart.good", "ok"], passed: ["smart.good", "ok"], ok: ["smart.good", "ok"],
+  bad: ["smart.bad", "bad"], failed: ["smart.failed", "bad"], warning: ["smart.warning", "warn"],
+};
 
 class ServeurHaOmvCard extends HTMLElement {
   static getConfigElement() {
@@ -2784,6 +3016,7 @@ class ServeurHaOmvCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...OMV_DEFAULTS, ...(config || {}) };
     this._map = null;
     this._sig = null;
@@ -2922,15 +3155,15 @@ class ServeurHaOmvCard extends HTMLElement {
     if (sig === this._sig) return;
     this._sig = sig;
 
-    const sec = (icon, t, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
-    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => `<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
-    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
+    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
+    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => localizeTemplate`<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
+    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : localizeTemplate`<div class="srv-g" data-entity="${esc(id)}">
         <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
-        <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
+        <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const btn = (id, icon, label, cls = "") => {
       if (!id || !this._st(id)) return "";
       const armed = this._armed === id;
-      return `<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${esc(armed ? "mdi:check-bold" : icon)}"></ha-icon>${armed ? "<span>Confirmer</span>" : ""}</button>`;
+      return localizeTemplate`<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${esc(armed ? "mdi:check-bold" : icon)}"></ha-icon>${armed ? localizeStaticHTML("<span>Confirmer</span>") : ""}</button>`;
     };
     const size = (id) => { const v = this._num(id); if (v === null) return null; const u = this._unit(id, "GB"); return v >= 1000 && /^GB$/i.test(u) ? `${fmt(v / 1000, 2)} To` : `${fmt(v, v < 10 ? 1 : 0)} ${u.replace(/^GB$/i, "Go").replace(/^TB$/i, "To").replace(/^MB$/i, "Mo")}`; };
 
@@ -2949,18 +3182,18 @@ class ServeurHaOmvCard extends HTMLElement {
     const needUpd = upd?.state === "on" || (pkg !== null && pkg > 0);
     const rebootReq = this._st(r.reboot_req)?.state === "on";
     const ups = upsBlock(this, m.ups || {}, c);
-    const led = (ok, label, id, cls = "") => `<span class="srv-led ${ok ? "ok" : "bad"} ${cls}" data-entity="${esc(id || "")}"><i></i>${label}</span>`;
+    const led = (ok, label, id, cls = "") => localizeTemplate`<span class="srv-led ${ok ? "ok" : "bad"} ${cls}" data-entity="${esc(id || "")}"><i></i>${label}</span>`;
     const leds = m.hubId ? [
       led(online, "OMV", r.reachable || r.cpu),
       m.disks.length ? led(!disksBad, "Disques", m.disks[0].roles.smart || m.disks[0].roles.temp) : "",
-      needUpd ? `<span class="srv-led upd" data-entity="${esc(r.update || r.pkg || "")}"><i></i>Mise à jour</span>` : "",
-      rebootReq ? `<span class="srv-led upd" data-entity="${esc(r.reboot_req)}"><i></i>Redémarrage requis</span>` : "",
+      needUpd ? localizeTemplate`<span class="srv-led upd" data-entity="${esc(r.update || r.pkg || "")}"><i></i>Mise à jour</span>` : "",
+      rebootReq ? localizeTemplate`<span class="srv-led upd" data-entity="${esc(r.reboot_req)}"><i></i>Redémarrage requis</span>` : "",
       ups.ok === null ? "" : led(ups.ok, "UPS", m.ups.status || m.ups.status_raw),
     ].join("") : "";
 
     let body = "";
     if (!m.hubId) {
-      body = `<div class="empty">Aucun OpenMediaVault trouvé<span>Installez l'intégration OpenMediaVault (HACS, dépôt SlyBase/homeassistant-openmediavault), ajoutez-la dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`;
+      body = localizeTemplate`<div class="empty">Aucun OpenMediaVault trouvé<span>Installez l'intégration OpenMediaVault (HACS, dépôt SlyBase/homeassistant-openmediavault), ajoutez-la dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`;
     } else {
       // --- système
       let system = "";
@@ -2970,11 +3203,11 @@ class ServeurHaOmvCard extends HTMLElement {
         const short = (v) => (/\d+(?:\.\d+)+/.exec(v || "") || [v || null])[0]; // « 7.7.24-7 (Sandworm) » → « 7.7.24 »
         const loads = [r.load1, r.load5, r.load15].map((id) => this._num(id));
         const tiles = [
-          boot && since(boot) ? `<div class="tile srv-t" data-entity="${esc(r.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
-          upd || pkg !== null ? `<div class="tile srv-t nas-dsm ${needUpd ? "up" : ""}" data-entity="${esc(r.update || r.pkg)}" title="${esc(inst || "")}"><div class="tile-l"><ha-icon icon="${esc(needUpd ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>OMV</div>
-            ${kv([["Version", short(inst)], needUpd ? ["Paquets", pkg !== null && pkg > 0 ? fmt(pkg, 0) : "Oui", "bad"] : ["État", "À jour", "ok"]])}</div>` : "",
-          loads.some((v) => v !== null) ? `<div class="tile srv-t" data-entity="${esc(r.load1 || r.load5)}"><div class="tile-l"><ha-icon icon="mdi:chart-line-variant"></ha-icon>Charge</div>
-            <div class="omv-load">${loads.map((v, i) => `<span><b>${v === null ? "—" : fmt(v, 2)}</b><small>${[1, 5, 15][i]} min</small></span>`).join("")}</div></div>` : "",
+          boot && since(boot) ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(r.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
+          upd || pkg !== null ? localizeTemplate`<div class="tile srv-t nas-dsm ${needUpd ? "up" : ""}" data-entity="${esc(r.update || r.pkg)}" title="${esc(inst || "")}"><div class="tile-l"><ha-icon icon="${esc(needUpd ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>OMV</div>
+            ${kv([["Version", short(inst)], needUpd ? ["Paquets", pkg !== null && pkg > 0 ? fmt(pkg, 0) : "Oui", "bad"] : [trLabel("État"), "À jour", "ok"]])}</div>` : "",
+          loads.some((v) => v !== null) ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(r.load1 || r.load5)}"><div class="tile-l"><ha-icon icon="mdi:chart-line-variant"></ha-icon>Charge</div>
+            <div class="omv-load">${loads.map((v, i) => localizeTemplate`<span><b>${v === null ? "—" : fmt(v, 2)}</b><small>${[1, 5, 15][i]} min</small></span>`).join("")}</div></div>` : "",
         ].filter(Boolean);
         const memTotal = this._num(r.mem_total), memUsed = this._num(r.mem_used), memPct = this._num(r.mem) ?? (memUsed !== null && memTotal ? (memUsed / memTotal) * 100 : null);
         const mo = (v) => (v === null ? null : v >= 1024 ? `${fmt(v / 1024, 1)} Go` : `${fmt(v, 0)} Mo`);
@@ -2982,9 +3215,9 @@ class ServeurHaOmvCard extends HTMLElement {
         const res = [
           gauge(r.cpu, "mdi:cpu-64-bit", "CPU", this._num(r.cpu), "", 70, 90),
           gauge(r.mem || r.mem_used, "mdi:memory", "RAM", memPct, memUsed !== null && memTotal !== null ? `${mo(memUsed)} / ${mo(memTotal)}` : "", 80, 92),
-          temp !== null ? gauge(r.cpu_temp, "mdi:thermometer", "Température", temp, "", c.temp_warn, c.temp_alert, ` ${esc(this._unit(r.cpu_temp, "°C"))}`, 100) : "",
+          temp !== null ? gauge(r.cpu_temp, "mdi:thermometer", trLabel("Température"), temp, "", c.temp_warn, c.temp_alert, ` ${esc(this._unit(r.cpu_temp, "°C"))}`, 100) : "",
         ].filter(Boolean);
-        system = sec("mdi:information-outline", "Système", `${tiles.length ? `<div class="tiles srv-tiles">${tiles.join("")}</div>` : ""}${res.length ? `<div class="srv-grid pve-res">${res.join("")}</div>` : ""}`);
+        system = sec("mdi:information-outline", trLabel("Système"), `${tiles.length ? localizeTemplate`<div class="tiles srv-tiles">${tiles.join("")}</div>` : ""}${res.length ? localizeTemplate`<div class="srv-grid pve-res">${res.join("")}</div>` : ""}`);
       }
 
       // --- systèmes de fichiers
@@ -2997,15 +3230,17 @@ class ServeurHaOmvCard extends HTMLElement {
       const diskHtml = c.show_disks !== false ? m.disks.map((d) => {
         const t = this._num(d.roles.temp);
         const s = String(this._txt(d.roles.smart) || "").toLowerCase();
-        const [sTxt, sCls] = s ? OMV_SMART[s] || [this._txt(d.roles.smart), ""] : [null, ""];
-        const flag = (id) => { const v = this._st(id)?.state; return v === "on" ? ["Alerte", "bad"] : v === "off" ? ["OK", "ok"] : null; };
+        const [smartKey, sCls] = s ? OMV_SMART[s] || [null, ""] : [null, ""];
+        // Unknown SMART states originate from the integration, so preserve them.
+        const sTxt = smartKey ? uiText(smartKey) : s ? this._txt(d.roles.smart) : null;
+        const flag = (id) => { const v = this._st(id)?.state; return v === "on" ? [trLabel("Alerte"), "bad"] : v === "off" ? ["OK", "ok"] : null; };
         const bad = flag(d.roles.bad), crc = flag(d.roles.crc);
         const hot = t !== null && t >= c.temp_alert ? "bad" : t !== null && t >= c.temp_warn ? "warn" : "";
         const alert = sCls === "bad" || bad?.[1] === "bad" || crc?.[1] === "bad";
-        return `<div class="tile srv-t omv-disk ${alert ? "bad" : hot}" data-entity="${esc(d.roles.smart || d.roles.temp || "")}" title="${esc(d.model)}">
-          <div class="tile-l"><ha-icon icon="mdi:harddisk"></ha-icon>${esc(d.short)}${t !== null ? `<b class="omv-t ${hot}">${fmt(t, 0)} ${esc(this._unit(d.roles.temp, "°C"))}</b>` : ""}</div>
+        return localizeTemplate`<div class="tile srv-t omv-disk ${alert ? "bad" : hot}" data-entity="${esc(d.roles.smart || d.roles.temp || "")}" title="${esc(d.model)}">
+          <div class="tile-l"><ha-icon icon="mdi:harddisk"></ha-icon>${esc(d.short)}${t !== null ? localizeTemplate`<b class="omv-t ${hot}">${fmt(t, 0)} ${esc(this._unit(d.roles.temp, "°C"))}</b>` : ""}</div>
           <div class="omv-model">${esc(d.model)}</div>
-          ${kv([["SMART", sTxt, sCls], ["Secteurs défectueux", bad?.[0] ?? null, bad?.[1]], ["Erreurs CRC", crc?.[0] ?? null, crc?.[1]]])}</div>`;
+          ${kv([["SMART", sTxt, sCls], [trLabel("Secteurs défectueux"), bad?.[0] ?? null, bad?.[1]], ["Erreurs CRC", crc?.[0] ?? null, crc?.[1]]])}</div>`;
       }) : [];
 
       // --- services
@@ -3014,7 +3249,7 @@ class ServeurHaOmvCard extends HTMLElement {
         const st = this._st(id);
         const on = st.state === "on";
         const name = String(st.attributes?.friendly_name || id).replace(devName, "").replace(/\s*(service|serveur)\s*$/i, "").replace(/\s*service\s*/i, " ").trim();
-        return `<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}" title="${on ? "En cours" : "Arrêté"}"><i></i>${esc(name)}</span>`;
+        return localizeTemplate`<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}" title="${on ? "En cours" : trLabel("Arrêté")}"><i></i>${esc(name)}</span>`;
       }) : [];
 
       // --- réseau
@@ -3030,22 +3265,22 @@ class ServeurHaOmvCard extends HTMLElement {
         : [btn(c.power_on, "mdi:power", "Allumer", "go")]).filter(Boolean) : [];
 
       body = system
-        + sec("mdi:folder-network-outline", "Systèmes de fichiers", fsHtml.length ? `<div class="srv-grid pve-res">${fsHtml.join("")}</div>` : "")
-        + sec("mdi:harddisk", "Disques", diskHtml.length ? `<div class="tiles srv-tiles omv-disks">${diskHtml.join("")}</div>` : "")
-        + sec("mdi:cog-outline", `Services <small class="pve-n">${svc.length ? `${m.hub.services.filter((id) => this._st(id)?.state === "on").length}/${svc.length} en cours` : ""}</small>`, svc.length ? `<div class="omv-svcs">${svc.join("")}</div>` : "")
-        + sec("mdi:swap-vertical", "Débits réseau", nets.length ? `<div class="srv-grid">${nets.join("")}</div>` : "")
+        + sec("mdi:folder-network-outline", trLabel("Systèmes de fichiers"), fsHtml.length ? localizeTemplate`<div class="srv-grid pve-res">${fsHtml.join("")}</div>` : "")
+        + sec("mdi:harddisk", "Disques", diskHtml.length ? localizeTemplate`<div class="tiles srv-tiles omv-disks">${diskHtml.join("")}</div>` : "")
+        + sec("mdi:cog-outline", localizeTemplate`Services <small class="pve-n">${svc.length ? localizeTextTemplate`${m.hub.services.filter((id) => this._st(id)?.state === "on").length}/${svc.length} en cours` : ""}</small>`, svc.length ? localizeTemplate`<div class="omv-svcs">${svc.join("")}</div>` : "")
+        + sec("mdi:swap-vertical", trLabel("Débits réseau"), nets.length ? localizeTemplate`<div class="srv-grid">${nets.join("")}</div>` : "")
         + sec("mdi:power-plug-battery-outline", "Onduleur", ups.html)
-        + sec("mdi:gesture-tap-button", "Actions", acts.length ? `<div class="pve-na">${acts.join("")}</div>` : "");
+        + sec("mdi:gesture-tap-button", "Actions", acts.length ? localizeTemplate`<div class="pve-na">${acts.join("")}</div>` : "");
     }
 
     const alertCls = (m.hubId && !online) || disksBad || ups.ok === false ? "srv-alert" : "";
     const sub = [online ? "En ligne" : m.hubId ? "Hors ligne" : "OpenMediaVault", version ? `OMV ${(/\d+(?:\.\d+)+(?:-\d+)?/.exec(version) || [version])[0]}` : null].filter(Boolean).join(" · ");
     const sub2 = [ip, host && host !== ip ? host : null].filter(Boolean).join(" · ");
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${OMV_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${OMV_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:nas")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
-          <div><div class="title">${esc(c.title || "OpenMediaVault")}</div><div class="sub">${esc(sub)}</div>${sub2 ? `<div class="sub">${esc(sub2)}</div>` : ""}</div></div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+          <div><div class="title">${esc(c.title || "OpenMediaVault")}</div><div class="sub">${esc(sub)}</div>${sub2 ? localizeTemplate`<div class="sub">${esc(sub2)}</div>` : ""}</div></div>
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
       ${body}
     </ha-card>`;
@@ -3141,6 +3376,7 @@ class ServeurHaAsusCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...ASUS_DEFAULTS, ...(config || {}) };
     this._map = null;
     this._sig = null;
@@ -3261,11 +3497,11 @@ class ServeurHaAsusCard extends HTMLElement {
     if (sig === this._sig) return;
     this._sig = sig;
 
-    const sec = (icon, t, body) => (body ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
-    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => `<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
-    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
+    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
+    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v, cls]) => localizeTemplate`<div class="srv-kv"><span>${k}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
+    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : localizeTemplate`<div class="srv-g" data-entity="${esc(id)}">
         <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
-        <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
+        <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const rate = (id, icon, label, max, sub, cls) => {
       const v = this._num(id);
       return v === null ? "" : gauge(id, icon, label, v, sub, 101, 101, ` ${esc(this._unit(id, "Mbit/s"))}`, max, v < 10 ? 2 : v < 100 ? 1 : 0).replace('class="srv-g"', `class="srv-g ${cls}"`);
@@ -3273,9 +3509,9 @@ class ServeurHaAsusCard extends HTMLElement {
     const btn = (id, icon, label, cls = "") => {
       if (!id || !this._st(id)) return "";
       const armed = this._armed === id;
-      return `<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${esc(armed ? "mdi:check-bold" : icon)}"></ha-icon>${armed ? "<span>Confirmer</span>" : ""}</button>`;
+      return localizeTemplate`<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${esc(armed ? "mdi:check-bold" : icon)}"></ha-icon>${armed ? localizeStaticHTML("<span>Confirmer</span>") : ""}</button>`;
     };
-    const chip = (id, label, on, title = "") => `<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}" title="${esc(title || (on ? "Activé" : "Désactivé"))}"><i></i>${esc(label)}</span>`;
+    const chip = (id, label, on, title = "") => localizeTemplate`<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}" title="${esc(title || (on ? trLabel("Activé") : trLabel("Désactivé")))}"><i></i>${esc(label)}</span>`;
     const go = (v) => (v === null ? null : v >= 1000 ? `${fmt(v / 1000, 2)} To` : `${fmt(v, v < 10 ? 2 : 1)} Go`);
 
     const dev = m.dev || {};
@@ -3290,11 +3526,11 @@ class ServeurHaAsusCard extends HTMLElement {
       || (() => { try { return dev.configuration_url ? new URL(dev.configuration_url).hostname : null; } catch (e) { return null; } })();
 
     // --- voyants
-    const led = (ok, label, id) => (ok === null ? "" : `<span class="srv-led ${ok ? "ok" : "bad"}" data-entity="${esc(id || "")}"><i></i>${label}</span>`);
+    const led = (ok, label, id) => (ok === null ? "" : localizeTemplate`<span class="srv-led ${ok ? "ok" : "bad"}" data-entity="${esc(id || "")}"><i></i>${label}</span>`);
     const leds = m.devId ? [
       led(online, "Internet", r.internet || r.wan),
-      st(r.block)?.state === "on" ? `<span class="srv-led bad" data-entity="${esc(r.block)}"><i></i>Internet bloqué</span>` : "",
-      needUpd ? `<span class="srv-led upd" data-entity="${esc(r.update)}"><i></i>Mise à jour</span>` : "",
+      st(r.block)?.state === "on" ? localizeTemplate`<span class="srv-led bad" data-entity="${esc(r.block)}"><i></i>Internet bloqué</span>` : "",
+      needUpd ? localizeTemplate`<span class="srv-led upd" data-entity="${esc(r.update)}"><i></i>Mise à jour</span>` : "",
     ].join("") : "";
 
     // appareils connectés (attribut devices) : par type de connexion
@@ -3303,7 +3539,7 @@ class ServeurHaAsusCard extends HTMLElement {
 
     let body = "";
     if (!m.devId) {
-      body = `<div class="empty">Aucun routeur ASUS trouvé<span>Installez l'intégration AsusRouter (HACS, dépôt Vaskivskyi/ha-asusrouter), ajoutez-la dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`;
+      body = localizeTemplate`<div class="empty">Aucun routeur ASUS trouvé<span>Installez l'intégration AsusRouter (HACS, dépôt Vaskivskyi/ha-asusrouter), ajoutez-la dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`;
     } else {
       // --- système
       let system = "";
@@ -3314,11 +3550,11 @@ class ServeurHaAsusCard extends HTMLElement {
         // « 3.0.0.4.386.14_2 » → « 386.14_2 », comme dans l'interface ASUS (version complète au survol)
         const fw = (v) => (v ? String(v).replace(/^3\.0\.0\.\d+\./, "") : v);
         const tiles = [
-          boot && since(boot) ? `<div class="tile srv-t" data-entity="${esc(r.boot || r.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
-          upd || version ? `<div class="tile srv-t nas-dsm ${needUpd ? "up" : ""}" data-entity="${esc(r.update || "")}" title="${esc(version || "")}"><div class="tile-l"><ha-icon icon="${esc(needUpd ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>Firmware</div>
-            ${kv([["Version", fw(version)], needUpd ? ["Nouvelle", fw(latest) || "Oui", "bad"] : upd ? ["État", "À jour", "ok"] : [null, null]])}</div>` : "",
-          loads.some((v) => v !== null) ? `<div class="tile srv-t" data-entity="${esc(r.load1 || r.load5)}"><div class="tile-l"><ha-icon icon="mdi:chart-line-variant"></ha-icon>Charge</div>
-            <div class="omv-load">${loads.map((v, i) => `<span><b>${v === null ? "—" : fmt(v, 2)}</b><small>${[1, 5, 15][i]} min</small></span>`).join("")}</div></div>` : "",
+          boot && since(boot) ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(r.boot || r.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
+          upd || version ? localizeTemplate`<div class="tile srv-t nas-dsm ${needUpd ? "up" : ""}" data-entity="${esc(r.update || "")}" title="${esc(version || "")}"><div class="tile-l"><ha-icon icon="${esc(needUpd ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>Firmware</div>
+            ${kv([["Version", fw(version)], needUpd ? ["Nouvelle", fw(latest) || "Oui", "bad"] : upd ? [trLabel("État"), "À jour", "ok"] : [null, null]])}</div>` : "",
+          loads.some((v) => v !== null) ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(r.load1 || r.load5)}"><div class="tile-l"><ha-icon icon="mdi:chart-line-variant"></ha-icon>Charge</div>
+            <div class="omv-load">${loads.map((v, i) => localizeTemplate`<span><b>${v === null ? "—" : fmt(v, 2)}</b><small>${[1, 5, 15][i]} min</small></span>`).join("")}</div></div>` : "",
         ].filter(Boolean);
         const cpuA = st(r.cpu)?.attributes || {};
         const cores = Object.keys(cpuA).filter((k) => /^core_\d+$/.test(k)).sort((a, b) => a.localeCompare(b, "fr", { numeric: true })).map((k) => `${fmt(cpuA[k], 0)} %`);
@@ -3327,11 +3563,11 @@ class ServeurHaAsusCard extends HTMLElement {
         const temps = [["t_cpu", "Temp."], ["t_24", "2,4 GHz"], ["t_5", "5 GHz"], ["t_52", "5 GHz (2)"], ["t_6", "6 GHz"]]
           .map(([k, label]) => (this._num(r[k]) === null ? "" : gauge(r[k], "mdi:thermometer", label, this._num(r[k]), "", c.temp_warn, c.temp_alert, ` ${esc(this._unit(r[k], "°C"))}`, 110)));
         const res = [
-          gauge(r.cpu, "mdi:cpu-32-bit", "CPU", this._num(r.cpu), cores.length > 1 ? `Cœurs ${cores.map((x) => x.replace(" %", "")).join(" · ")} %` : "", 70, 90),
+          gauge(r.cpu, "mdi:cpu-32-bit", "CPU", this._num(r.cpu), cores.length > 1 ? localizeTextTemplate`Cœurs ${cores.map((x) => x.replace(" %", "")).join(" · ")} %` : "", 70, 90),
           gauge(r.ram, "mdi:memory", "RAM", this._num(r.ram), mo(ramA.used) && mo(ramA.total) ? `${mo(ramA.used)} / ${mo(ramA.total)}` : "", 80, 92),
           ...temps,
         ].filter(Boolean);
-        system = sec("mdi:information-outline", "Système", `${tiles.length ? `<div class="tiles srv-tiles">${tiles.join("")}</div>` : ""}${res.length ? `<div class="srv-grid pve-res">${res.join("")}</div>` : ""}`);
+        system = sec("mdi:information-outline", trLabel("Système"), `${tiles.length ? localizeTemplate`<div class="tiles srv-tiles">${tiles.join("")}</div>` : ""}${res.length ? localizeTemplate`<div class="srv-grid pve-res">${res.join("")}</div>` : ""}`);
       }
 
       // --- Internet
@@ -3341,11 +3577,11 @@ class ServeurHaAsusCard extends HTMLElement {
         const ip = this._txt(r.wan_ip) || internet?.attributes?.ip_address || null;
         const totals = [go(this._num(r.wan_rx_total)), go(this._num(r.wan_tx_total))];
         const rates = [
-          rate(r.wan_rx, "mdi:download", "Download", wanMax, totals[0] ? `${totals[0]} depuis le démarrage` : "", "srv-in"),
-          rate(r.wan_tx, "mdi:upload", "Upload", wanMax, totals[1] ? `${totals[1]} depuis le démarrage` : "", "srv-out"),
+          rate(r.wan_rx, "mdi:download", "Download", wanMax, totals[0] ? localizeTextTemplate`${totals[0]} depuis le démarrage` : "", "srv-in"),
+          rate(r.wan_tx, "mdi:upload", "Upload", wanMax, totals[1] ? localizeTextTemplate`${totals[1]} depuis le démarrage` : "", "srv-out"),
         ].filter(Boolean);
-        const info = kv([["Connexion", online === null ? null : online ? "En ligne" : "Coupée", online ? "ok" : "bad"], ["IP publique", ip]]);
-        net = sec("mdi:web", "Internet", `${info ? `<div class="asus-kv" data-entity="${esc(r.internet || r.wan_ip || "")}">${info}</div>` : ""}${rates.length ? `<div class="srv-grid">${rates.join("")}</div>` : ""}`);
+        const info = kv([["Connexion", online === null ? null : online ? "En ligne" : trLabel("Coupée"), online ? "ok" : "bad"], ["IP publique", ip]]);
+        net = sec("mdi:web", "Internet", `${info ? localizeTemplate`<div class="asus-kv" data-entity="${esc(r.internet || r.wan_ip || "")}">${info}</div>` : ""}${rates.length ? localizeTemplate`<div class="srv-grid">${rates.join("")}</div>` : ""}`);
       }
 
       // --- Wi-Fi : bandes, réseaux invités, débits par bande et filaire
@@ -3359,27 +3595,27 @@ class ServeurHaAsusCard extends HTMLElement {
             const n = count(re);
             // seul le SSID est lu : les autres attributs du Wi-Fi (dont le mot de passe) ne sont jamais affichés
             const ssid = s.attributes?.ssid;
-            return chip(r[k], `${label}${n ? ` · ${n}` : ""}`, s.state === "on", `${ssid ? `${ssid} · ` : ""}${s.state === "on" ? "Activé" : "Désactivé"}${n ? ` · ${n} appareil${n > 1 ? "s" : ""}` : ""}`);
+            return chip(r[k], `${label}${n ? ` · ${n}` : ""}`, s.state === "on", `${ssid ? `${ssid} · ` : ""}${s.state === "on" ? trLabel("Activé") : trLabel("Désactivé")}${n ? ` · ${n} appareil${n > 1 ? "s" : ""}` : ""}`);
           });
         const guestOn = m.guests.filter((id) => st(id)?.state === "on");
         const guestName = (id) => {
           const g = /_guest_(2_4|5|6)_ghz(?:_\d)?_(\d)$/.exec(id);
-          return g ? `Invités ${g[1].replace("_", ",")} GHz n°${g[2]}` : "Invités";
+          return g ? localizeTextTemplate`Invités ${g[1].replace("_", ",")} GHz n°${g[2]}` : trLabel("Invités");
         };
         const guests = guestOn.map((id) => chip(id, guestName(id), true));
         // débits par bande : une ligne par bande, barres réception et envoi
         const mbit = (id) => { const v = this._num(id); return v === null ? null : v; };
-        const bar = (id, cls) => { const v = mbit(id); return v === null ? "<span></span>" : `<span class="asus-r ${cls}" data-entity="${esc(id)}"><b>${fmt(v, v < 10 ? 2 : v < 100 ? 1 : 0)}</b><small>${esc(this._unit(id, "Mbit/s"))}</small><i style="--w:${Math.max(0, Math.min(100, (v / wMax) * 100))}%"></i></span>`; };
+        const bar = (id, cls) => { const v = mbit(id); return v === null ? localizeStaticHTML("<span></span>") : localizeTemplate`<span class="asus-r ${cls}" data-entity="${esc(id)}"><b>${fmt(v, v < 10 ? 2 : v < 100 ? 1 : 0)}</b><small>${esc(this._unit(id, "Mbit/s"))}</small><i style="--w:${Math.max(0, Math.min(100, (v / wMax) * 100))}%"></i></span>`; };
         const rows = [["2,4 GHz", r.w24_rx, r.w24_tx], ["5 GHz", r.w5_rx, r.w5_tx], ["Filaire", r.lan_rx, r.lan_tx]]
           .filter(([, rx, tx]) => mbit(rx) !== null || mbit(tx) !== null)
-          .map(([label, rx, tx]) => `<div class="asus-row"><span class="asus-rl">${label}</span>${bar(rx, "in")}${bar(tx, "out")}</div>`);
+          .map(([label, rx, tx]) => localizeTemplate`<div class="asus-row"><span class="asus-rl">${label}</span>${bar(rx, "in")}${bar(tx, "out")}</div>`);
         // repliés par défaut : le bouton « Débits par bande » les déplie
         const ratesOpen = this._fold === "rates";
-        const ratesBtn = rows.length ? `<button class="asus-more ${ratesOpen ? "on" : ""}" data-fold="rates"><ha-icon icon="${esc(ratesOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${ratesOpen ? "Réduire" : "Débits par bande"}</button>` : "";
-        const rates = rows.length && ratesOpen ? [`<div class="asus-rates"><div class="asus-row asus-rh"><span></span><span><ha-icon icon="mdi:download"></ha-icon>Réception</span><span><ha-icon icon="mdi:upload"></ha-icon>Envoi</span></div>${rows.join("")}</div>`] : [];
-        const guestTxt = m.guests.length ? `<div class="asus-note">${guestOn.length ? "" : "Aucun réseau invité actif"}</div>` : "";
+        const ratesBtn = rows.length ? localizeTemplate`<button class="asus-more ${ratesOpen ? "on" : ""}" data-fold="rates"><ha-icon icon="${esc(ratesOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${ratesOpen ? trLabel("Réduire") : trLabel("Débits par bande")}</button>` : "";
+        const rates = rows.length && ratesOpen ? [localizeTemplate`<div class="asus-rates"><div class="asus-row asus-rh"><span></span><span><ha-icon icon="mdi:download"></ha-icon>Réception</span><span><ha-icon icon="mdi:upload"></ha-icon>Envoi</span></div>${rows.join("")}</div>`] : [];
+        const guestTxt = m.guests.length ? localizeTemplate`<div class="asus-note">${guestOn.length ? "" : trLabel("Aucun réseau invité actif")}</div>` : "";
         wifi = sec("mdi:wifi", "Wi-Fi", bands.length || ratesBtn
-          ? `${bands.length || guests.length ? `<div class="omv-svcs">${bands.join("")}${guests.join("")}</div>` : ""}${guestOn.length ? "" : guestTxt}${rates.join("")}${ratesBtn}`
+          ? `${bands.length || guests.length ? localizeTemplate`<div class="omv-svcs">${bands.join("")}${guests.join("")}</div>` : ""}${guestOn.length ? "" : guestTxt}${rates.join("")}${ratesBtn}`
           : "");
       }
 
@@ -3395,12 +3631,12 @@ class ServeurHaAsusCard extends HTMLElement {
           const up = !!p?.state;
           const sp = Number(p?.link_rate) || 0;
           const cls = !up ? "off" : sp >= 1000 ? "g" : "m";
-          return `<div class="asus-port ${cls}" data-entity="${esc(id)}" title="${esc(`${label} : ${up ? `connecté, ${speed(sp)}bit/s` : "déconnecté"}`)}"><ha-icon icon="mdi:ethernet"></ha-icon><b>${esc(label)}</b><small>${up ? speed(sp) : "—"}</small></div>`;
+          return localizeTemplate`<div class="asus-port ${cls}" data-entity="${esc(id)}" title="${esc(`${label} : ${up ? localizeTextTemplate`connecté, ${speed(sp)}bit/s` : trLabel("déconnecté")}`)}"><ha-icon icon="mdi:ethernet"></ha-icon><b>${esc(label)}</b><small>${up ? speed(sp) : "—"}</small></div>`;
         };
         const wan = list(r.ports_wan).map(([, p]) => port(r.ports_wan, "WAN", p).replace('class="asus-port ', 'class="asus-port wan '));
         const lan = list(r.ports_lan).map(([n, p]) => port(r.ports_lan, `LAN ${n}`, p));
         const upCount = list(r.ports_lan).filter(([, p]) => p?.state).length;
-        ports = sec("mdi:ethernet", `Ports <small class="pve-n">${lan.length ? `${upCount}/${lan.length} LAN connectés` : ""}</small>`, wan.length || lan.length ? `<div class="asus-ports">${wan.join("")}${lan.join("")}</div>` : "");
+        ports = sec("mdi:ethernet", localizeTemplate`Ports <small class="pve-n">${lan.length ? localizeTextTemplate`${upCount}/${lan.length} LAN connectés` : ""}</small>`, wan.length || lan.length ? localizeTemplate`<div class="asus-ports">${wan.join("")}${lan.join("")}</div>` : "");
       }
 
       // --- appareils connectés
@@ -3412,15 +3648,15 @@ class ServeurHaAsusCard extends HTMLElement {
           ["Wi-Fi 2,4 GHz", count(/^2ghz$/), "mdi:wifi", "2ghz"],
           ["Wi-Fi 5 GHz", count(/^5ghz/), "mdi:wifi", "5ghz"],
           ["Filaire", count(/^wired$/), "mdi:ethernet", "wired"],
-          ["Invités", guestsN, "mdi:account-multiple-outline", "guest"],
+          [trLabel("Invités"), guestsN, "mdi:account-multiple-outline", "guest"],
         ].filter(([, v], i) => v !== null && (v > 0 || i < 3) && (devices.length || i === 3));
         const latestList = Array.isArray(st(r.latest)?.attributes?.list) ? [...st(r.latest).attributes.list] : [];
         latestList.sort((a, b) => String(b?.connected || "").localeCompare(String(a?.connected || "")));
         const n = Math.max(0, Math.min(20, Number(c.latest) || 0));
         const latest = latestList.slice(0, n).map((d) => {
           const name = String(d?.name || d?.ip || d?.mac || "Appareil").replace(/^\[\d+\]\s*/, "");
-          const when = d?.connected ? since(d.connected) : null;
-          return `<div class="asus-dev" data-entity="${esc(r.latest)}"><ha-icon icon="${esc(/wired/.test(d?.connection_type || "") ? "mdi:ethernet" : "mdi:wifi")}"></ha-icon><span>${esc(name)}</span><small>${esc([ASUS_LINK[d?.connection_type] || null, when ? `il y a ${when}` : null].filter(Boolean).join(" · "))}</small></div>`;
+          const when = d?.connected ? relativeAgo(d.connected) : null;
+          return localizeTemplate`<div class="asus-dev" data-entity="${esc(r.latest)}"><ha-icon icon="${esc(/wired/.test(d?.connection_type || "") ? "mdi:ethernet" : "mdi:wifi")}"></ha-icon><span>${esc(name)}</span><small>${esc([ASUS_LINK[d?.connection_type] || null, when].filter(Boolean).join(" · "))}</small></div>`;
         });
         // liste complète, dépliée par « Voir tous » ou par une tuile : par type de connexion, puis par nom
         const open = this._devs && (devices.length || latest.length) ? this._devs : null;
@@ -3430,18 +3666,18 @@ class ServeurHaAsusCard extends HTMLElement {
           .filter((d) => open === "all" || (open === "guest" ? d?.guest : String(d?.connection_type || "").startsWith(open)))
           .sort((a, b) => (ORDER[a?.connection_type] || 9) - (ORDER[b?.connection_type] || 9) || label(a).localeCompare(label(b), "fr", { numeric: true }));
         const full = shown.map((d) => {
-          const when = d?.connected ? since(d.connected) : null;
-          return `<div class="asus-dev"><ha-icon icon="${esc(/wired/.test(d?.connection_type || "") ? "mdi:ethernet" : "mdi:wifi")}"></ha-icon><div class="asus-dn"><span>${esc(label(d))}</span><small>${esc([d?.ip || null, ASUS_LINK[d?.connection_type] || null, when ? `depuis ${when}` : null].filter(Boolean).join(" · "))}</small></div></div>`;
+          const when = d?.connected ? relativeAgo(d.connected) : null;
+          return localizeTemplate`<div class="asus-dev"><ha-icon icon="${esc(/wired/.test(d?.connection_type || "") ? "mdi:ethernet" : "mdi:wifi")}"></ha-icon><div class="asus-dn"><span>${esc(label(d))}</span><small>${esc([d?.ip || null, ASUS_LINK[d?.connection_type] || null, when].filter(Boolean).join(" · "))}</small></div></div>`;
         });
         const openName = { all: "Tous les appareils", "2ghz": "Wi-Fi 2,4 GHz", "5ghz": "Wi-Fi 5 GHz", wired: "Filaire", guest: "Invités" }[open];
         // tout est replié par défaut : le bouton déplie les dernières connexions et la liste complète
         const more = devices.length || latest.length
-          ? `<button class="asus-more ${open ? "on" : ""}" data-devs="${open || "all"}"><ha-icon icon="${esc(open ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${open ? "Réduire" : devices.length ? `Voir les ${fmt(devices.length, 0)} appareils` : "Voir les dernières connexions"}</button>`
+          ? localizeTemplate`<button class="asus-more ${open ? "on" : ""}" data-devs="${open || "all"}"><ha-icon icon="${esc(open ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${open ? trLabel("Réduire") : devices.length ? `Voir les ${fmt(devices.length, 0)} appareils` : trLabel("Voir les dernières connexions")}</button>`
           : "";
-        clients = sec("mdi:devices", `Appareils connectés <small class="pve-n">${total !== null ? fmt(total, 0) : ""}</small>`,
-          `${tiles.length ? `<div class="asus-counts">${tiles.map(([lbl, v, icon, key]) => `<div class="${open === key ? "on" : ""}" ${devices.length && v ? `data-devs="${key}" title="Voir les appareils : ${lbl}"` : ""}><ha-icon icon="${esc(icon)}"></ha-icon><b>${v === null ? "—" : fmt(v, 0)}</b><small>${lbl}</small></div>`).join("")}</div>` : ""}
-          ${open === "all" && latest.length ? `<div class="asus-sub">Dernières connexions</div><div class="asus-devs">${latest.join("")}</div>` : ""}
-          ${open ? `<div class="asus-sub">${openName} <b>${fmt(shown.length, 0)}</b></div><div class="asus-devs asus-all">${full.join("") || `<div class="asus-note">Aucun appareil</div>`}</div>` : ""}
+        clients = sec("mdi:devices", localizeTemplate`Appareils connectés <small class="pve-n">${total !== null ? fmt(total, 0) : ""}</small>`,
+          `${tiles.length ? localizeTemplate`<div class="asus-counts">${tiles.map(([lbl, v, icon, key]) => localizeTemplate`<div class="${open === key ? "on" : ""}" ${devices.length && v ? `data-devs="${key}" title="Voir les appareils : ${lbl}"` : ""}><ha-icon icon="${esc(icon)}"></ha-icon><b>${v === null ? "—" : fmt(v, 0)}</b><small>${lbl}</small></div>`).join("")}</div>` : ""}
+          ${open === "all" && latest.length ? localizeTemplate`<div class="asus-sub">Dernières connexions</div><div class="asus-devs">${latest.join("")}</div>` : ""}
+          ${open ? localizeTemplate`<div class="asus-sub">${openName} <b>${fmt(shown.length, 0)}</b></div><div class="asus-devs asus-all">${full.join("") || localizeTemplate`<div class="asus-note">Aucun appareil</div>`}</div>` : ""}
           ${more}`);
       }
 
@@ -3454,8 +3690,8 @@ class ServeurHaAsusCard extends HTMLElement {
           return v ? `${v[1] === "openvpn" ? "OpenVPN" : "WireGuard"} ${v[2] === "client" ? "client" : "serveur"} ${v[3]}` : id;
         };
         const chips = [...on.map((id) => chip(id, name(id), true)), st(r.parental) ? chip(r.parental, "Contrôle parental", st(r.parental).state === "on") : ""].filter(Boolean);
-        vpn = sec("mdi:vpn", `VPN <small class="pve-n">${m.vpns.length ? `${on.length} actif${on.length > 1 ? "s" : ""}` : ""}</small>`,
-          `${chips.length ? `<div class="omv-svcs">${chips.join("")}</div>` : ""}${m.vpns.length && !on.length ? `<div class="asus-note">Aucun VPN actif</div>` : ""}`);
+        vpn = sec("mdi:vpn", localizeTemplate`VPN <small class="pve-n">${m.vpns.length ? `${on.length} actif${on.length > 1 ? "s" : ""}` : ""}</small>`,
+          `${chips.length ? localizeTemplate`<div class="omv-svcs">${chips.join("")}</div>` : ""}${m.vpns.length && !on.length ? localizeTemplate`<div class="asus-note">Aucun VPN actif</div>` : ""}`);
       }
 
       // --- actions
@@ -3463,22 +3699,22 @@ class ServeurHaAsusCard extends HTMLElement {
         btn(r.reboot, "mdi:restart", "Redémarrer", "stop"),
         btn(r.restart_wifi, "mdi:wifi-refresh", "Redémarrer le Wi-Fi"),
         btn(r.refresh, "mdi:refresh", "Actualiser les appareils"),
-        r.led ? btn(r.led, st(r.led)?.state === "on" ? "mdi:led-on" : "mdi:led-off", st(r.led)?.state === "on" ? "Éteindre les LED" : "Allumer les LED") : "",
+        r.led ? btn(r.led, st(r.led)?.state === "on" ? "mdi:led-on" : "mdi:led-off", st(r.led)?.state === "on" ? trLabel("Éteindre les LED") : trLabel("Allumer les LED")) : "",
       ].filter(Boolean) : [];
 
       body = system + net + wifi + ports + clients + vpn
-        + sec("mdi:gesture-tap-button", "Actions", acts.length ? `<div class="pve-na asus-acts">${acts.join("")}</div>` : "");
+        + sec("mdi:gesture-tap-button", "Actions", acts.length ? localizeTemplate`<div class="pve-na asus-acts">${acts.join("")}</div>` : "");
     }
 
     const alertCls = m.devId && online === false ? "srv-alert" : "";
-    const model = dev.model || dev.name || "Routeur ASUS";
+    const model = dev.model || dev.name || trLabel("Routeur ASUS");
     // le routeur répond (ses capteurs sont là) même quand Internet est coupé : le voyant Internet le signale
     const sub = [this._txt(r.cpu) === null && m.devId ? "Injoignable" : null, version ? `Firmware ${version}` : null].filter(Boolean).join(" · ");
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${OMV_STYLE}${ASUS_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${OMV_STYLE}${ASUS_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:router-wireless")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
-          <div><div class="title">${esc(c.title || dev.name_by_user || model)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}${routerIp ? `<div class="sub">${esc(routerIp)}</div>` : ""}</div></div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+          <div><div class="title">${esc(c.title || dev.name_by_user || model)}</div>${sub ? localizeTemplate`<div class="sub">${esc(sub)}</div>` : ""}${routerIp ? localizeTemplate`<div class="sub">${esc(routerIp)}</div>` : ""}</div></div>
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
       ${body}
     </ha-card>`;
@@ -3579,6 +3815,7 @@ class ServeurHaPingCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...PING_DEFAULTS, ...(config || {}) };
     this._map = null;
     this._sig = null;
@@ -3738,46 +3975,46 @@ class ServeurHaPingCard extends HTMLElement {
       const loss = up ? this._num(h.roles.loss) : null;
       const jit = up ? this._num(h.roles.jitter) : null;
       const cls = off ? "off" : up === false ? "down" : up === null ? "na" : loss > 0 ? "warn" : lat(avg);
-      const detail = off ? "Éteint" : up === false ? (downSince(h) ? `depuis ${downSince(h)}` : "hors ligne")
+      const detail = off ? trLabel("Éteint") : up === false ? (downSince(h) ? localizeTextTemplate`depuis ${downSince(h)}` : trLabel("Hors ligne"))
         : [avg !== null ? ms(avg) : null, loss > 0 ? `${fmt(loss, 0)} % perdus` : null].filter(Boolean).join(" · ");
-      const title = [h.name, h.ip, off ? "Éteint (volontairement)" : up === false ? "Hors ligne" : up ? "En ligne" : "Inconnu",
+      const title = [h.name, h.ip, off ? trLabel("Éteint (volontairement)") : up === false ? trLabel("Hors ligne") : up ? trLabel("En ligne") : trLabel("Inconnu"),
         avg !== null ? `Moyenne ${ms(avg)}` : null, this._num(h.roles.max) !== null && up ? `Max ${ms(this._num(h.roles.max))}` : null,
         jit !== null ? `Gigue ${ms(jit)}` : null, loss !== null ? `Perte ${fmt(loss, 0)} %` : null].filter(Boolean).join(" · ");
-      return `<div class="ping-h s-${cls || "ok"}" data-entity="${esc(h.roles.up || h.roles.tracker)}" title="${esc(title)}"><i></i><div class="ping-n"><span>${esc(h.name)}</span><small>${esc(detail || h.ip || "")}</small></div></div>`;
+      return localizeTemplate`<div class="ping-h s-${cls || "ok"}" data-entity="${esc(h.roles.up || h.roles.tracker)}" title="${esc(title)}"><i></i><div class="ping-n"><span>${esc(h.name)}</span><small>${esc(detail || h.ip || "")}</small></div></div>`;
     };
 
     // --- hors ligne, toujours visibles en haut
-    const downHtml = down.length ? `<div class="srv-sec"><div class="srv-h ping-bad"><ha-icon icon="mdi:lan-disconnect"></ha-icon>Hors ligne <small class="pve-n">${down.length}</small></div><div class="ping-grid">${down.map(tile).join("")}</div></div>` : "";
+    const downHtml = down.length ? localizeTemplate`<div class="srv-sec"><div class="srv-h ping-bad"><ha-icon icon="mdi:lan-disconnect"></ha-icon>Hors ligne <small class="pve-n">${down.length}</small></div><div class="ping-grid">${down.map(tile).join("")}</div></div>` : "";
 
     // --- groupes, repliés par défaut : un point par appareil, la liste au clic
     const groupsHtml = m.groups.map((g) => {
       const n = g.hosts.length, ok = g.hosts.filter((h) => this._isUp(h) === true).length, bad = g.hosts.filter((h) => this._state(h) === "down").length;
       const isOpen = open(g.key);
-      const dots = g.hosts.map((h) => { const st = this._state(h); return `<i class="${st === "up" ? "ok" : st}"></i>`; }).join("");
-      return `<div class="ping-g ${isOpen ? "open" : ""}">
+      const dots = g.hosts.map((h) => { const st = this._state(h); return localizeTemplate`<i class="${st === "up" ? "ok" : st}"></i>`; }).join("");
+      return localizeTemplate`<div class="ping-g ${isOpen ? "open" : ""}">
         <button class="ping-gh" data-fold="${esc(g.key)}" aria-expanded="${isOpen}"><ha-icon icon="${esc(g.icon)}"></ha-icon><span class="ping-gl">${esc(g.label)}</span>
           <span class="ping-dots">${dots}</span><b class="${bad ? "bad" : "ok"}">${ok}/${n}</b><ha-icon class="ping-chev" icon="${esc(isOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon></button>
-        ${isOpen ? `<div class="ping-grid">${g.hosts.map(tile).join("")}</div>` : ""}
+        ${isOpen ? localizeTemplate`<div class="ping-grid">${g.hosts.map(tile).join("")}</div>` : ""}
       </div>`;
     }).join("");
 
     const body = !hosts.length
-      ? `<div class="empty">Aucun appareil suivi par Ping<span>Ajoutez l'intégration Ping (ICMP) pour chaque appareil dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`
-      : `<div class="ping-sum">
+      ? localizeTemplate`<div class="empty">Aucun appareil suivi par Ping<span>Ajoutez l'intégration Ping (ICMP) pour chaque appareil dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`
+      : localizeTemplate`<div class="ping-sum">
           <div class="${down.length ? "bad" : "ok"}"><b>${upN}<small>/${hosts.length}</small></b><span>en ligne</span></div>
-          <div class="${down.length ? "bad" : ""}"><b>${down.length}</b><span>hors ligne${offN ? ` · ${offN} éteint${offN > 1 ? "s" : ""}` : ""}</span></div>
+          <div class="${down.length ? "bad" : ""}"><b>${down.length}</b><span>hors ligne${offN ? localizeTextTemplate` · ${offN} éteint${offN > 1 ? "s" : ""}` : ""}</span></div>
           <div class="${lat(mean)}"><b>${mean === null ? "—" : fmt(mean, mean < 10 ? 1 : 0)}<small> ms</small></b><span>latence moyenne</span></div>
           <div class="${lossy.length ? "warn" : ""}"><b>${lossy.length}</b><span>perte de paquets</span></div>
         </div>${downHtml}<div class="srv-sec ping-groups">${groupsHtml}</div>`;
 
     const leds = hosts.length ? (down.length
-      ? `<span class="srv-led bad"><i></i>${down.length} hors ligne</span>`
-      : `<span class="srv-led ok"><i></i>Tout en ligne</span>`) : "";
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${PVE_STYLE}${PING_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${down.length ? "srv-alert" : ""}">
+      ? localizeTemplate`<span class="srv-led bad"><i></i>${down.length} hors ligne</span>`
+      : localizeTemplate`<span class="srv-led ok"><i></i>Tout en ligne</span>`) : "";
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${PVE_STYLE}${PING_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${down.length ? "srv-alert" : ""}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:lan")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
-          <div><div class="title">${esc(c.title || "Réseau")}</div><div class="sub">${hosts.length} appareil${hosts.length > 1 ? "s" : ""} suivi${hosts.length > 1 ? "s" : ""} par Ping</div></div></div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+          <div><div class="title">${esc(c.title || "Réseau")}</div><div class="sub">${countUi(hosts.length, "ping")}</div></div></div>
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
       ${body}
     </ha-card>`;
@@ -3854,6 +4091,7 @@ class ServeurHaZigbeeCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...ZB_DEFAULTS, ...(config || {}) };
     this._map = null;
     this._sig = null;
@@ -3988,51 +4226,51 @@ class ServeurHaZigbeeCard extends HTMLElement {
 
     const batCls = (v) => (v === null ? "" : v < (Number(c.alert) || 15) ? "bad" : v < (Number(c.warn) || 30) ? "warn" : "ok");
     const line = ({ it, s }) => {
-      const detail = s.st === "off" ? `hors ligne${s.offSince && since(s.offSince) ? ` depuis ${since(s.offSince)}` : ""}`
-        : s.st === "silent" ? `aucune nouvelle depuis ${since(s.seen)}`
-        : [it.area || it.model, s.lqi !== null ? `signal ${fmt(s.lqi, 0)}` : null, s.seen && s.st !== "ok" ? `vu il y a ${since(s.seen)}` : null].filter(Boolean).join(" · ");
-      const val = s.bat !== null ? `<b class="${batCls(s.bat)}">${fmt(s.bat, 0)} %</b>` : s.low ? `<b class="bad">Faible</b>` : it.roles.low ? `<b class="ok">OK</b>` : it.zigbee && !it.roles.battery ? `<small class="zb-mains">secteur</small>` : "";
-      const gauge = s.bat !== null ? `<span class="zb-g ${batCls(s.bat)}"><i style="width:${Math.max(3, Math.min(100, s.bat))}%"></i></span>` : "";
-      const title = [it.name, it.model, it.area, s.bat !== null ? `Pile ${fmt(s.bat, 0)} %` : null, s.lqi !== null ? `Qualité du lien ${fmt(s.lqi, 0)}/255` : null, s.seen ? `Dernière nouvelle il y a ${since(s.seen)}` : null].filter(Boolean).join(" · ");
-      return `<div class="zb-r s-${s.st}" data-entity="${esc(s.main)}" title="${esc(title)}"><i class="zb-d"></i><div class="zb-n"><span>${esc(it.name)}</span><small>${esc(detail)}</small></div>${gauge}${val}</div>`;
+      const detail = s.st === "off" ? `${trLabel("hors ligne")}${s.offSince && since(s.offSince) ? localizeTextTemplate` depuis ${since(s.offSince)}` : ""}`
+        : s.st === "silent" ? localizeTextTemplate`aucune nouvelle depuis ${since(s.seen)}`
+        : [it.area || it.model, s.lqi !== null ? localizeTextTemplate`signal ${fmt(s.lqi, 0)}` : null, s.seen && s.st !== "ok" ? formatSeenAgo(s.seen) : null].filter(Boolean).join(" · ");
+      const val = s.bat !== null ? localizeTemplate`<b class="${batCls(s.bat)}">${fmt(s.bat, 0)} %</b>` : s.low ? localizeTemplate`<b class="bad">Faible</b>` : it.roles.low ? localizeTemplate`<b class="ok">OK</b>` : it.zigbee && !it.roles.battery ? localizeTemplate`<small class="zb-mains">secteur</small>` : "";
+      const gauge = s.bat !== null ? localizeTemplate`<span class="zb-g ${batCls(s.bat)}"><i style="width:${Math.max(3, Math.min(100, s.bat))}%"></i></span>` : "";
+      const title = [it.name, it.model, it.area, s.bat !== null ? localizeTextTemplate`Pile ${fmt(s.bat, 0)} %` : null, s.lqi !== null ? localizeTextTemplate`Qualité du lien ${fmt(s.lqi, 0)}/255` : null, s.seen ? `${trLabel("Dernière nouvelle")} ${relativeAgo(s.seen)}` : null].filter(Boolean).join(" · ");
+      return localizeTemplate`<div class="zb-r s-${s.st}" data-entity="${esc(s.main)}" title="${esc(title)}"><i class="zb-d"></i><div class="zb-n"><span>${esc(it.name)}</span><small>${esc(detail)}</small></div>${gauge}${val}</div>`;
     };
     // groupes repliés : piles en bon état, appareils sur secteur
     const fold = (k, icon, label, list) => {
       if (!list.length) return "";
       const on = this._open.has(k);
-      return `<div class="ping-g ${on ? "open" : ""}"><button class="ping-gh" data-fold="${k}" aria-expanded="${on}"><ha-icon icon="${icon}"></ha-icon><span class="ping-gl">${label}</span>
+      return localizeTemplate`<div class="ping-g ${on ? "open" : ""}"><button class="ping-gh" data-fold="${k}" aria-expanded="${on}"><ha-icon icon="${icon}"></ha-icon><span class="ping-gl">${label}</span>
         <span class="ping-dots"></span><b class="ok">${list.length}</b><ha-icon class="ping-chev" icon="${on ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
-        ${on ? `<div class="zb-list zb-in">${list.map(line).join("")}</div>` : ""}</div>`;
+        ${on ? localizeTemplate`<div class="zb-list zb-in">${list.map(line).join("")}</div>` : ""}</div>`;
     };
-    const sec = (list, icon, label, cls) => (list.length ? `<div class="srv-sec"><div class="srv-h ${cls}"><ha-icon icon="${icon}"></ha-icon>${label} <small class="pve-n">${list.length}</small></div><div class="zb-list">${list.map(line).join("")}</div></div>` : "");
+    const sec = (list, icon, label, cls) => (list.length ? localizeTemplate`<div class="srv-sec"><div class="srv-h ${cls}"><ha-icon icon="${icon}"></ha-icon>${label} <small class="pve-n">${list.length}</small></div><div class="zb-list">${list.map(line).join("")}</div></div>` : "");
 
     const bridgeSt = this._st(m.bridge)?.state;
     const bridgeOk = bridgeSt === "on" ? true : bridgeSt === "off" ? false : null;
     const body = !rows.length
-      ? `<div class="empty">Aucun appareil à pile ni appareil Zigbee trouvé<span>La carte lit les capteurs de batterie (en %) de vos appareils, et les appareils Zigbee2MQTT ou ZHA. Vérifiez que leurs capteurs de batterie sont activés.</span></div>`
-      : `<div class="ping-sum">
+      ? localizeTemplate`<div class="empty">Aucun appareil à pile ni appareil Zigbee trouvé<span>La carte lit les capteurs de batterie (en %) de vos appareils, et les appareils Zigbee2MQTT ou ZHA. Vérifiez que leurs capteurs de batterie sont activés.</span></div>`
+      : localizeTemplate`<div class="ping-sum">
           <div class="${off.length ? "bad" : "ok"}"><b>${rows.length - off.length}<small>/${rows.length}</small></b><span>en ligne${zb ? ` · ${zb} Zigbee` : ""}</span></div>
           <div class="${alert.length ? "bad" : warn.length ? "warn" : "ok"}"><b>${alert.length + warn.length}</b><span>pile${alert.length + warn.length > 1 ? "s" : ""} faible${alert.length + warn.length > 1 ? "s" : ""}</span></div>
-          <div class="${batCls(lowest?.s.bat ?? null)}" ${lowest ? `data-entity="${esc(lowest.it.roles.battery)}"` : ""}><b>${lowest ? `${fmt(lowest.s.bat, 0)}<small> %</small>` : "—"}</b><span>${lowest ? `plus faible : ${esc(lowest.it.name)}` : "aucune pile"}</span></div>
+          <div class="${batCls(lowest?.s.bat ?? null)}" ${lowest ? `data-entity="${esc(lowest.it.roles.battery)}"` : ""}><b>${lowest ? localizeTemplate`${fmt(lowest.s.bat, 0)}<small> %</small>` : "—"}</b><span>${lowest ? `plus faible : ${esc(lowest.it.name)}` : "aucune pile"}</span></div>
           <div class="${weak.length ? "warn" : ""}"><b>${weak.length}</b><span>signal faible ou silencieux</span></div>
         </div>
-        ${bridgeOk === false ? `<div class="zb-alert" data-entity="${esc(m.bridge)}"><ha-icon icon="mdi:zigbee"></ha-icon>Pont Zigbee2MQTT déconnecté : aucun appareil Zigbee ne répond.</div>` : ""}
+        ${bridgeOk === false ? localizeTemplate`<div class="zb-alert" data-entity="${esc(m.bridge)}"><ha-icon icon="mdi:zigbee"></ha-icon>Pont Zigbee2MQTT déconnecté : aucun appareil Zigbee ne répond.</div>` : ""}
         ${sec(off, "mdi:lan-disconnect", "Hors ligne", "ping-bad")}
-        ${sec(alert, "mdi:battery-alert-variant-outline", "Piles à changer", "ping-bad")}
+        ${sec(alert, "mdi:battery-alert-variant-outline", trLabel("Piles à changer"), "ping-bad")}
         ${sec(warn, "mdi:battery-low", "Piles faibles", "zb-warn")}
         ${sec(weak, "mdi:signal-cellular-1", "Signal faible ou silencieux", "zb-warn")}
-        ${okBat.length || okMains.length ? `<div class="srv-sec ping-groups">${fold("bat", "mdi:battery-high", "Piles en bon état", okBat)}${fold("mains", "mdi:power-plug-outline", "Sur secteur", okMains)}</div>` : ""}`;
+        ${okBat.length || okMains.length ? localizeTemplate`<div class="srv-sec ping-groups">${fold("bat", "mdi:battery-high", trLabel("Piles en bon état"), okBat)}${fold("mains", "mdi:power-plug-outline", "Sur secteur", okMains)}</div>` : ""}`;
 
     const nbBad = off.length + alert.length;
     const leds = [
-      bridgeOk !== null ? `<span class="srv-led ${bridgeOk ? "ok" : "bad"}" data-entity="${esc(m.bridge)}"><i></i>Pont ${bridgeOk ? "connecté" : "déconnecté"}</span>` : "",
-      rows.length ? (nbBad ? `<span class="srv-led bad"><i></i>${nbBad} à traiter</span>` : warn.length + weak.length ? `<span class="srv-led upd"><i></i>${warn.length + weak.length} à surveiller</span>` : `<span class="srv-led ok"><i></i>Tout va bien</span>`) : "",
+      bridgeOk !== null ? localizeTemplate`<span class="srv-led ${bridgeOk ? "ok" : "bad"}" data-entity="${esc(m.bridge)}"><i></i>Pont ${bridgeOk ? trLabel("connecté") : trLabel("déconnecté")}</span>` : "",
+      rows.length ? (nbBad ? localizeTemplate`<span class="srv-led bad"><i></i>${nbBad} à traiter</span>` : warn.length + weak.length ? localizeTemplate`<span class="srv-led upd"><i></i>${warn.length + weak.length} à surveiller</span>` : localizeTemplate`<span class="srv-led ok"><i></i>Tout va bien</span>`) : "",
     ].join("");
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${PVE_STYLE}${PING_STYLE}${ZB_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${nbBad || bridgeOk === false ? "srv-alert" : ""}">
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${PVE_STYLE}${PING_STYLE}${ZB_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${nbBad || bridgeOk === false ? "srv-alert" : ""}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:zigbee")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
-          <div><div class="title">${esc(c.title || "Zigbee et piles")}</div><div class="sub">${rows.length} appareil${rows.length > 1 ? "s" : ""}${nBat ? `, ${nBat} à pile` : ""}</div></div></div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+          <div><div class="title">${esc(c.title || "Zigbee et piles")}</div><div class="sub">${countUi(rows.length, "device")}${nBat ? CURRENT_CARD_LANGUAGE === "en" ? `, ${nBat} battery-powered` : CURRENT_CARD_LANGUAGE === "pl" ? `, ${nBat} na baterie` : `, ${nBat} à pile` : ""}</div></div></div>
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
       ${body}
     </ha-card>`;
@@ -4091,6 +4329,7 @@ class ServeurHaWireguardCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...WG_DEFAULTS, ...(config || {}) };
     this._map = null;
     this._sig = null;
@@ -4207,7 +4446,7 @@ class ServeurHaWireguardCard extends HTMLElement {
       return u === "TB" ? v * 1000 : u === "MB" ? v / 1000 : u === "KB" ? v / 1e6 : u === "B" ? v / 1e9 : v;
     };
     const isUp = (p) => this._st(p.roles.up)?.state === "on";
-    const hsAgo = (p) => { const s = this._st(p.roles.hs)?.state; return s && s !== "unknown" && s !== "unavailable" ? since(s) : null; };
+    const hsAgo = (p) => { const s = this._st(p.roles.hs)?.state; return s && s !== "unknown" && s !== "unavailable" && Number.isFinite(new Date(s).getTime()) ? s : null; };
 
     const peerTile = (p) => {
       const up = isUp(p);
@@ -4215,9 +4454,9 @@ class ServeurHaWireguardCard extends HTMLElement {
       const a = this._st(p.roles.hs)?.attributes || {};
       const ep = a.endpoint && a.endpoint !== "(none)" ? a.endpoint : null;
       const hs = hsAgo(p);
-      const line1 = up ? (hs ? `Handshake il y a ${hs}` : "Connecté") : hs ? `Vu il y a ${hs}` : "Jamais connecté";
-      const title = [p.name, p.raw !== p.name ? `(${p.raw})` : null, up ? "Connecté" : "Déconnecté", a.allowed_ips ? `IP VPN ${a.allowed_ips}` : null, ep ? `Point d'accès ${ep}` : null, hs ? `Dernier handshake il y a ${hs}` : null].filter(Boolean).join(" · ");
-      return `<div class="wg-p ${up ? "up" : ""}" data-entity="${esc(p.roles.up || p.roles.hs || "")}" title="${esc(title)}">
+      const line1 = up ? (hs ? `${trLabel("Handshake")} ${relativeAgo(hs)}` : trLabel("Connecté")) : hs ? formatSeenAgo(hs) : trLabel("Jamais connecté");
+      const title = [p.name, p.raw !== p.name ? `(${p.raw})` : null, up ? trLabel("Connecté") : trLabel("Déconnecté"), a.allowed_ips ? `IP VPN ${a.allowed_ips}` : null, ep ? localizeTextTemplate`Point d'accès ${ep}` : null, hs ? `${trLabel("Dernier handshake")} ${relativeAgo(hs)}` : null].filter(Boolean).join(" · ");
+      return localizeTemplate`<div class="wg-p ${up ? "up" : ""}" data-entity="${esc(p.roles.up || p.roles.hs || "")}" title="${esc(title)}">
           <i></i><div class="wg-pn"><span>${esc(p.name)}</span><small>${esc(line1)}${a.allowed_ips ? ` · ${esc(String(a.allowed_ips).replace(/\/32$/, ""))}` : ""}${c.show_endpoint && ep ? ` · ${esc(ep)}` : ""}</small></div>
           <div class="wg-pd"><span title="Reçu par le serveur"><ha-icon icon="mdi:arrow-down"></ha-icon>${go(rx)}</span><span title="Envoyé par le serveur"><ha-icon icon="mdi:arrow-up"></ha-icon>${go(tx)}</span></div>
         </div>`;
@@ -4232,29 +4471,29 @@ class ServeurHaWireguardCard extends HTMLElement {
       const totalRaw = Number(this._st(s.count)?.attributes?.total_peers);
       const total = Number.isFinite(totalRaw) ? totalRaw : s.peers.length;
       const isOpen = open(s.key);
-      const dots = s.peers.map((p) => `<i class="${isUp(p) ? "ok" : "na"}"></i>`).join("");
-      return `<div class="ping-g ${isOpen ? "open" : ""}">
+      const dots = s.peers.map((p) => localizeTemplate`<i class="${isUp(p) ? "ok" : "na"}"></i>`).join("");
+      return localizeTemplate`<div class="ping-g ${isOpen ? "open" : ""}">
         <button class="ping-gh" data-fold="${esc(s.key)}" aria-expanded="${isOpen}"><ha-icon icon="mdi:server-network"></ha-icon><span class="ping-gl">${esc(s.short)}</span>
           <span class="ping-dots">${dots}</span><b class="${on.length ? "ok" : "off"}">${on.length}/${total}</b><ha-icon class="ping-chev" icon="${esc(isOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon></button>
-        ${isOpen ? `<div class="wg-list">${s.peers.map(peerTile).join("")}</div>`
-          : on.length ? `<div class="wg-on">${on.map((p) => `<span class="omv-svc on" data-entity="${esc(p.roles.up)}"><i></i>${esc(p.name)}</span>`).join("")}</div>` : ""}
+        ${isOpen ? localizeTemplate`<div class="wg-list">${s.peers.map(peerTile).join("")}</div>`
+          : on.length ? localizeTemplate`<div class="wg-on">${on.map((p) => localizeTemplate`<span class="omv-svc on" data-entity="${esc(p.roles.up)}"><i></i>${esc(p.name)}</span>`).join("")}</div>` : ""}
       </div>`;
     }).join("");
 
     const body = !m.servers.length
-      ? `<div class="empty">Aucun serveur WireGuard trouvé<span>Installez l'intégration WGDashboard Monitor (HACS) et ajoutez votre WGDashboard dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`
-      : `<div class="ping-sum">
+      ? localizeTemplate`<div class="empty">Aucun serveur WireGuard trouvé<span>Installez l'intégration WGDashboard Monitor (HACS) et ajoutez votre WGDashboard dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`
+      : localizeTemplate`<div class="ping-sum">
           <div class="${upN ? "ok" : ""}"><b>${upN}<small>/${all.length}</small></b><span>pairs connectés</span></div>
           <div><b>${m.servers.length}</b><span>serveur${m.servers.length > 1 ? "s" : ""}</span></div>
           <div><b>${go(rxT)}</b><span>reçu</span></div>
           <div><b>${go(txT)}</b><span>envoyé</span></div>
         </div><div class="srv-sec ping-groups">${serversHtml}</div>`;
-    const leds = m.servers.length ? `<span class="srv-led ${upN ? "ok" : "na"}"><i></i>${upN ? `${upN} connecté${upN > 1 ? "s" : ""}` : "Aucun pair connecté"}</span>` : "";
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${PVE_STYLE}${OMV_STYLE}${PING_STYLE}${WG_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
+    const leds = m.servers.length ? localizeTemplate`<span class="srv-led ${upN ? "ok" : "na"}"><i></i>${upN ? localizeTextTemplate`${upN} connecté${upN > 1 ? "s" : ""}` : trLabel("Aucun pair connecté")}</span>` : "";
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${PVE_STYLE}${OMV_STYLE}${PING_STYLE}${WG_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:vpn")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
           <div><div class="title">${esc(c.title || "VPN WireGuard")}</div><div class="sub">${m.servers.length ? m.servers.map((s) => esc(s.short)).join(" · ") : "WGDashboard"}</div></div></div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
       ${body}
     </ha-card>`;
@@ -4314,6 +4553,7 @@ class ServeurHaGlancesCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...GL_DEFAULTS, ...(config || {}) };
     this._map = null;
     this._sig = null;
@@ -4434,10 +4674,10 @@ class ServeurHaGlancesCard extends HTMLElement {
 
     const tw = Number(c.temp_warn) || 70, ta = Number(c.temp_alert) || 85;
     const open = (k) => this._open.has("*") || this._open.has(k);
-    const sec = (icon, t, body) => (body ? `<div class="gl-sub"><div class="gl-subh"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
-    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : `<div class="srv-g" data-entity="${esc(id)}">
+    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="gl-sub"><div class="gl-subh"><ha-icon icon="${esc(icon)}"></ha-icon>${t}</div>${body}</div>` : "");
+    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : localizeTemplate`<div class="srv-g" data-entity="${esc(id)}">
         <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${label}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
-        <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? `<div class="srv-gs">${sub}</div>` : ""}</div>`);
+        <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
     const go = (id) => { const v = this._num(id); if (v === null) return null; const u = this._unit(id, "GiB"); const g = /^TiB|^TB/i.test(u) ? v * 1024 : /^MiB|^MB/i.test(u) ? v / 1024 : v; return g >= 1024 ? `${fmt(g / 1024, 2)} To` : `${fmt(g, g < 10 ? 1 : 0)} Go`; };
     const tcls = (v) => (v === null ? "" : v >= ta ? "bad" : v >= tw ? "warn" : "ok");
     const pcls = (v, w, a) => (v === null ? "" : v >= a ? "bad" : v >= w ? "warn" : "ok");
@@ -4455,63 +4695,63 @@ class ServeurHaGlancesCard extends HTMLElement {
       const up = this._st(r.uptime)?.state;
       const upTxt = up && !/unknown|unavailable/.test(up) ? since(up) : null;
       const isOpen = open(h.key);
-      const chip = (label, v, cls, unit = "%") => (v === null || v < 0 ? "" : `<span class="gl-c ${cls}"><small>${label}</small>${fmt(v, 0)}${unit === "%" ? "<small>%</small>" : `<small>${unit}</small>`}</span>`);
+      const chip = (label, v, cls, unit = "%") => (v === null || v < 0 ? "" : localizeTemplate`<span class="gl-c ${cls}"><small>${label}</small>${fmt(v, 0)}${unit === "%" ? localizeStaticHTML("<small>%</small>") : localizeTemplate`<small>${unit}</small>`}</span>`);
       const chips = online
         ? [chip("CPU", cpu, pcls(cpu, 70, 90)), chip("RAM", mem, pcls(mem, 80, 92)), chip("Disque", diskMax, pcls(diskMax, 80, 90)), t ? chip("Temp.", t.v, tcls(t.v), "°C") : ""].join("")
-        : `<span class="gl-c bad">Injoignable</span>`;
+        : localizeTemplate`<span class="gl-c bad">Injoignable</span>`;
 
       let detail = "";
       if (isOpen && online) {
         const memUsed = go(r.mem_used), memTot = (() => { const u = this._num(r.mem_used), f = this._num(r.mem_free); return u !== null && f !== null ? `${fmt(u + f, 1)} Go` : null; })();
         const swap = this._num(r.swap);
         const tiles = [
-          upTxt ? `<div class="tile srv-t" data-entity="${esc(r.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(upTxt)}</div></div>` : "",
-          this._num(r.load) !== null ? `<div class="tile srv-t" data-entity="${esc(r.load)}"><div class="tile-l"><ha-icon icon="mdi:chart-line-variant"></ha-icon>Charge</div><div class="nas-up">${fmt(this._num(r.load), 2)}</div></div>` : "",
-          this._num(r.procs) !== null ? `<div class="tile srv-t" data-entity="${esc(r.procs)}"><div class="tile-l"><ha-icon icon="mdi:format-list-bulleted"></ha-icon>Processus</div><div class="nas-up">${fmt(this._num(r.procs), 0)}</div>${this._num(r.threads) !== null ? `<div class="tile-n">${fmt(this._num(r.threads), 0)} threads</div>` : ""}</div>` : "",
-          this._num(r.containers) !== null ? `<div class="tile srv-t" data-entity="${esc(r.containers)}"><div class="tile-l"><ha-icon icon="mdi:docker"></ha-icon>Conteneurs</div><div class="nas-up">${fmt(this._num(r.containers), 0)}</div></div>` : "",
+          upTxt ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(r.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(upTxt)}</div></div>` : "",
+          this._num(r.load) !== null ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(r.load)}"><div class="tile-l"><ha-icon icon="mdi:chart-line-variant"></ha-icon>Charge</div><div class="nas-up">${fmt(this._num(r.load), 2)}</div></div>` : "",
+          this._num(r.procs) !== null ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(r.procs)}"><div class="tile-l"><ha-icon icon="mdi:format-list-bulleted"></ha-icon>Processus</div><div class="nas-up">${fmt(this._num(r.procs), 0)}</div>${this._num(r.threads) !== null ? localizeTemplate`<div class="tile-n">${fmt(this._num(r.threads), 0)} threads</div>` : ""}</div>` : "",
+          this._num(r.containers) !== null ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(r.containers)}"><div class="tile-l"><ha-icon icon="mdi:docker"></ha-icon>Conteneurs</div><div class="nas-up">${fmt(this._num(r.containers), 0)}</div></div>` : "",
         ].filter(Boolean);
         const res = [
           gauge(r.cpu, "mdi:cpu-64-bit", "CPU", cpu, "", 70, 90),
           gauge(r.mem, "mdi:memory", "RAM", mem, memUsed && memTot ? `${memUsed} / ${memTot}` : "", 80, 92),
           swap !== null && swap > 0 ? gauge(r.swap, "mdi:swap-horizontal", "Swap", swap, "", 50, 80) : "",
-          gauge(h.gpu.cpu, "mdi:expansion-card", "GPU", this._num(h.gpu.cpu), this._num(h.gpu.mem) !== null ? `Mémoire ${fmt(this._num(h.gpu.mem), 0)} %` : "", 80, 95),
+          gauge(h.gpu.cpu, "mdi:expansion-card", "GPU", this._num(h.gpu.cpu), this._num(h.gpu.mem) !== null ? localizeTextTemplate`Mémoire ${fmt(this._num(h.gpu.mem), 0)} %` : "", 80, 95),
         ].filter(Boolean);
         const disks = fsList.map(([mount, f]) => gauge(f.pct, "mdi:harddisk", esc(mount), this._num(f.pct), go(f.used) && go(f.size) ? `${go(f.used)} / ${go(f.size)}` : "", 80, 90));
         const temps = h.temps.map((x) => ({ ...x, v: this._num(x.id) })).filter((x) => x.v !== null && x.v > 0).sort((a, b) => b.v - a.v)
-          .map((x) => `<span class="gl-t ${tcls(x.v)}" data-entity="${esc(x.id)}" title="${esc(x.label)}"><span>${esc(x.label.length > 22 ? `${x.label.slice(0, 21)}…` : x.label)}</span><b>${fmt(x.v, 0)} °C</b></span>`);
+          .map((x) => localizeTemplate`<span class="gl-t ${tcls(x.v)}" data-entity="${esc(x.id)}" title="${esc(x.label)}"><span>${esc(x.label.length > 22 ? `${x.label.slice(0, 21)}…` : x.label)}</span><b>${fmt(x.v, 0)} °C</b></span>`);
         const fans = h.fans.map((x) => ({ ...x, v: this._num(x.id) })).filter((x) => x.v !== null && x.v > 0)
-          .map((x) => `<span class="gl-t" data-entity="${esc(x.id)}" title="${esc(x.label)}"><span>${esc(x.label.length > 22 ? `${x.label.slice(0, 21)}…` : x.label)}</span><b>${fmt(x.v, 0)} tr/min</b></span>`);
+          .map((x) => localizeTemplate`<span class="gl-t" data-entity="${esc(x.id)}" title="${esc(x.label)}"><span>${esc(x.label.length > 22 ? `${x.label.slice(0, 21)}…` : x.label)}</span><b>${fmt(x.v, 0)} tr/min</b></span>`);
         const netMax = Number(c.net_max) || 1000;
         const nets = Object.entries(h.net).flatMap(([n, x]) => [
-          x.rx ? gauge(x.rx, "mdi:download", `${esc(n)}`, this._num(x.rx), "Réception", 101, 101, ` ${esc(this._unit(x.rx, "Mbit/s"))}`, netMax, (this._num(x.rx) ?? 0) < 10 ? 2 : 0).replace('class="srv-g"', 'class="srv-g srv-in"') : "",
+          x.rx ? gauge(x.rx, "mdi:download", `${esc(n)}`, this._num(x.rx), trLabel("Réception"), 101, 101, ` ${esc(this._unit(x.rx, "Mbit/s"))}`, netMax, (this._num(x.rx) ?? 0) < 10 ? 2 : 0).replace('class="srv-g"', 'class="srv-g srv-in"') : "",
           x.tx ? gauge(x.tx, "mdi:upload", `${esc(n)}`, this._num(x.tx), "Envoi", 101, 101, ` ${esc(this._unit(x.tx, "Mbit/s"))}`, netMax, (this._num(x.tx) ?? 0) < 10 ? 2 : 0).replace('class="srv-g"', 'class="srv-g srv-out"') : "",
         ]).filter(Boolean);
-        detail = `<div class="gl-d">
-          ${tiles.length ? `<div class="tiles srv-tiles">${tiles.join("")}</div>` : ""}
-          ${res.length ? `<div class="srv-grid pve-res">${res.join("")}</div>` : ""}
-          ${sec("mdi:harddisk", "Disques", disks.length ? `<div class="srv-grid pve-res">${disks.join("")}</div>` : "")}
-          ${sec("mdi:thermometer", "Températures", temps.length ? `<div class="gl-ts">${temps.join("")}</div>` : "")}
-          ${sec("mdi:fan", "Ventilateurs", fans.length ? `<div class="gl-ts">${fans.join("")}</div>` : "")}
-          ${sec("mdi:swap-vertical", "Réseau", nets.length ? `<div class="srv-grid">${nets.join("")}</div>` : "")}
+        detail = localizeTemplate`<div class="gl-d">
+          ${tiles.length ? localizeTemplate`<div class="tiles srv-tiles">${tiles.join("")}</div>` : ""}
+          ${res.length ? localizeTemplate`<div class="srv-grid pve-res">${res.join("")}</div>` : ""}
+          ${sec("mdi:harddisk", "Disques", disks.length ? localizeTemplate`<div class="srv-grid pve-res">${disks.join("")}</div>` : "")}
+          ${sec("mdi:thermometer", trLabel("Températures"), temps.length ? localizeTemplate`<div class="gl-ts">${temps.join("")}</div>` : "")}
+          ${sec("mdi:fan", "Ventilateurs", fans.length ? localizeTemplate`<div class="gl-ts">${fans.join("")}</div>` : "")}
+          ${sec("mdi:swap-vertical", trLabel("Réseau"), nets.length ? localizeTemplate`<div class="srv-grid">${nets.join("")}</div>` : "")}
         </div>`;
       }
-      return `<div class="ping-g gl-h ${isOpen ? "open" : ""} ${bad ? "alert" : ""}">
+      return localizeTemplate`<div class="ping-g gl-h ${isOpen ? "open" : ""} ${bad ? "alert" : ""}">
         <button class="ping-gh" data-fold="${esc(h.key)}" aria-expanded="${isOpen}"><ha-icon icon="mdi:server"></ha-icon>
-          <span class="gl-hn"><span class="ping-gl">${esc(h.name)}</span>${upTxt && online ? `<small>depuis ${esc(upTxt)}</small>` : ""}</span>
+          <span class="gl-hn"><span class="ping-gl">${esc(h.name)}</span>${upTxt && online ? localizeTemplate`<small>depuis ${esc(upTxt)}</small>` : ""}</span>
           <span class="gl-cs">${chips}</span><ha-icon class="ping-chev" icon="${esc(isOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon></button>
         ${detail}
       </div>`;
     }).join("");
 
     const body = !m.hosts.length
-      ? `<div class="empty">Aucun serveur Glances trouvé<span>Installez Glances (mode web, glances -w) sur vos serveurs, puis ajoutez l'intégration Glances dans Paramètres › Appareils et services.</span></div>`
-      : `<div class="srv-sec ping-groups">${hostsHtml}</div>`;
-    const leds = m.hosts.length ? `<span class="srv-led ${alerts ? "bad" : "ok"}"><i></i>${alerts ? `${alerts} à surveiller` : "Tout va bien"}</span>` : "";
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${PING_STYLE}${GL_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alerts ? "srv-alert" : ""}">
+      ? localizeTemplate`<div class="empty">Aucun serveur Glances trouvé<span>Installez Glances (mode web, glances -w) sur vos serveurs, puis ajoutez l'intégration Glances dans Paramètres › Appareils et services.</span></div>`
+      : localizeTemplate`<div class="srv-sec ping-groups">${hostsHtml}</div>`;
+    const leds = m.hosts.length ? localizeTemplate`<span class="srv-led ${alerts ? "bad" : "ok"}"><i></i>${alerts ? localizeTextTemplate`${alerts} à surveiller` : "Tout va bien"}</span>` : "";
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${PING_STYLE}${GL_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alerts ? "srv-alert" : ""}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:monitor-dashboard")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
-          <div><div class="title">${esc(c.title || "Serveurs Glances")}</div><div class="sub">${m.hosts.length} serveur${m.hosts.length > 1 ? "s" : ""} · ${m.hosts.map((h) => esc(h.name)).join(" · ")}</div></div></div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+          <div><div class="title">${esc(c.title || "Serveurs Glances")}</div><div class="sub">${countUi(m.hosts.length, "server")} · ${m.hosts.map((h) => esc(h.name)).join(" · ")}</div></div></div>
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
       ${body}
     </ha-card>`;
@@ -4587,6 +4827,7 @@ class ServeurHaMediaCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...MEDIA_DEFAULTS, ...(config || {}) };
     this._map = null;
     this._sig = null;
@@ -4703,7 +4944,7 @@ class ServeurHaMediaCard extends HTMLElement {
       if (this._br !== b) return;
       b.items = (res?.children || []).map((x) => ({ id: x.media_content_id, type: x.media_content_type, title: x.title, play: !!x.can_play, open: !!x.can_expand, thumb: x.thumbnail || "" }));
     } catch (e) {
-      b.error = `Lecture de la bibliothèque impossible : ${e?.message || e}`;
+      b.error = { kind: "browse_failed", detail: String(e?.message || e) };
     }
     b.loading = false;
     if (this._br === b) { this._brRedraw(); this._brThumbs(); }
@@ -4742,7 +4983,7 @@ class ServeurHaMediaCard extends HTMLElement {
       const player = players.includes(this._config.browse_player) ? this._config.browse_player : now || players[0];
       // sans capteurs de bibliothèque : on part de la liste des bibliothèques du serveur
       this._br = { srv: s.key, lib: el.dataset.lib, player, browser, stack: el.dataset.lib ? [] : [{ id: "", type: "", title: "Bibliothèques" }], items: [], filter: "", limit: BROWSE_PAGE, msg: "" };
-      if (!browser) { this._br.error = "Aucun lecteur disponible : allumez la TV et ouvrez Plex (ou Jellyfin), puis réessayez."; this._brRedraw(); return; }
+      if (!browser) { this._br.error = { kind: "no_player" }; this._brRedraw(); return; }
       this._brLoad(null);
       return;
     }
@@ -4765,11 +5006,11 @@ class ServeurHaMediaCard extends HTMLElement {
     if (act === "play") {
       if (!b.player) return;
       const name = mediaPlayerName(this._st(b.player)?.attributes?.friendly_name) || b.player;
-      b.msg = `Lecture de « ${item.title} » sur ${name}…`;
+      b.msg = { kind: "starting", title: item.title, player: name };
       this._brRedraw();
       Promise.resolve(this._hass.callService("media_player", "play_media", { entity_id: b.player, media_content_id: item.id, media_content_type: item.type }))
-        .then(() => { if (this._br === b) { b.msg = `« ${item.title} » lancé sur ${name}.`; this._brRedraw(); } })
-        .catch((e) => { if (this._br === b) { b.msg = `Échec : ${e?.message || e}`; this._brRedraw(); } });
+        .then(() => { if (this._br === b) { b.msg = { kind: "started", title: item.title, player: name }; this._brRedraw(); } })
+        .catch((e) => { if (this._br === b) { b.msg = { kind: "failed", detail: String(e?.message || e) }; this._brRedraw(); } });
     }
   }
 
@@ -4781,14 +5022,14 @@ class ServeurHaMediaCard extends HTMLElement {
     const vis = this._brVisible(), total = this._brMatches().length;
     const img = (x) => {
       const u = x.thumb ? (x.thumb.startsWith("/") ? this._thumbs?.get(x.thumb) : x.thumb) : "";
-      return u ? `<img src="${esc(u)}" alt="" loading="lazy">` : `<ha-icon icon="${esc(x.open && !x.play ? "mdi:folder-play-outline" : "mdi:movie-open-outline")}"></ha-icon>`;
+      return u ? localizeTemplate`<img src="${esc(u)}" alt="" loading="lazy">` : localizeTemplate`<ha-icon icon="${esc(x.open && !x.play ? "mdi:folder-play-outline" : "mdi:movie-open-outline")}"></ha-icon>`;
     };
     const rows = vis.map((x) => {
       const i = b.items.indexOf(x);
-      return `<div class="br-it">
+      return localizeTemplate`<div class="br-it">
           <button class="br-th" data-br="card" data-i="${i}" title="Voir la fiche" aria-label="Fiche de ${esc(x.title)}">${img(x)}</button>
-          ${x.open ? `<button class="br-t" data-br="open" data-i="${i}" title="Ouvrir">${esc(x.title)}<ha-icon icon="mdi:chevron-right"></ha-icon></button>` : `<span class="br-t">${esc(x.title)}</span>`}
-          ${x.play && b.player ? `<button class="md-b" data-br="play" data-i="${i}" title="Lire" aria-label="Lire ${esc(x.title)}"><ha-icon icon="mdi:play"></ha-icon></button>` : ""}
+          ${x.open ? localizeTemplate`<button class="br-t" data-br="open" data-i="${i}" title="Ouvrir">${esc(x.title)}<ha-icon icon="mdi:chevron-right"></ha-icon></button>` : localizeTemplate`<span class="br-t">${esc(x.title)}</span>`}
+          ${x.play && b.player ? localizeTemplate`<button class="md-b" data-br="play" data-i="${i}" title="Lire" aria-label="Lire ${esc(x.title)}"><ha-icon icon="mdi:play"></ha-icon></button>` : ""}
         </div>`;
     }).join("");
     const pname = (id) => mediaPlayerName(this._st(id)?.attributes?.friendly_name) || id;
@@ -4800,12 +5041,12 @@ class ServeurHaMediaCard extends HTMLElement {
       const m = String(x.title).match(/^(.*?)\s*\((\d{4})\)\s*$/);
       const u = x.thumb ? (x.thumb.startsWith("/") ? this._thumbs?.get(x.thumb) : x.thumb) : "";
       const meta = [TYPES[String(x.type).toLowerCase()], m?.[2]].filter(Boolean).join(" · ");
-      return `<div class="br-card">
-          <div class="br-big">${u ? `<img src="${esc(u)}" alt="">` : `<ha-icon icon="mdi:movie-open-outline"></ha-icon>`}</div>
-          <div class="br-ci"><b>${esc(m ? m[1] : x.title)}</b>${meta ? `<small>${esc(meta)}</small>` : ""}
+      return localizeTemplate`<div class="br-card">
+          <div class="br-big">${u ? localizeTemplate`<img src="${esc(u)}" alt="">` : localizeTemplate`<ha-icon icon="mdi:movie-open-outline"></ha-icon>`}</div>
+          <div class="br-ci"><b>${esc(m ? m[1] : x.title)}</b>${meta ? localizeTemplate`<small>${esc(meta)}</small>` : ""}
             <div class="br-ca">
-              ${x.play && b.player ? `<button class="br-go" data-br="play" data-i="${i}"><ha-icon icon="mdi:play"></ha-icon>Lire sur ${esc(pname(b.player))}</button>` : ""}
-              ${x.open ? `<button class="md-chip" data-br="open" data-i="${i}"><ha-icon icon="mdi:folder-open-outline"></ha-icon> Ouvrir</button>` : ""}
+              ${x.play && b.player ? localizeTemplate`<button class="br-go" data-br="play" data-i="${i}"><ha-icon icon="mdi:play"></ha-icon>Lire sur ${esc(pname(b.player))}</button>` : ""}
+              ${x.open ? localizeTemplate`<button class="md-chip" data-br="open" data-i="${i}"><ha-icon icon="mdi:folder-open-outline"></ha-icon> Ouvrir</button>` : ""}
               <button class="md-chip" data-br="uncard"><ha-icon icon="mdi:arrow-left"></ha-icon> Retour à la liste</button>
             </div></div>
         </div>`;
@@ -4813,19 +5054,29 @@ class ServeurHaMediaCard extends HTMLElement {
     // TV éteinte : bouton pour l'allumer si son lecteur (Cast, Android TV…) le permet
     const wake = b.player ? "" : [...new Set(s.players.map((id) => this._twin(id)).filter(Boolean))]
       .filter((t) => { const o = this._st(t); return o && o.state !== "unavailable" && ((Number(o.attributes?.supported_features) || 0) & 128); })
-      .map((t) => `<button class="md-chip" data-mp="${esc(t)}" data-mp-act="turn_on"><ha-icon icon="mdi:power"></ha-icon> Allumer ${esc(pname(t))}</button>`).join("");
-    return `<div class="br">
+      .map((t) => localizeTemplate`<button class="md-chip" data-mp="${esc(t)}" data-mp-act="turn_on"><ha-icon icon="mdi:power"></ha-icon> Allumer ${esc(pname(t))}</button>`).join("");
+    const browseMessage = (message) => {
+      if (!message) return "";
+      if (typeof message === "string") return message;
+      if (message.kind === "browse_failed") return localizeTextTemplate`Lecture de la bibliothèque impossible : ${message.detail}`;
+      if (message.kind === "no_player") return trLabel("Aucun lecteur disponible : allumez la TV et ouvrez Plex (ou Jellyfin), puis réessayez.");
+      if (message.kind === "starting") return localizeTextTemplate`Lecture de « ${message.title} » sur ${message.player}…`;
+      if (message.kind === "started") return localizeTextTemplate`« ${message.title} » lancé sur ${message.player}.`;
+      if (message.kind === "failed") return localizeTextTemplate`Échec : ${message.detail}`;
+      return "";
+    };
+    return localizeTemplate`<div class="br">
         <div class="br-h">
           <button class="md-b" data-br="back" title="Retour" aria-label="Retour"><ha-icon icon="mdi:arrow-left"></ha-icon></button>
-          <b>${esc(title)}</b>${b.items.length ? `<small>${total}</small>` : ""}
+          <b>${esc(title)}</b>${b.items.length ? localizeTemplate`<small>${total}</small>` : ""}
           <button class="md-b" data-br="close" title="Fermer" aria-label="Fermer"><ha-icon icon="mdi:close"></ha-icon></button>
         </div>
-        ${players.length > 1 ? `<div class="br-pl"><small>Lire sur</small>${players.map((id) => `<button class="md-chip ${id === b.player ? "on" : ""}" data-br="player" data-id="${esc(id)}">${esc(pname(id))}</button>`).join("")}</div>`
-          : b.player ? `<div class="br-pl"><small>Lire sur ${esc(pname(b.player))}</small></div>` : `<div class="br-pl"><small>Aucun lecteur allumé : allumez la TV et ouvrez Plex pour lancer une lecture.</small>${wake}</div>`}
-        ${!fiche && b.items.length > 12 ? `<input class="br-q" type="search" placeholder="Rechercher…" aria-label="Rechercher" value="${esc(b.filter)}">` : ""}
-        ${b.msg ? `<div class="br-msg">${esc(b.msg)}</div>` : ""}
-        ${b.error ? `<div class="br-msg err">${esc(b.error)}</div>` : b.loading ? `<div class="br-msg">Chargement…</div>` : !b.items.length ? `<div class="br-msg">Rien à afficher.</div>` : fiche || `<div class="br-ls">${rows}</div>`}
-        ${!fiche && vis.length < total ? `<button class="md-more" data-br="more">Afficher plus (${total - vis.length} de plus)</button>` : ""}
+        ${players.length > 1 ? localizeTemplate`<div class="br-pl"><small>Lire sur</small>${players.map((id) => localizeTemplate`<button class="md-chip ${id === b.player ? "on" : ""}" data-br="player" data-id="${esc(id)}">${esc(pname(id))}</button>`).join("")}</div>`
+          : b.player ? localizeTemplate`<div class="br-pl"><small>Lire sur ${esc(pname(b.player))}</small></div>` : localizeTemplate`<div class="br-pl"><small>Aucun lecteur allumé : allumez la TV et ouvrez Plex pour lancer une lecture.</small>${wake}</div>`}
+        ${!fiche && b.items.length > 12 ? localizeTemplate`<input class="br-q" type="search" placeholder="Rechercher…" aria-label="Rechercher" value="${esc(b.filter)}">` : ""}
+        ${b.msg ? localizeTemplate`<div class="br-msg">${esc(browseMessage(b.msg))}</div>` : ""}
+        ${b.error ? localizeTemplate`<div class="br-msg err">${esc(browseMessage(b.error))}</div>` : b.loading ? localizeTemplate`<div class="br-msg">Chargement…</div>` : !b.items.length ? localizeTemplate`<div class="br-msg">Rien à afficher.</div>` : fiche || localizeTemplate`<div class="br-ls">${rows}</div>`}
+        ${!fiche && vis.length < total ? localizeTemplate`<button class="md-more" data-br="more">Afficher plus (${total - vis.length} de plus)</button>` : ""}
       </div>`;
   }
 
@@ -4967,9 +5218,9 @@ class ServeurHaMediaCard extends HTMLElement {
       if (lost) f = 0;
       const on = kst === "playing" || this._st(id)?.state === "playing";
       const via = k !== id ? mediaPlayerName(this._st(k)?.attributes?.friendly_name) : "";
-      const b = (act, icon, label, extra = "") => `<button class="md-b" data-mp="${esc(k)}" data-mp-act="${act}"${extra} title="${esc(label)}${via ? ` (${esc(via)})` : ""}" aria-label="${esc(label)}"><ha-icon icon="${icon}"></ha-icon></button>`;
+      const b = (act, icon, label, extra = "") => localizeTemplate`<button class="md-b" data-mp="${esc(k)}" data-mp-act="${act}"${extra} title="${esc(label)}${via ? ` (${esc(via)})` : ""}" aria-label="${esc(label)}"><ha-icon icon="${icon}"></ha-icon></button>`;
       const seek = (f & MP.SEEK) && Number.isFinite(pos);
-      const resumeBtn = plexResume ? `<button class="md-b" data-mp="${esc(id)}" data-mp-act="plex_resume" title="Reprendre la lecture (par Plex)" aria-label="Reprendre la lecture"><ha-icon icon="mdi:play"></ha-icon></button>` : "";
+      const resumeBtn = plexResume ? localizeTemplate`<button class="md-b" data-mp="${esc(id)}" data-mp-act="plex_resume" title="Reprendre la lecture (par Plex)" aria-label="Reprendre la lecture"><ha-icon icon="mdi:play"></ha-icon></button>` : "";
       const ka = this._st(k)?.attributes || {};
       // volume : coupure, −, niveau, +
       let vol = "";
@@ -4977,9 +5228,9 @@ class ServeurHaMediaCard extends HTMLElement {
         const lv = Number(ka.volume_level), muted = ka.is_volume_muted === true;
         const step = Math.min(50, Math.max(1, Number(c.volume_step) || 5)) / 100;
         const has = (f & MP.VOLUME_SET) && Number.isFinite(lv);
-        vol = `<div class="md-v">
+        vol = localizeTemplate`<div class="md-v">
             ${f & MP.MUTE ? b("volume_mute", muted ? "mdi:volume-off" : "mdi:volume-high", muted ? "Remettre le son" : "Couper le son", ` data-mute="${!muted}"`) : ""}
-            ${has ? `${b("volume_set", "mdi:volume-minus", "Baisser le volume", ` data-vol="${(lv - step).toFixed(2)}"`)}
+            ${has ? localizeTemplate`${b("volume_set", "mdi:volume-minus", "Baisser le volume", ` data-vol="${(lv - step).toFixed(2)}"`)}
             <div class="bar ${muted ? "mute" : ""}"><i style="width:${(lv * 100).toFixed(0)}%"></i></div><small>${muted ? "Muet" : `${Math.round(lv * 100)} %`}</small>
             ${b("volume_set", "mdi:volume-plus", "Monter le volume", ` data-vol="${(lv + step).toFixed(2)}"`)}` : ""}
             %EXTRA%</div>`;
@@ -4990,38 +5241,38 @@ class ServeurHaMediaCard extends HTMLElement {
       if (t) {
         const left = t.state === "active" ? (Date.parse(t.attributes?.finishes_at || "") - Date.now()) / 60000 : NaN;
         const sk = `sleep:${id}`, sOpen = this._open.has(sk);
-        sleepBtn = `<button class="md-b ${t.state === "active" ? "on" : ""}" data-fold="${esc(sk)}" title="Minuterie de veille" aria-label="Minuterie de veille" aria-expanded="${sOpen}"><ha-icon icon="mdi:timer-sand"></ha-icon></button>`;
+        sleepBtn = localizeTemplate`<button class="md-b ${t.state === "active" ? "on" : ""}" data-fold="${esc(sk)}" title="Minuterie de veille" aria-label="Minuterie de veille" aria-expanded="${sOpen}"><ha-icon icon="mdi:timer-sand"></ha-icon></button>`;
         const durs = (Array.isArray(c.sleep_durations) ? c.sleep_durations : [15, 30, 45, 60, 90]).map(Number).filter((x) => x > 0);
-        sleep = `${t.state === "active" ? `<div class="md-sl"><ha-icon icon="mdi:timer-sand"></ha-icon>Veille dans ${Number.isFinite(left) ? Math.max(1, Math.ceil(left)) : "?"} min</div>` : ""}
-          ${sOpen ? `<div class="md-c md-ch">${durs.map((d) => `<button class="md-chip" data-mp="${esc(k)}" data-mp-act="timer_start" data-min="${d}">${d} min</button>`).join("")}
-            ${t.state === "active" ? `<button class="md-chip off" data-mp="${esc(k)}" data-mp-act="timer_cancel">Annuler</button>` : ""}</div>` : ""}`;
+        sleep = `${t.state === "active" ? localizeTemplate`<div class="md-sl"><ha-icon icon="mdi:timer-sand"></ha-icon>Veille dans ${Number.isFinite(left) ? Math.max(1, Math.ceil(left)) : "?"} min</div>` : ""}
+          ${sOpen ? localizeTemplate`<div class="md-c md-ch">${durs.map((d) => localizeTemplate`<button class="md-chip" data-mp="${esc(k)}" data-mp-act="timer_start" data-min="${d}">${d} min</button>`).join("")}
+            ${t.state === "active" ? localizeTemplate`<button class="md-chip off" data-mp="${esc(k)}" data-mp-act="timer_cancel">Annuler</button>` : ""}</div>` : ""}`;
       }
       // volet Détails
       const dk = `det:${id}`, dOpen = this._open.has(dk);
-      const detBtn = c.show_details !== false ? `<button class="md-b ${dOpen ? "on" : ""}" data-fold="${esc(dk)}" title="Détails" aria-label="Détails" aria-expanded="${dOpen}"><ha-icon icon="mdi:information-outline"></ha-icon></button>` : "";
-      return `<div class="md-c">
+      const detBtn = c.show_details !== false ? localizeTemplate`<button class="md-b ${dOpen ? "on" : ""}" data-fold="${esc(dk)}" title="Détails" aria-label="Détails" aria-expanded="${dOpen}"><ha-icon icon="mdi:information-outline"></ha-icon></button>` : "";
+      return localizeTemplate`<div class="md-c">
           ${f & MP.PREV ? b("media_previous_track", "mdi:skip-previous", "Précédent") : ""}
           ${seek ? b("media_seek", "mdi:rewind-10", "Reculer de 10 s", ` data-pos="${Math.round(pos - 10)}"`) : ""}
           ${resumeBtn}${f & (MP.PAUSE | MP.PLAY) ? b("media_play_pause", on ? "mdi:pause" : "mdi:play", on ? "Pause" : "Lecture") : ""}
           ${seek ? b("media_seek", "mdi:fast-forward-30", "Avancer de 30 s", ` data-pos="${Math.round(pos + 30)}"`) : ""}
           ${f & MP.NEXT ? b("media_next_track", "mdi:skip-next", "Suivant") : ""}
           ${f & MP.STOP ? b("media_stop", "mdi:stop", "Arrêt") : ""}
-        </div>${vol ? vol.replace("%EXTRA%", sleepBtn + detBtn) : sleepBtn || detBtn ? `<div class="md-c">${sleepBtn}${detBtn}</div>` : ""}${sleep}`;
+        </div>${vol ? vol.replace("%EXTRA%", sleepBtn + detBtn) : sleepBtn || detBtn ? localizeTemplate`<div class="md-c">${sleepBtn}${detBtn}</div>` : ""}${sleep}`;
     };
     // volet Détails : ce que fournissent l'intégration et le lecteur de l'appareil
     const details = (id) => {
       if (c.show_details === false || !this._open.has(`det:${id}`)) return "";
       const a = this._st(id)?.attributes || {}, k = this._controller(id), ka = k ? this._st(k)?.attributes || {} : {};
       const rows = [
-        ["Résumé", a.media_summary],
+        [trLabel("Résumé"), a.media_summary],
         ["Classification", a.media_content_rating],
-        ["Bibliothèque", a.media_library_title],
+        [trLabel("Bibliothèque"), a.media_library_title],
         ["Utilisateur", a.username || a.user],
         ["Lecteur", mediaPlayerName(a.friendly_name)],
         ["Application", ka.app_name],
-        ["Commandé par", k && k !== id ? mediaPlayerName(ka.friendly_name) : null],
-        ["Volume", Number.isFinite(Number(ka.volume_level)) ? `${Math.round(ka.volume_level * 100)} %${ka.is_volume_muted ? " (muet)" : ""}` : null],
-        ["Durée", Number.isFinite(Number(a.media_duration)) ? clock(Number(a.media_duration)) : null],
+        [trLabel("Commandé par"), k && k !== id ? mediaPlayerName(ka.friendly_name) : null],
+        [uiText("media.volume"), Number.isFinite(Number(ka.volume_level)) ? `${Math.round(ka.volume_level * 100)} %${ka.is_volume_muted ? ` (${uiText("media.muted")})` : ""}` : null],
+        [trLabel("Durée"), Number.isFinite(Number(a.media_duration)) ? clock(Number(a.media_duration)) : null],
       ].filter(([, v]) => v !== undefined && v !== null && v !== "");
       return rows.length ? `<dl class="md-d">${rows.map(([n, v]) => `<dt>${esc(n)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : "";
     };
@@ -5033,12 +5284,12 @@ class ServeurHaMediaCard extends HTMLElement {
       if (o.state === "playing" && Number.isFinite(pos) && Number.isFinite(posAt)) pos += (Date.now() - posAt) / 1000;
       const pct = Number.isFinite(dur) && dur > 0 && Number.isFinite(pos) ? Math.min(100, (pos / dur) * 100) : null;
       const who = [a.username || a.user, mediaPlayerName(a.friendly_name)].filter(Boolean).join(" · ");
-      const pic = a.entity_picture ? `<img src="${esc(a.entity_picture)}" alt="" loading="lazy">` : `<ha-icon icon="${esc(a.media_content_type === "music" || a.media_artist ? "mdi:music" : "mdi:movie-open-outline")}"></ha-icon>`;
-      return `<div class="md-s ${o.state}" data-entity="${esc(id)}">
+      const pic = a.entity_picture ? localizeTemplate`<img src="${esc(a.entity_picture)}" alt="" loading="lazy">` : localizeTemplate`<ha-icon icon="${esc(a.media_content_type === "music" || a.media_artist ? "mdi:music" : "mdi:movie-open-outline")}"></ha-icon>`;
+      return localizeTemplate`<div class="md-s ${o.state}" data-entity="${esc(id)}">
           <div class="md-art">${pic}</div>
-          <div class="md-i"><div class="md-t">${esc(t1)}</div>${t2 ? `<div class="md-t2">${esc(t2)}</div>` : ""}
+          <div class="md-i"><div class="md-t">${esc(t1)}</div>${t2 ? localizeTemplate`<div class="md-t2">${esc(t2)}</div>` : ""}
             <div class="md-w"><ha-icon icon="${esc(o.state === "paused" ? "mdi:pause" : "mdi:play")}"></ha-icon>${esc(who || "Lecteur")}${MEDIA_TYPES[a.media_content_type] ? ` · ${MEDIA_TYPES[a.media_content_type]}` : ""}</div>
-            ${pct !== null ? `<div class="md-p"><div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div><small>${clock(pos)} / ${clock(dur)}</small></div>` : ""}
+            ${pct !== null ? localizeTemplate`<div class="md-p"><div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div><small>${clock(pos)} / ${clock(dur)}</small></div>` : ""}
             ${c.show_controls !== false ? controls(id, pos) : ""}${details(id)}</div>
         </div>`;
     };
@@ -5058,38 +5309,38 @@ class ServeurHaMediaCard extends HTMLElement {
         if (!Number.isFinite(n)) return "";
         const open = this._br?.srv === s.key && this._br?.lib === name;
         return canBrowse
-          ? `<button class="md-lib br ${open ? "on" : ""}" data-br="lib" data-srv="${esc(s.key)}" data-lib="${esc(name)}" aria-expanded="${open}" title="Voir le contenu"><b>${fmt(n, 0)}</b>${esc(name)}</button>`
-          : `<span class="md-lib" data-entity="${esc(id)}"><b>${fmt(n, 0)}</b>${esc(name)}</span>`;
+          ? localizeTemplate`<button class="md-lib br ${open ? "on" : ""}" data-br="lib" data-srv="${esc(s.key)}" data-lib="${esc(name)}" aria-expanded="${open}" title="Voir le contenu"><b>${fmt(n, 0)}</b>${esc(name)}</button>`
+          : localizeTemplate`<span class="md-lib" data-entity="${esc(id)}"><b>${fmt(n, 0)}</b>${esc(name)}</span>`;
       }).filter(Boolean) : [];
       const panel = this._br?.srv === s.key ? this._brPanel(s) : "";
       const isOpen = this._open.has(s.key);
       const known = s.players.filter((id) => !this._deviceOff(id));
-      const clients = c.show_clients !== false && s.players.length ? `<button class="md-more" data-fold="${esc(s.key)}"><ha-icon icon="${esc(isOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${isOpen ? "Réduire" : `Lecteurs (${known.length} disponible${known.length > 1 ? "s" : ""} sur ${s.players.length})`}</button>
-          ${isOpen ? `<div class="md-cl">${s.players.map((id) => { const o = this._st(id); const on = !this._deviceOff(id); return `<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}"><i></i>${esc(mediaPlayerName(o?.attributes?.friendly_name) || id)}</span>`; }).join("")}</div>` : ""}` : "";
-      return `<div class="md-srv">
+      const clients = c.show_clients !== false && s.players.length ? localizeTemplate`<button class="md-more" data-fold="${esc(s.key)}"><ha-icon icon="${esc(isOpen ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${isOpen ? trLabel("Réduire") : localizeTextTemplate`Lecteurs (${known.length} disponible${known.length > 1 ? "s" : ""} sur ${s.players.length})`}</button>
+          ${isOpen ? localizeTemplate`<div class="md-cl">${s.players.map((id) => { const o = this._st(id); const on = !this._deviceOff(id); return localizeTemplate`<span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}"><i></i>${esc(mediaPlayerName(o?.attributes?.friendly_name) || id)}</span>`; }).join("")}</div>` : ""}` : "";
+      return localizeTemplate`<div class="md-srv">
           <div class="md-h" data-entity="${esc(s.count || s.update || "")}">
             <span class="md-app" style="--app:${appColor}"><ha-icon icon="${esc(appIcon)}"></ha-icon></span>
             <div class="md-hn"><b>${esc(s.name)}</b><small>${esc([app, version ? `v${String(version).split("-")[0]}` : null].filter(Boolean).join(" · "))}</small></div>
-            ${needUpd ? `<span class="srv-led upd" data-entity="${esc(s.update)}"><i></i>Mise à jour</span>` : ""}
-            <span class="md-n ${now.length ? "on" : ""}">${now.length ? `${now.length} en lecture` : "Rien en lecture"}</span>
+            ${needUpd ? localizeTemplate`<span class="srv-led upd" data-entity="${esc(s.update)}"><i></i>Mise à jour</span>` : ""}
+            <span class="md-n ${now.length ? "on" : ""}">${now.length ? localizeTextTemplate`${now.length} en lecture` : trLabel("Rien en lecture")}</span>
           </div>
-          ${now.length ? `<div class="md-ss">${now.map(session).join("")}</div>` : ""}
-          ${libs.length ? `<div class="md-libs">${libs.join("")}</div>` : ""}
-          ${!libs.length && canBrowse ? `<button class="md-more ${this._br?.srv === s.key ? "on" : ""}" data-br="lib" data-srv="${esc(s.key)}" data-lib="" aria-expanded="${this._br?.srv === s.key}"><ha-icon icon="mdi:folder-play-outline"></ha-icon>Bibliothèques</button>` : ""}
+          ${now.length ? localizeTemplate`<div class="md-ss">${now.map(session).join("")}</div>` : ""}
+          ${libs.length ? localizeTemplate`<div class="md-libs">${libs.join("")}</div>` : ""}
+          ${!libs.length && canBrowse ? localizeTemplate`<button class="md-more ${this._br?.srv === s.key ? "on" : ""}" data-br="lib" data-srv="${esc(s.key)}" data-lib="" aria-expanded="${this._br?.srv === s.key}"><ha-icon icon="mdi:folder-play-outline"></ha-icon>Bibliothèques</button>` : ""}
           ${panel}
           ${clients}
         </div>`;
     }).join("");
 
     const body = !m.servers.length
-      ? `<div class="empty">Aucun serveur multimédia trouvé<span>Ajoutez l'intégration Plex, Jellyfin ou Emby dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`
-      : `<div class="md-list">${blocks}</div>`;
-    const leds = m.servers.length ? `<span class="srv-led ${totalPlaying ? "ok" : "na"}"><i></i>${totalPlaying ? `${totalPlaying} en lecture` : "Aucune lecture"}</span>` : "";
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${OMV_STYLE}${MEDIA_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
+      ? localizeTemplate`<div class="empty">Aucun serveur multimédia trouvé<span>Ajoutez l'intégration Plex, Jellyfin ou Emby dans Paramètres › Appareils et services, puis rechargez la page.</span></div>`
+      : localizeTemplate`<div class="md-list">${blocks}</div>`;
+    const leds = m.servers.length ? localizeTemplate`<span class="srv-led ${totalPlaying ? "ok" : "na"}"><i></i>${totalPlaying ? localizeTextTemplate`${totalPlaying} en lecture` : trLabel("Aucune lecture")}</span>` : "";
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${OMV_STYLE}${MEDIA_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:play-box-multiple")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
           <div><div class="title">${esc(c.title || "Serveurs multimédia")}</div><div class="sub">${m.servers.map((s) => esc(MEDIA_APPS[s.platform][0])).filter((v, i, a) => a.indexOf(v) === i).join(" · ") || "Plex, Jellyfin, Emby"}</div></div></div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
       ${body}
     </ha-card>`;
@@ -5249,6 +5500,7 @@ class ServeurHaDnsCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...DNS_DEFAULTS, ...(config || {}) };
     this._map = null;
     this._sig = null;
@@ -5382,21 +5634,21 @@ class ServeurHaDnsCard extends HTMLElement {
     const off = list.filter((d) => isOn(d) === false || !reachable(d));
     const updates = list.filter((d) => upd(d).length);
     const apps = [...new Set(list.map((d) => d.app))];
-    const title = c.title || (apps.length === 1 ? DNS_APPS[apps[0]][0] : "Filtrage DNS");
+    const title = c.title || (apps.length === 1 ? DNS_APPS[apps[0]][0] : trLabel("Filtrage DNS"));
     const icon = c.icon || (apps.length === 1 ? DNS_APPS[apps[0]][1] : "mdi:shield-check");
-    const led = (ok, label, id, cls = "") => `<span class="srv-led ${ok ? "ok" : "bad"} ${cls}" data-entity="${esc(id || "")}"><i></i>${label}</span>`;
+    const led = (ok, label, id, cls = "") => localizeTemplate`<span class="srv-led ${ok ? "ok" : "bad"} ${cls}" data-entity="${esc(id || "")}"><i></i>${label}</span>`;
     const leds = list.length ? [
-      led(!off.length, apps.includes("pi_hole") && !apps.includes("adguard") ? "Blocage" : "Protection", guardOf(off[0] || list[0]) || ""),
-      updates.length ? `<span class="srv-led upd" data-entity="${esc(upd(updates[0])[0])}"><i></i>Mise à jour</span>` : "",
+      led(!off.length, apps.includes("pi_hole") && !apps.includes("adguard") ? trLabel("Blocage") : trLabel("Protection"), guardOf(off[0] || list[0]) || ""),
+      updates.length ? localizeTemplate`<span class="srv-led upd" data-entity="${esc(upd(updates[0])[0])}"><i></i>Mise à jour</span>` : "",
     ].join("") : "";
-    const sub = list.length ? `${list.length} serveur${list.length > 1 ? "s" : ""} · ${off.length ? `${off.length} sans protection` : "protection active"}` : "";
+    const sub = list.length ? `${list.length} ${CURRENT_CARD_LANGUAGE === "pl" ? (list.length === 1 ? "serwer" : "serwery") : CURRENT_CARD_LANGUAGE === "en" ? `server${list.length === 1 ? "" : "s"}` : `serveur${list.length > 1 ? "s" : ""}`} · ${off.length ? `${off.length} ${trLabel("sans protection")}` : trLabel("protection active")}` : "";
 
     let body = "";
     if (!srv) {
-      body = `<div class="empty">Aucun serveur AdGuard Home ni Pi-hole trouvé<span>Ajoutez l'intégration AdGuard Home ou Pi-hole (Paramètres › Appareils et services), puis rechargez la page.</span></div>`;
+      body = localizeTemplate`<div class="empty">Aucun serveur AdGuard Home ni Pi-hole trouvé<span>Ajoutez l'intégration AdGuard Home ou Pi-hole (Paramètres › Appareils et services), puis rechargez la page.</span></div>`;
     } else {
-      const tabs = list.length > 1 ? `<div class="pve-tabs" role="tablist">${list.map((d) => `<button class="pve-tab ${d.id === srv.id ? "on" : ""}" role="tab" aria-selected="${d.id === srv.id}" data-tab="${esc(d.id)}">
-          <i class="pve-dot ${isOn(d) === false || !reachable(d) ? "bad" : "ok"}"></i>${esc(d.name)}<small>${this._num(d.roles.ratio) === null ? "" : `${fmt(this._num(d.roles.ratio), 1)} %`}</small>${upd(d).length ? `<ha-icon class="pve-up" icon="mdi:arrow-up-circle"></ha-icon>` : ""}</button>`).join("")}</div>` : "";
+      const tabs = list.length > 1 ? localizeTemplate`<div class="pve-tabs" role="tablist">${list.map((d) => localizeTemplate`<button class="pve-tab ${d.id === srv.id ? "on" : ""}" role="tab" aria-selected="${d.id === srv.id}" data-tab="${esc(d.id)}">
+          <i class="pve-dot ${isOn(d) === false || !reachable(d) ? "bad" : "ok"}"></i>${esc(d.name)}<small>${this._num(d.roles.ratio) === null ? "" : `${fmt(this._num(d.roles.ratio), 1)} %`}</small>${upd(d).length ? localizeTemplate`<ha-icon class="pve-up" icon="mdi:arrow-up-circle"></ha-icon>` : ""}</button>`).join("")}</div>` : "";
       const r = srv.roles;
       const q = this._num(r.queries), b = this._num(r.blocked);
       const ratio = this._num(r.ratio) ?? (q ? (b / q) * 100 : null);
@@ -5404,65 +5656,66 @@ class ServeurHaDnsCard extends HTMLElement {
       const on = isOn(srv);
       // anneau : part des requêtes bloquées
       const R = 36, C = 2 * Math.PI * R, p = Math.max(0, Math.min(100, ratio ?? 0));
-      const ring = `<svg viewBox="0 0 90 90" class="dns-ring" aria-hidden="true"><circle cx="45" cy="45" r="${R}" class="bg"/><circle cx="45" cy="45" r="${R}" class="fg" stroke-dasharray="${(p / 100) * C} ${C}" transform="rotate(-90 45 45)"/></svg>`;
-      const stat = (id, label, v, unit = "") => (v === null ? "" : `<div class="dns-kv" data-entity="${esc(id)}"><span>${label}</span><b>${v}${unit ? `<small> ${unit}</small>` : ""}</b></div>`);
-      const hero = c.show_stats === false ? "" : `<div class="dns-hero ${on === false ? "off" : ""}" data-entity="${esc(r.ratio || r.queries || "")}">
+      const ring = localizeTemplate`<svg viewBox="0 0 90 90" class="dns-ring" aria-hidden="true"><circle cx="45" cy="45" r="${R}" class="bg"/><circle cx="45" cy="45" r="${R}" class="fg" stroke-dasharray="${(p / 100) * C} ${C}" transform="rotate(-90 45 45)"/></svg>`;
+      const stat = (id, label, v, unit = "") => (v === null ? "" : localizeTemplate`<div class="dns-kv" data-entity="${esc(id)}"><span>${label}</span><b>${v}${unit ? localizeTemplate`<small> ${unit}</small>` : ""}</b></div>`);
+      const hero = c.show_stats === false ? "" : localizeTemplate`<div class="dns-hero ${on === false ? "off" : ""}" data-entity="${esc(r.ratio || r.queries || "")}">
           <div class="dns-rw">${ring}<div class="dns-rv"><b>${ratio === null ? "—" : fmt(ratio, ratio < 10 ? 1 : 0)}<small> %</small></b><span>bloqué</span></div></div>
           <div class="dns-hs">
-            <div class="dns-state ${on === false ? "bad" : on ? "ok" : ""}"><i></i>${on === false ? (srv.app === "pi_hole" ? "Blocage désactivé" : "Protection désactivée") : on ? (srv.app === "pi_hole" ? "Blocage actif" : "Protection active") : "État inconnu"}</div>
-            ${stat(r.queries, "Requêtes", q === null ? null : fmt(q, 0))}
-            ${stat(r.blocked, "Bloquées", b === null ? null : fmt(b, 0))}
-            ${stat(r.speed, "Temps de réponse", speed === null ? null : fmt(speed, speed < 10 ? 1 : 0), "ms")}
+            <div class="dns-state ${on === false ? "bad" : on ? "ok" : ""}"><i></i>${on === false ? (srv.app === "pi_hole" ? trLabel("Blocage désactivé") : trLabel("Protection désactivée")) : on ? (srv.app === "pi_hole" ? trLabel("Blocage actif") : trLabel("Protection active")) : trLabel("État inconnu")}</div>
+            ${stat(r.queries, trLabel("Requêtes"), q === null ? null : fmt(q, 0))}
+            ${stat(r.blocked, trLabel("Bloquées"), b === null ? null : fmt(b, 0))}
+            ${stat(r.speed, trLabel("Temps de réponse"), speed === null ? null : fmt(speed, speed < 10 ? 1 : 0), "ms")}
           </div></div>`;
 
       // détails : ce que chaque application fournit
-      const tile = (id, ic, label, v) => (v === null ? "" : `<div class="tile srv-b" data-entity="${esc(id)}"><ha-icon icon="${esc(ic)}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${v}</div></div>`);
+      const tile = (id, ic, label, v) => (v === null ? "" : localizeTemplate`<div class="tile srv-b" data-entity="${esc(id)}"><ha-icon icon="${esc(ic)}"></ha-icon><div class="tile-l">${label}</div><div class="srv-bv">${v}</div></div>`);
       const n = (id) => { const v = this._num(id); return v === null ? null : fmt(v, 0); };
       const det = c.show_details === false ? [] : [
         tile(r.clients, "mdi:devices", "Clients actifs", n(r.clients)),
-        tile(r.domains, "mdi:playlist-remove", "Domaines bloqués", n(r.domains)),
-        tile(r.rules, "mdi:format-list-checks", "Règles", n(r.rules)),
-        tile(r.cached, "mdi:cached", "En cache", n(r.cached)),
-        tile(r.forwarded, "mdi:arrow-decision-outline", "Transférées", n(r.forwarded)),
-        tile(r.unique_domains, "mdi:web", "Domaines uniques", n(r.unique_domains)),
-        tile(r.parental_blocked, "mdi:human-male-child", "Contrôle parental", n(r.parental_blocked)),
-        tile(r.sb_blocked, "mdi:web-check", "Navigation sécurisée", n(r.sb_blocked)),
-        tile(r.ss_enforced, "mdi:magnify-scan", "Recherches sécurisées", n(r.ss_enforced)),
+        tile(r.domains, "mdi:playlist-remove", trLabel("Domaines bloqués"), n(r.domains)),
+        tile(r.rules, "mdi:format-list-checks", trLabel("Règles"), n(r.rules)),
+        tile(r.cached, "mdi:cached", trLabel("En cache"), n(r.cached)),
+        tile(r.forwarded, "mdi:arrow-decision-outline", trLabel("Transférées"), n(r.forwarded)),
+        tile(r.unique_domains, "mdi:web", trLabel("Domaines uniques"), n(r.unique_domains)),
+        tile(r.parental_blocked, "mdi:human-male-child", trLabel("Contrôle parental"), n(r.parental_blocked)),
+        tile(r.sb_blocked, "mdi:web-check", trLabel("Navigation sécurisée"), n(r.sb_blocked)),
+        tile(r.ss_enforced, "mdi:magnify-scan", trLabel("Recherches sécurisées"), n(r.ss_enforced)),
       ].filter(Boolean);
 
       // interrupteurs
       const sw = c.show_switches === false ? [] : ["protection", "blocking", "filtering", "parental", "safe_browsing", "safe_search", "query_log"].filter((k) => r[k] && this._st(r[k])).map((k) => {
         const id = r[k], s = this._st(id).state, armed = this._armed === id, guard = k === "protection" || k === "blocking";
-        const [ic, label] = DNS_SWITCH[k];
-        return `<button class="tile srv-b dns-sw ${s === "on" ? "good" : s === "off" ? "bad" : ""} ${guard ? "main" : ""} ${armed ? "armed" : ""}" data-toggle="${esc(id)}" ${guard ? 'data-guard="1"' : ""} title="${armed ? "Cliquez encore pour couper" : s === "on" ? "Cliquer pour couper" : "Cliquer pour activer"}">
-          <ha-icon icon="${esc(armed ? "mdi:check-bold" : ic)}"></ha-icon><div class="tile-l">${label}</div><div class="tile-n">${armed ? "Confirmer ?" : s === "on" ? "Activé" : s === "off" ? "Désactivé" : "Indisponible"}</div></button>`;
+        const [ic, labelFr] = DNS_SWITCH[k];
+        const label = trLabel(labelFr);
+        return localizeTemplate`<button class="tile srv-b dns-sw ${s === "on" ? "good" : s === "off" ? "bad" : ""} ${guard ? "main" : ""} ${armed ? "armed" : ""}" data-toggle="${esc(id)}" ${guard ? 'data-guard="1"' : ""} title="${armed ? trLabel("Cliquez encore pour couper") : s === "on" ? trLabel("Cliquer pour couper") : trLabel("Cliquer pour activer")}">
+          <ha-icon icon="${esc(armed ? "mdi:check-bold" : ic)}"></ha-icon><div class="tile-l">${label}</div><div class="tile-n">${armed ? "Confirmer ?" : s === "on" ? trLabel("Activé") : s === "off" ? trLabel("Désactivé") : "Indisponible"}</div></button>`;
       });
       // Pi-hole : pause du blocage
       const pauses = srv.app === "pi_hole" && r.blocking && this._st(r.blocking)?.state === "on" && c.show_switches !== false
-        ? (Array.isArray(c.pause_minutes) ? c.pause_minutes : [c.pause_minutes]).filter((m) => Number(m) > 0).map((m) => `<button class="tile srv-b dns-sw dns-pause" data-pause="${esc(r.blocking)}|${Number(m)}" title="Couper le blocage pendant ${Number(m)} min"><ha-icon icon="mdi:timer-pause-outline"></ha-icon><div class="tile-l">Pause</div><div class="tile-n">${Number(m)} min</div></button>`)
+        ? (Array.isArray(c.pause_minutes) ? c.pause_minutes : [c.pause_minutes]).filter((m) => Number(m) > 0).map((m) => localizeTemplate`<button class="tile srv-b dns-sw dns-pause" data-pause="${esc(r.blocking)}|${Number(m)}" title="Couper le blocage pendant ${Number(m)} min"><ha-icon icon="mdi:timer-pause-outline"></ha-icon><div class="tile-l">Pause</div><div class="tile-n">${Number(m)} min</div></button>`)
         : [];
 
       // mise à jour
       const ups = c.show_update === false ? [] : srv.updates.map((id) => {
         const u = this._st(id), a = u.attributes || {};
         const label = srv.updates.length > 1 ? (a.title || a.friendly_name || "Mise à jour").replace(/^Pi-?hole\s*/i, "") : DNS_APPS[srv.app][0];
-        return `<div class="tile srv-t nas-dsm ${u.state === "on" ? "up" : ""}" data-entity="${esc(id)}"><div class="tile-l"><ha-icon icon="${esc(u.state === "on" ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>${esc(label)}</div>
+        return localizeTemplate`<div class="tile srv-t nas-dsm ${u.state === "on" ? "up" : ""}" data-entity="${esc(id)}"><div class="tile-l"><ha-icon icon="${esc(u.state === "on" ? "mdi:package-up" : "mdi:package-check")}"></ha-icon>${esc(label)}</div>
           <div class="srv-kv"><span>${u.state === "on" ? "Dispo" : "Version"}</span><b class="${u.state === "on" ? "bad" : ""}">${esc((u.state === "on" ? a.latest_version : a.installed_version) || "—")}</b></div>
-          <div class="srv-kv"><span>État</span><b class="${u.state === "on" ? "bad" : "ok"}">${u.state === "on" ? "À installer" : "À jour"}</b></div></div>`;
+          <div class="srv-kv"><span>État</span><b class="${u.state === "on" ? "bad" : "ok"}">${u.state === "on" ? trLabel("À installer") : trLabel("À jour")}</b></div></div>`;
       });
 
-      const sec = (ic, t, inner) => (inner ? `<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(ic)}"></ha-icon>${t}</div>${inner}</div>` : "");
-      body = tabs + (hero ? `<div class="srv-sec">${hero}</div>` : "")
-        + sec("mdi:chart-box-outline", "Détails", det.length ? `<div class="srv-bk dns-det">${det.join("")}</div>` : "")
-        + sec("mdi:toggle-switch-outline", "Réglages", sw.length || pauses.length ? `<div class="srv-bk dns-sws">${sw.join("")}${pauses.join("")}</div>` : "")
-        + sec("mdi:update", "Mise à jour", ups.length ? `<div class="tiles srv-tiles">${ups.join("")}</div>` : "");
+      const sec = (ic, t, inner) => (inner ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(ic)}"></ha-icon>${t}</div>${inner}</div>` : "");
+      body = tabs + (hero ? localizeTemplate`<div class="srv-sec">${hero}</div>` : "")
+        + sec("mdi:chart-box-outline", trLabel("Détails"), det.length ? localizeTemplate`<div class="srv-bk dns-det">${det.join("")}</div>` : "")
+        + sec("mdi:toggle-switch-outline", trLabel("Réglages"), sw.length || pauses.length ? localizeTemplate`<div class="srv-bk dns-sws">${sw.join("")}${pauses.join("")}</div>` : "")
+        + sec("mdi:update", trLabel("Mise à jour"), ups.length ? localizeTemplate`<div class="tiles srv-tiles">${ups.join("")}</div>` : "");
     }
 
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${DNS_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${off.length ? "srv-alert" : ""}">
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${DNS_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${off.length ? "srv-alert" : ""}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(icon)}" style="color:${esc(c.icon_color || "var(--med-down)")}"></ha-icon>
           <div><div class="title">${esc(title)}</div><div class="sub">${esc(sub)}</div></div></div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
       ${body}
     </ha-card>`;
@@ -5547,6 +5800,7 @@ class ServeurHaLinuxCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...LNX_DEFAULTS, ...(config || {}) };
     this._sig = null;
     this._open = this._open || new Set();
@@ -5637,9 +5891,9 @@ class ServeurHaLinuxCard extends HTMLElement {
     const nBoot = systems.filter((x) => A(x).needs_reboot === true).length;
     const nOff = systems.filter(off).length;
     const leds = [
-      nSec ? `<span class="srv-led bad"><i></i>${plural(nSec, "sécurité", "sécurité")}</span>` : "",
-      nBoot ? `<span class="srv-led upd"><i></i>${plural(nBoot, "redémarrage")}</span>` : "",
-      nOff ? `<span class="srv-led na"><i></i>${plural(nOff, "injoignable")}</span>` : "",
+      nSec ? localizeTemplate`<span class="srv-led bad"><i></i>${plural(nSec, trLabel("sécurité"), trLabel("sécurité"))}</span>` : "",
+      nBoot ? localizeTemplate`<span class="srv-led upd"><i></i>${plural(nBoot, trLabel("redémarrage"))}</span>` : "",
+      nOff ? localizeTemplate`<span class="srv-led na"><i></i>${plural(nOff, "injoignable")}</span>` : "",
     ].join("");
 
     const shown = c.show_uptodate === false ? systems.filter((x) => off(x) || (Number(A(x).update_count) || 0) > 0 || A(x).needs_reboot) : systems;
@@ -5650,34 +5904,34 @@ class ServeurHaLinuxCard extends HTMLElement {
       const down = off(x);
       const cls = down ? "na" : sec ? "bad" : upd ? "upd" : a.needs_reboot ? "upd" : "ok";
       const icon = down ? "mdi:lan-disconnect" : sec ? "mdi:shield-alert" : upd ? "mdi:package-up" : a.needs_reboot ? "mdi:restart-alert" : "mdi:check-circle";
-      const os = c.show_os !== false ? [[sys.os_name, sys.os_version].filter(Boolean).join(" "), sys.kernel ? `noyau ${sys.kernel}` : null,
-        upFr(sys.uptime) ? `allumé depuis ${upFr(sys.uptime)}` : null].filter(Boolean).join(" · ") : "";
+      const os = c.show_os !== false ? [[sys.os_name, sys.os_version].filter(Boolean).join(" "), sys.kernel ? localizeTextTemplate`noyau ${sys.kernel}` : null,
+        upFr(sys.uptime) ? localizeTextTemplate`allumé depuis ${upFr(sys.uptime)}` : null].filter(Boolean).join(" · ") : "";
       const badges = [
-        down ? `<span class="lnx-b na">injoignable${sys.last_seen_at ? ` · vu ${esc(relTime(sys.last_seen_at) || "")}` : ""}</span>` : "",
-        busy ? `<span class="lnx-b run">mise à jour en cours…</span>` : "",
-        !down && upd ? `<span class="lnx-b upd">${plural(upd, "mise à jour", "mises à jour")}</span>` : "",
-        sec ? `<span class="lnx-b bad">${plural(sec, "sécurité", "sécurité")}</span>` : "",
-        kept ? `<span class="lnx-b">${plural(kept, "retenue")}</span>` : "",
-        a.needs_reboot ? `<span class="lnx-b upd">redémarrage requis</span>` : "",
-        !down && !upd && !a.needs_reboot && !busy ? `<span class="lnx-b ok">à jour</span>` : "",
+        down ? localizeTemplate`<span class="lnx-b na">injoignable${sys.last_seen_at ? `${CURRENT_CARD_LANGUAGE === "en" ? " · last seen " : CURRENT_CARD_LANGUAGE === "pl" ? " · ostatnio widziany " : " · vu "}${esc(relTime(sys.last_seen_at) || "")}` : ""}</span>` : "",
+        busy ? localizeTemplate`<span class="lnx-b run">mise à jour en cours…</span>` : "",
+        !down && upd ? localizeTemplate`<span class="lnx-b upd">${plural(upd, trLabel("mise à jour"), trLabel("mises à jour"))}</span>` : "",
+        sec ? localizeTemplate`<span class="lnx-b bad">${plural(sec, trLabel("sécurité"), trLabel("sécurité"))}</span>` : "",
+        kept ? localizeTemplate`<span class="lnx-b">${plural(kept, "retenue")}</span>` : "",
+        a.needs_reboot ? localizeTemplate`<span class="lnx-b upd">redémarrage requis</span>` : "",
+        !down && !upd && !a.needs_reboot && !busy ? localizeTemplate`<span class="lnx-b ok">à jour</span>` : "",
       ].join("");
       const canInstall = c.show_actions !== false && !down && !busy && upd > 0 && ((Number(a.supported_features) || 0) & 1);
       const armed = this._armed === x.id;
       const pk = Array.isArray(a.packages) ? a.packages : [];
       const canFold = c.show_packages !== false && pk.length > 0;
       const open = canFold && this._open.has(x.id);
-      const list = open ? `<div class="lnx-pk">${pk.slice(0, 40).map((p) => `<div class="lnx-p${p.is_security ? " sec" : ""}">
-          ${p.is_security ? `<ha-icon icon="mdi:shield-alert"></ha-icon>` : `<ha-icon icon="mdi:package-variant"></ha-icon>`}
+      const list = open ? localizeTemplate`<div class="lnx-pk">${pk.slice(0, 40).map((p) => localizeTemplate`<div class="lnx-p${p.is_security ? " sec" : ""}">
+          ${p.is_security ? localizeTemplate`<ha-icon icon="mdi:shield-alert"></ha-icon>` : localizeTemplate`<ha-icon icon="mdi:package-variant"></ha-icon>`}
           <b>${esc(p.package_name)}</b><span>${esc(p.current_version || "")}${p.new_version ? ` → ${esc(p.new_version)}` : ""}</span>
-          ${p.is_kept_back ? `<em>retenu</em>` : ""}</div>`).join("")}${pk.length > 40 ? `<div class="lnx-more">et ${pk.length - 40} autres</div>` : ""}</div>` : "";
-      return `<div class="lnx-s ${cls}">
+          ${p.is_kept_back ? localizeTemplate`<em>retenu</em>` : ""}</div>`).join("")}${pk.length > 40 ? localizeTemplate`<div class="lnx-more">et ${pk.length - 40} autres</div>` : ""}</div>` : "";
+      return localizeTemplate`<div class="lnx-s ${cls}">
         <div class="lnx-row" data-entity="${esc(x.id)}">
           <ha-icon class="lnx-i" icon="${esc(icon)}"></ha-icon>
-          <div class="lnx-n"><b>${esc(sys.name || x.s.attributes.friendly_name || x.id)}</b>${os ? `<span>${esc(os)}</span>` : ""}</div>
+          <div class="lnx-n"><b>${esc(sys.name || x.s.attributes.friendly_name || x.id)}</b>${os ? localizeTemplate`<span>${esc(os)}</span>` : ""}</div>
           <div class="lnx-a">
-            ${canInstall ? `<button class="pve-btn wide go${armed ? " armed" : ""}" data-install="${esc(x.id)}" title="Installer les mises à jour">
-              <ha-icon icon="mdi:download"></ha-icon>${armed ? "Confirmer ?" : "Mettre à jour"}</button>` : ""}
-            ${canFold ? `<button class="pve-btn" data-fold="${esc(x.id)}" title="${open ? "Masquer" : "Voir"} les paquets" aria-expanded="${open}">
+            ${canInstall ? localizeTemplate`<button class="pve-btn wide go${armed ? " armed" : ""}" data-install="${esc(x.id)}" title="Installer les mises à jour">
+              <ha-icon icon="mdi:download"></ha-icon>${armed ? "Confirmer ?" : trLabel("Mettre à jour")}</button>` : ""}
+            ${canFold ? localizeTemplate`<button class="pve-btn" data-fold="${esc(x.id)}" title="${open ? "Masquer" : "Voir"} les paquets" aria-expanded="${open}">
               <ha-icon icon="${esc(open ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon></button>` : ""}
           </div>
         </div>
@@ -5686,22 +5940,22 @@ class ServeurHaLinuxCard extends HTMLElement {
     }).join("");
 
     const appRow = c.show_app !== false && appS && appS.state === "on"
-      ? `<div class="srv-sec"><div class="lnx-appu" data-entity="${esc(app)}"><ha-icon icon="mdi:update"></ha-icon>
+      ? localizeTemplate`<div class="srv-sec"><div class="lnx-appu" data-entity="${esc(app)}"><ha-icon icon="mdi:update"></ha-icon>
           <span>Linux Update Dashboard <b>${esc(appS.attributes.installed_version || "")} → ${esc(appS.attributes.latest_version || "")}</b> disponible</span></div></div>` : "";
 
     const sub = systems.length
-      ? [plural(systems.length, "serveur"), nUpd ? `${nUpd} à mettre à jour` : "tout est à jour"].join(" · ")
+      ? [plural(systems.length, "serveur"), nUpd ? localizeTextTemplate`${nUpd} à mettre à jour` : trLabel("tout est à jour")].join(" · ")
       : "";
     const body = systems.length
-      ? `<div class="srv-sec">${rows ? `<div class="lnx-list">${rows}</div>` : `<div class="lnx-all">Tous les serveurs sont à jour.</div>`}</div>${appRow}`
-      : `<div class="empty">Aucun serveur trouvé<span>Cette carte lit les entités <code>update.*</code> publiées en MQTT par
+      ? localizeTemplate`<div class="srv-sec">${rows ? localizeTemplate`<div class="lnx-list">${rows}</div>` : localizeTemplate`<div class="lnx-all">Tous les serveurs sont à jour.</div>`}</div>${appRow}`
+      : localizeTemplate`<div class="empty">Aucun serveur trouvé<span>Cette carte lit les entités <code>update.*</code> publiées en MQTT par
         <b>Linux Update Dashboard</b> (Paramètres → Notifications → MQTT, avec l'option Home Assistant). Indiquez-les dans <code>entities:</code> si besoin.</span></div>`;
 
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${PVE_STYLE}${LNX_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${PVE_STYLE}${LNX_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
       <header>
         <div class="brand"><ha-icon class="lnx-logo" icon="${esc(c.icon || "mdi:linux")}" style="${c.icon_color ? `color:${esc(c.icon_color)}` : ""}"></ha-icon>
-          <div><div class="title">${esc(c.title)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div></div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+          <div><div class="title">${esc(c.title)}</div>${sub ? localizeTemplate`<div class="sub">${esc(sub)}</div>` : ""}</div></div>
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
       ${body}
     </ha-card>`;
@@ -5915,6 +6169,7 @@ class ServeurHaGithubCard extends HTMLElement {
   }
 
   setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
     this._config = { ...GH_DEFAULTS, ...(config || {}) };
     this._sig = null;
     this._open = null;
@@ -5986,10 +6241,10 @@ class ServeurHaGithubCard extends HTMLElement {
         if (r.status === 403 || r.status === 429) {
           const reset = Number(r.headers.get("x-ratelimit-reset")) * 1000;
           mem.until = Number.isFinite(reset) && reset > Date.now() ? reset : Date.now() + 120000;
-          mem.error = `Limite de GitHub atteinte : nouvel essai à ${new Date(mem.until).toLocaleTimeString(cardLocale(), { hour: "2-digit", minute: "2-digit" })}.`;
+          mem.error = { kind: "rate_limit", until: mem.until };
           return;
         }
-        if (!r.ok) { mem.error = r.status === 422 ? "Compte GitHub introuvable." : `GitHub a répondu ${r.status}.`; mem.until = Date.now() + 120000; return; }
+        if (!r.ok) { mem.error = r.status === 422 ? { kind: "account_not_found" } : { kind: "http_error", status: r.status }; mem.until = Date.now() + 120000; return; }
         const j = await r.json();
         const items = (j.items || []).map((it) => ({
           id: it.id, n: it.number, title: String(it.title || ""), url: String(it.html_url || ""),
@@ -6003,7 +6258,7 @@ class ServeurHaGithubCard extends HTMLElement {
         // première lecture : rien n'est « nouveau » jusqu'à la suivante
         if (ghStore.get(this._seenKey()) === null) ghStore.set(this._seenKey(), Date.now());
       } catch (e) {
-        mem.error = "GitHub injoignable.";
+        mem.error = { kind: "unreachable" };
         mem.until = Date.now() + 120000;
       } finally {
         mem.pending = null;
@@ -6020,7 +6275,13 @@ class ServeurHaGithubCard extends HTMLElement {
     if (!this._config || !this.shadowRoot) return;
     const c = this._config, q = this._query();
     const key = q ? `serveur-ha-github:${q}` : "";
-    const err = q ? GH_CACHE[key]?.error : null;
+    const errorData = q ? GH_CACHE[key]?.error : null;
+    const err = !errorData ? null
+      : errorData.kind === "rate_limit" ? localizeTextTemplate`Limite de GitHub atteinte : nouvel essai à ${new Date(errorData.until).toLocaleTimeString(cardLocale(), { hour: "2-digit", minute: "2-digit" })}.`
+      : errorData.kind === "account_not_found" ? trLabel("Compte GitHub introuvable.")
+      : errorData.kind === "http_error" ? localizeTextTemplate`GitHub a répondu ${errorData.status}.`
+      : errorData.kind === "unreachable" ? trLabel("GitHub injoignable.")
+      : typeof errorData === "string" ? errorData : null;
     const d = this._data;
     const seen = Number(ghStore.get(this._seenKey())) || 0;
     const sig = `${c.theme}|${this._hass?.themes?.darkMode}|${d?.at}|${err}|${seen}|${[...(this._open || [])].join(",")}|${Math.floor(Date.now() / 60000)}`;
@@ -6037,50 +6298,65 @@ class ServeurHaGithubCard extends HTMLElement {
       .sort((a, b) => b.list.some(isNew) - a.list.some(isNew) || new Date(b.list[0].updated) - new Date(a.list[0].updated));
     if (!this._open) this._open = new Set(c.expanded ? repos.map((r) => r.name) : repos.filter((r) => r.list.some(isNew)).map((r) => r.name));
     const nIssues = items.filter((it) => !it.pr).length, nPr = items.length - nIssues, nNew = items.filter(isNew).length;
-    const ago = (iso) => { const s = since(iso); return s ? `il y a ${s}` : ""; };
+    const ago = (iso) => relativeAgo(iso) || "";
+    // Source-authored count labels, with correct locale-specific word order and
+    // pluralization. GitHub titles, repository names and issue labels stay raw.
+    const ghCount = (kind, count) => {
+      if (CURRENT_CARD_LANGUAGE === "fr") return kind === "issue" ? `issue${count > 1 ? "s" : ""} ouverte${count > 1 ? "s" : ""}`
+        : kind === "pr" ? `PR ouverte${count > 1 ? "s" : ""}`
+        : kind === "new" ? `nouvelle${count > 1 ? "s" : ""}`
+        : kind === "repo" ? `dépôt${count > 1 ? "s" : ""}` : `ouverte${count > 1 ? "s" : ""}`;
+      if (CURRENT_CARD_LANGUAGE === "en") return kind === "issue" ? `open issue${count === 1 ? "" : "s"}`
+        : kind === "pr" ? `open PR${count === 1 ? "" : "s"}`
+        : kind === "new" ? "new" : kind === "repo" ? `repositor${count === 1 ? "y" : "ies"}` : `open item${count === 1 ? "" : "s"}`;
+      return kind === "issue" ? plCountForm(count, "otwarte zgłoszenie", "otwarte zgłoszenia", "otwartych zgłoszeń")
+        : kind === "pr" ? plCountForm(count, "otwarty pull request", "otwarte pull requesty", "otwartych pull requestów")
+        : kind === "new" ? "nowych" : kind === "repo" ? plCountForm(count, "repozytorium", "repozytoria", "repozytoriów")
+        : plCountForm(count, "otwarty element", "otwarte elementy", "otwartych elementów");
+    };
 
     const row = (it) => {
       const icon = it.pr ? "mdi:source-pull" : "mdi:alert-circle-outline";
-      const labels = c.show_labels ? it.labels.slice(0, 3).map((l) => `<span class="gh-l" style="--lc:${ghSafeColor(l.color)}">${esc(l.name)}</span>`).join("") : "";
-      return `<a class="gh-i ${it.pr ? "pr" : "is"}${isNew(it) ? " new" : ""}${it.draft ? " draft" : ""}" href="${esc(/^https:\/\/github\.com\//.test(it.url) ? it.url : "#")}" target="_blank" rel="noopener noreferrer" title="${esc(it.title)}">
+      const labels = c.show_labels ? it.labels.slice(0, 3).map((l) => localizeTemplate`<span class="gh-l" style="--lc:${ghSafeColor(l.color)}">${esc(l.name)}</span>`).join("") : "";
+      return localizeTemplate`<a class="gh-i ${it.pr ? "pr" : "is"}${isNew(it) ? " new" : ""}${it.draft ? " draft" : ""}" href="${esc(/^https:\/\/github\.com\//.test(it.url) ? it.url : "#")}" target="_blank" rel="noopener noreferrer" title="${esc(it.title)}">
         <ha-icon icon="${icon}"></ha-icon>
-        <div class="gh-t"><span>${isNew(it) ? '<b class="gh-new">nouveau</b>' : ""}${esc(it.title)}</span>
-          <small>#${it.n}${it.draft ? " · brouillon" : ""} · ${esc(it.author)} · ${esc(ago(it.created))}${it.updated !== it.created ? ` · activité ${esc(ago(it.updated))}` : ""}</small>
-          ${labels ? `<div class="gh-ls">${labels}</div>` : ""}</div>
-        ${it.comments ? `<span class="gh-c" title="${it.comments} commentaire${it.comments > 1 ? "s" : ""}"><ha-icon icon="mdi:comment-outline"></ha-icon>${it.comments}</span>` : ""}
+        <div class="gh-t"><span>${isNew(it) ? localizeStaticHTML('<b class="gh-new">nouveau</b>') : ""}${esc(it.title)}</span>
+          <small>#${it.n}${it.draft ? ` · ${uiText("github.draft")}` : ""} · ${esc(it.author)} · ${esc(ago(it.created))}${it.updated !== it.created ? localizeTextTemplate` · activité ${esc(ago(it.updated))}` : ""}</small>
+          ${labels ? localizeTemplate`<div class="gh-ls">${labels}</div>` : ""}</div>
+        ${it.comments ? localizeTemplate`<span class="gh-c" title="${it.comments} commentaire${it.comments > 1 ? "s" : ""}"><ha-icon icon="mdi:comment-outline"></ha-icon>${it.comments}</span>` : ""}
       </a>`;
     };
     const groups = repos.map((r) => {
       const open = this._open.has(r.name), nn = r.list.filter(isNew).length;
-      const dots = r.list.map((it) => `<i class="${it.pr ? "pr" : "is"}${isNew(it) ? " new" : ""}"></i>`).join("");
-      return `<div class="ping-g ${open ? "open" : ""}">
+      const dots = r.list.map((it) => localizeTemplate`<i class="${it.pr ? "pr" : "is"}${isNew(it) ? " new" : ""}"></i>`).join("");
+      return localizeTemplate`<div class="ping-g ${open ? "open" : ""}">
         <button class="ping-gh" data-fold="${esc(r.name)}" aria-expanded="${open}"><ha-icon icon="mdi:source-repository"></ha-icon><span class="ping-gl">${esc(r.name)}</span>
-          <span class="ping-dots gh-dots">${dots}</span>${nn ? `<b class="gh-nb">${nn} nouv.</b>` : ""}<b>${r.list.length}</b><ha-icon class="ping-chev" icon="${open ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
-        ${open ? `<div class="gh-list">${r.list.map(row).join("")}</div>` : ""}
+          <span class="ping-dots gh-dots">${dots}</span>${nn ? localizeTemplate`<b class="gh-nb">${nn} nouv.</b>` : ""}<b>${r.list.length}</b><ha-icon class="ping-chev" icon="${open ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
+        ${open ? localizeTemplate`<div class="gh-list">${r.list.map(row).join("")}</div>` : ""}
       </div>`;
     }).join("");
 
     const user = String(c.user || "").trim();
     let body;
-    if (!q) body = `<div class="empty">Compte GitHub à indiquer<span>Choisissez le compte ou l'organisation à suivre dans l'éditeur (option <code>user</code>), par exemple <code>user: Marlboro62</code>.</span></div>`;
-    else if (!d) body = `<div class="empty">${err ? esc(err) : "Lecture de GitHub…"}</div>`;
+    if (!q) body = localizeTemplate`<div class="empty">Compte GitHub à indiquer<span>Choisissez le compte ou l'organisation à suivre dans l'éditeur (option <code>user</code>), par exemple <code>user: Marlboro62</code>.</span></div>`;
+    else if (!d) body = localizeTemplate`<div class="empty">${err ? esc(err) : "Lecture de GitHub…"}</div>`;
     else {
-      body = `<div class="ping-sum">
-          <div class="${nIssues ? "warn" : "ok"}"><b>${nIssues}</b><span>issue${nIssues > 1 ? "s" : ""} ouverte${nIssues > 1 ? "s" : ""}</span></div>
-          <div class="${nPr ? "warn" : "ok"}"><b>${nPr}</b><span>PR ouverte${nPr > 1 ? "s" : ""}</span></div>
-          <div class="${nNew ? "bad" : ""}"><b>${nNew}</b><span>nouvelle${nNew > 1 ? "s" : ""}</span></div>
-          <div><b>${repos.length}</b><span>dépôt${repos.length > 1 ? "s" : ""}</span></div>
+      body = localizeTemplate`<div class="ping-sum">
+          <div class="${nIssues ? "warn" : "ok"}"><b>${nIssues}</b><span>${ghCount("issue", nIssues)}</span></div>
+          <div class="${nPr ? "warn" : "ok"}"><b>${nPr}</b><span>${ghCount("pr", nPr)}</span></div>
+          <div class="${nNew ? "bad" : ""}"><b>${nNew}</b><span>${ghCount("new", nNew)}</span></div>
+          <div><b>${repos.length}</b><span>${ghCount("repo", repos.length)}</span></div>
         </div>
-        ${items.length ? `<div class="srv-sec ping-groups">${groups}</div>` : `<div class="empty gh-ok"><ha-icon icon="mdi:check-circle-outline"></ha-icon>Rien d'ouvert : tout est traité.</div>`}
-        <div class="gh-f"><span>${err ? `${esc(err)} · ` : ""}Lu ${Date.now() - d.at < 60000 ? "à l'instant" : esc(ago(new Date(d.at).toISOString()))}</span>
-          <span>${nNew ? `<button data-act="seen">Tout marquer comme vu</button>` : ""}<button data-act="reload" title="Relire maintenant">Actualiser</button></span></div>`;
+        ${items.length ? localizeTemplate`<div class="srv-sec ping-groups">${groups}</div>` : localizeTemplate`<div class="empty gh-ok"><ha-icon icon="mdi:check-circle-outline"></ha-icon>Rien d'ouvert : tout est traité.</div>`}
+        <div class="gh-f"><span>${err ? `${esc(err)} · ` : ""}Lu ${Date.now() - d.at < 60000 ? trLabel("à l'instant") : esc(ago(new Date(d.at).toISOString()))}</span>
+          <span>${nNew ? localizeTemplate`<button data-act="seen">Tout marquer comme vu</button>` : ""}<button data-act="reload" title="Relire maintenant">Actualiser</button></span></div>`;
     }
-    const leds = d ? `<span class="srv-led ${nNew ? "bad" : items.length ? "upd" : "ok"}"><i></i>${nNew ? `${nNew} nouvelle${nNew > 1 ? "s" : ""}` : items.length ? `${items.length} ouverte${items.length > 1 ? "s" : ""}` : "Tout est traité"}</span>` : "";
-    this.shadowRoot.innerHTML = `${STYLE}${SRV_STYLE}${PVE_STYLE}${PING_STYLE}${GH_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
+    const leds = d ? localizeTemplate`<span class="srv-led ${nNew ? "bad" : items.length ? "upd" : "ok"}"><i></i>${nNew ? `${nNew} ${ghCount("new", nNew)}` : items.length ? `${items.length} ${ghCount("open", items.length)}` : trLabel("Tout est traité")}</span>` : "";
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${PVE_STYLE}${PING_STYLE}${GH_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)}">
       <header>
         <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:github")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
-          <div><div class="title">${esc(c.title || "GitHub")}</div><div class="sub">${user ? `<a href="https://github.com/${esc(user)}" target="_blank" rel="noopener noreferrer">${esc(user)}</a>` : "Issues et pull requests"}</div></div></div>
-        ${leds ? `<div class="srv-leds">${leds}</div>` : ""}
+          <div><div class="title">${esc(c.title || "GitHub")}</div><div class="sub">${user ? localizeTemplate`<a href="https://github.com/${esc(user)}" target="_blank" rel="noopener noreferrer">${esc(user)}</a>` : trLabel("Issues et pull requests")}</div></div></div>
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
       ${body}
     </ha-card>`;
@@ -6841,7 +7117,7 @@ class ServeurHaOpnsenseMoved extends HTMLElement {
 
   _render() {
     if (!this.shadowRoot) return;
-    this.shadowRoot.innerHTML = `${STYLE}<ha-card class="${themeClass(this._config?.theme, this._hass)}">
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}<ha-card class="${themeClass(this._config?.theme, this._hass)}">
       <div class="empty">La carte OPNsense a déménagé<span>Elle a maintenant son propre dépôt : installez « Carte OPNsense » depuis HACS
       (dépôt personnalisé https://github.com/Marlboro62/opnsense-card), puis remplacez <code>custom:serveur-ha-opnsense-card</code>
       par <code>custom:opnsense-card</code> dans ce tableau de bord. Les options restent les mêmes.</span></div></ha-card>`;
