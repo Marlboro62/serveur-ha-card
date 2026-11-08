@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.18.0-beta.1";
+const CARD_VERSION = "0.18.0-beta.2";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -857,7 +857,7 @@ const PL_EDITOR_COMMON = {
   show_info: 'Sekcja informacji', show_resources: 'Sekcja zasobów',
   show_network: 'Sekcja ruchu sieciowego', show_actions: 'Sekcja działań',
   show_ups: 'Sekcja UPS (NUT)', show_system: 'Sekcja systemu',
-  show_apps: 'Sekcja aplikacji', show_thermal: 'Sekcja temperatur i chłodzenia',
+  show_apps: 'Sekcja aplikacji', show_thermal: 'Sekcja temperatur i chłodzenia', show_fan: 'Pokaż wentylator',
   show_storage: 'Sekcja pamięci masowej', show_details: 'Sekcja szczegółów',
   show_clients: 'Sekcja podłączonych klientów', expanded: 'Domyślnie rozwinięte',
 };
@@ -1311,7 +1311,7 @@ const SRV_DEFAULTS = {
   temp_warn: 60, temp_alert: 75,
   ram_warn: 75, ram_alert: 90,
   disk_warn: 75, disk_alert: 90,
-  show_info: true, show_resources: true, show_network: true, show_power: true, show_backup: true,
+  show_info: true, show_resources: true, show_network: true, show_power: true, show_backup: true, show_fan: true,
   icon: "", // ex. mdi:raspberry-pi
   icon_color: "", // ex. #E30B5D
   ram_total: null, // MiB : la barre « RAM libre » devient libre / total
@@ -1654,7 +1654,8 @@ class ServeurHaCard extends HTMLElement {
   _render() {
     if (!this._config || !this._hass || !this.shadowRoot) return;
     const c = this._config;
-    const m = this._resolve();
+    const m = { ...this._resolve() };
+    if (c.show_fan === false) m.fan = null; // option : masquer le ventilateur
     const ids = Object.entries(m).filter(([k]) => k !== "ip_ext_attr").map(([, v]) => v);
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._histAt || 0}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|") + `|${this._st(m.fan)?.attributes?.percentage}|${this._st(m.backup_event)?.attributes?.event_type}`;
     if (sig === this._sig) return;
@@ -2092,7 +2093,7 @@ const NAS_DEFAULTS = {
   volume_name: "", // ex. « HDD 4 To » ; sinon « Volume 1 »
   net_max: 1000, // Mbit/s, pleine échelle des barres réseau
   temp_warn: 45, temp_alert: 55, // °C, disques et NAS
-  show_info: true, show_resources: true, show_thermal: true, show_actions: true, show_network: true, show_ups: true,
+  show_info: true, show_resources: true, show_thermal: true, show_actions: true, show_network: true, show_ups: true, show_fan: true,
   theme: "v2",
 };
 
@@ -2392,7 +2393,8 @@ class ServeurHaNasCard extends HTMLElement {
   _render() {
     if (!this._config || !this._hass || !this.shadowRoot) return;
     const c = this._config;
-    const m = this._resolve();
+    const m = { ...this._resolve() };
+    if (c.show_fan === false) m.fan = null; // option : masquer le ventilateur
     const all = [m.cpu, m.ram, m.last_boot, m.net_down, m.net_up, m.security, m.temperature, m.fan, m.reboot, m.tracker, m.shutdown, m.power_on, m.dsm_update,
       /^[a-z_]+\.[a-z0-9_]+$/.test(c.ip || "") ? c.ip : null, ...m.usb.map((u) => u.entity),
       ...m.volumes.flatMap((v) => [v.status, v.used]), ...m.drives.flatMap((d) => Object.values(d)), ...Object.values(m.ups), ...m.actions.map((a) => a.entity),
@@ -6451,7 +6453,7 @@ const EN_EDITOR_COMMON = {
   show_info: "Information section", show_resources: "Resources section",
   show_network: "Network traffic section", show_actions: "Actions section",
   show_ups: "UPS section (NUT)", show_system: "System section",
-  show_apps: "Applications section", show_thermal: "Temperatures and cooling section",
+  show_apps: "Applications section", show_thermal: "Temperatures and cooling section", show_fan: "Show the fan",
   show_storage: "Storage section", show_details: "Details section",
   show_clients: "Connected clients section", expanded: "Expanded by default",
 };
@@ -6686,6 +6688,7 @@ const SRV_SCHEMA = [
   { name: "show_network", selector: { boolean: {} } },
   { name: "show_power", selector: { boolean: {} } },
   { name: "show_backup", selector: { boolean: {} } },
+  { name: "show_fan", selector: { boolean: {} } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -6706,6 +6709,7 @@ const SRV_LABELS = {
   show_network: "Section Débits réseau",
   show_power: "Section Alimentation",
   show_backup: "Section Sauvegardes",
+  show_fan: "Afficher le ventilateur",
   theme: "Couleurs de la carte",
 };
 const ServeurHaCardEditor = makeEditor(SRV_SCHEMA, SRV_LABELS, SRV_DEFAULTS, EN_EDITOR_LABELS.SRV, PL_EDITOR_LABELS.SRV);
@@ -6761,6 +6765,7 @@ const NAS_SCHEMA = [
   { name: "show_info", selector: { boolean: {} } },
   { name: "show_resources", selector: { boolean: {} } },
   { name: "show_thermal", selector: { boolean: {} } },
+  { name: "show_fan", selector: { boolean: {} } },
   { name: "show_actions", selector: { boolean: {} } },
   { name: "show_network", selector: { boolean: {} } },
   { name: "show_ups", selector: { boolean: {} } },
@@ -6787,6 +6792,7 @@ const NAS_LABELS = {
   show_info: "Section Informations",
   show_resources: "Section Ressources",
   show_thermal: "Section Températures et ventilation",
+  show_fan: "Afficher le ventilateur",
   show_actions: "Section Actions",
   show_network: "Section Débits réseau",
   show_ups: "Section Onduleur",

@@ -199,6 +199,7 @@ Les capteurs de System Monitor sont souvent **désactivés par défaut** : activ
 | `navigation_path` | Page ouverte en cliquant sur le titre | fiche de l'IP |
 | `ip_ext_attribute` | Attribut portant l'IP externe | détecté |
 | `show_info`, `show_resources`, `show_network`, `show_power`, `show_backup` | Afficher chaque section | `true` |
+| `show_fan` | Afficher le ventilateur (voyant, tuile et mode). `false` le masque même s'il est détecté | `true` |
 | `entities` | Capteurs choisis à la main (voir ci-dessous) | — |
 
 Clés de `entities:` : `cpu`, `temperature`, `ram`, `ram_free`, `disk`, `disk_used`, `disk_total`, `net_in`, `net_out`, `ip`, `ip_ext`, `last_boot`, `ha_start`, `power`, `fan`, `backup_state`, `backup_event`, `backup_last`, `backup_next`, `drive_size`, `drive_used`, `drive_total`, `drive_count`.
@@ -274,6 +275,7 @@ Les entités sont trouvées via l'intégration **Synology DSM**, pour **tous les
 | `temp_warn` / `temp_alert` | Seuils de température | `45` / `55` °C |
 | `navigation_path` | Page ouverte en cliquant sur le titre | — |
 | `show_info`, `show_resources`, `show_thermal`, `show_actions`, `show_network`, `show_ups` | Afficher chaque section | `true` |
+| `show_fan` | Afficher le ventilateur (tuile et mode). `false` le masque même s'il est détecté | `true` |
 
 D'autres exemples sont dans [`exemples/`](https://github.com/Marlboro62/serveur-ha-card/blob/main/exemples/).
 

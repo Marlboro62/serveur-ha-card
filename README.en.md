@@ -116,6 +116,7 @@ show_resources: true
 show_network: true
 show_power: true
 show_backup: true
+show_fan: true # false hides the fan
 ```
 
 The card discovers supported sensors from System Monitor, Local IP, Uptime, Raspberry Pi Power Supply Checker, backup events, and Google Drive Backup. System Monitor sensors may require enabling in **Settings → Devices & services → System Monitor**.

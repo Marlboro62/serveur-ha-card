@@ -118,6 +118,7 @@ show_resources: true
 show_network: true
 show_power: true
 show_backup: true
+show_fan: true # false ukrywa wentylator
 ```
 
 **Aktualizacje Home Assistant:**
