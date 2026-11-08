@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.18.0";
+const CARD_VERSION = "0.18.1-beta.1";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -2322,12 +2322,18 @@ class ServeurHaNasCard extends HTMLElement {
     const devices = [...new Set(dsmIds.map((id) => reg[id]?.device_id).filter(Boolean))];
     let pool;
     if (dsmIds.length) {
-      // Les entités DSM sont réparties sur plusieurs appareils (NAS, volumes, disques) : on garde
-      // celles dont l'entity_id commence comme celles du NAS choisi
-      const hub = c.device || devices[0];
-      const first = dsmIds.find((id) => reg[id]?.device_id === hub) || dsmIds[0];
-      const prefix = c.prefix || first.split(".")[1].split("_")[0];
-      pool = dsmIds.filter((id) => id.split(".")[1].startsWith(prefix));
+      // Les entités DSM sont réparties sur plusieurs appareils : le NAS, et ses volumes et disques
+      // rattachés à lui (via_device_id). Avec plusieurs NAS, seuls ceux du NAS choisi sont gardés.
+      const devs = hass.devices || {};
+      const hub = c.device || devices.find((d) => devs[d] && !devs[d].via_device_id) || devices[0];
+      const own = dsmIds.filter((id) => reg[id]?.device_id === hub);
+      // préfixe commun des entités du NAS (« nas_maison »), coupé au dernier « _ »
+      const names = (own.length ? own : dsmIds).map((id) => id.split(".")[1]);
+      let common = names.reduce((a, b) => { let i = 0; while (i < a.length && a[i] === b[i]) i++; return a.slice(0, i); });
+      common = names.length > 1 ? common.replace(/_[^_]*$/, "") : common.split("_")[0];
+      const prefix = c.prefix || common || names[0].split("_")[0];
+      const byDevice = dsmIds.filter((id) => { const d = reg[id]?.device_id; return d && (d === hub || devs[d]?.via_device_id === hub); });
+      pool = !c.prefix && byDevice.length && Object.keys(devs).length ? byDevice : dsmIds.filter((id) => id.split(".")[1].startsWith(prefix));
       this._prefix = prefix;
     } else {
       // Sans registre : préfixe donné, ou « diskstation » par défaut
@@ -2349,7 +2355,8 @@ class ServeurHaNasCard extends HTMLElement {
     for (const f of ["drv_status", "drv_smart", "drv_temp"]) for (const id of find(f)) { const n = numIn(id); drives.set(n, { ...(drives.get(n) || { n }), [f]: id }); }
     for (const f of ["drv_bad", "drv_life"]) for (const id of find(f, "binary_sensor")) { const n = numIn(id); drives.set(n, { ...(drives.get(n) || { n }), [f]: id }); }
     map.drives = [...drives.values()].sort((a, b) => a.n - b.n);
-    map.fan = c.fan || ids.find((id) => id.startsWith("select.") && id.includes(this._prefix) && /fan|ventil/.test(id)) || null;
+    const isFan = (id) => id.startsWith("select.") && /fan|ventil/.test(id);
+    map.fan = c.fan || pool.find(isFan) || ids.find((id) => isFan(id) && id.includes(this._prefix)) || null;
     // reboot: null dans la configuration masque le bouton ; absent, il est détecté
     map.reboot = Object.prototype.hasOwnProperty.call(c, "reboot") ? c.reboot : (pool.find((id) => id.startsWith("button.") && (key(id) === "reboot" || /_reboot$|_redemarrer$/.test(id))) || null);
     map.tracker = c.tracker || ids.find((id) => id.startsWith("device_tracker.") && id.includes(this._prefix)) || null;
