@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.18.0-beta.2";
+const CARD_VERSION = "0.18.0";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
