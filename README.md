@@ -45,6 +45,7 @@
 | `custom:serveur-ha-linux-card` | **Serveurs Linux** ([Linux Update Dashboard](https://github.com/TheDuffman85/linux-update-dashboard)) : mises à jour en attente, sécurité, paquets, redémarrage requis, installation confirmée en deux clics |
 | `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
 | `custom:serveur-ha-asus-card` | **Routeur ASUS** ([AsusRouter](https://github.com/Vaskivskyi/ha-asusrouter)) : Internet et IP publique, débits, Wi-Fi et réseaux invités, ports Ethernet, appareils connectés, VPN, firmware, températures, redémarrage confirmé en deux clics |
+| `custom:serveur-ha-freebox-card` | **Freebox** (intégration Freebox) : Internet et IP publique, débits, test de débit (Speedtest), températures, disques et RAID, Wi-Fi, appels manqués, appareils connectés, redémarrage confirmé *(bêta)* |
 | `custom:serveur-ha-ping-card` | **Réseau** (intégration Ping) : appareils en ligne ou hors ligne, latence, gigue et perte de paquets, groupés par type ou par pièce, groupes dépliables |
 | `custom:serveur-ha-zigbee-card` | **Zigbee et piles** : piles à changer et piles faibles, appareils Zigbee hors ligne, signal faible ou silencieux, état du pont Zigbee2MQTT |
 | `custom:serveur-ha-wireguard-card` | **VPN WireGuard** ([WGDashboard](https://github.com/donaldzou/WGDashboard)) : serveurs, pairs connectés, dernier handshake, données reçues et envoyées |
@@ -398,6 +399,35 @@ title: Box internet
 wan_max: 500
 latest: 0
 ```
+
+## Carte Freebox — `custom:serveur-ha-freebox-card` *(bêta)*
+
+Pour la Freebox, avec l'intégration officielle **Freebox** de Home Assistant (**Paramètres › Appareils et services › Ajouter une intégration › Freebox**, puis accepter l'accès sur l'écran de la Freebox). Les capteurs sont trouvés tout seuls.
+
+```yaml
+type: custom:serveur-ha-freebox-card
+```
+
+- **Voyants** : Internet, Wi-Fi, appels manqués, RAID dégradé.
+- **Internet** : connexion, IP publique, type de connexion et uptime, lus sur le suivi de la Freebox quand l'intégration le fournit.
+- **Débits** en temps réel (download et upload), convertis en Mbit/s.
+- **Test de débit** : si l'intégration **Speedtest.net** ou **Speedtest CLI** est installée, débits mesurés, ping, opérateur et heure de la mesure.
+- **Système** : températures de la Freebox, espace des disques, état du RAID.
+- **Wi-Fi** : état, avec un bouton pour l'activer ou le couper (deux clics).
+- **Téléphone** : appels manqués, avec un bouton « Marquer comme lus ».
+- **Appareils connectés** : nombre d'appareils présents, liste dépliable.
+- **Actions** : redémarrer la Freebox (deux clics).
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `device` | Freebox (appareil de l'intégration Freebox), si vous en avez plusieurs | la première |
+| `title`, `icon`, `icon_color` | Titre, icône et sa couleur | modèle de la Freebox |
+| `wan_max` | Pleine échelle des barres de débit, en Mbit/s (débit de l'abonnement) | `1000` |
+| `speedtest_download`, `speedtest_upload`, `speedtest_ping` | Capteurs du test de débit | ceux de Speedtest trouvés seuls |
+| `tracker` | Suivi de la Freebox (IP publique, uptime, type de connexion) | trouvé seul |
+| `temp_warn`, `temp_alert` | Seuils orange et rouge des températures, en °C | `70`, `85` |
+| `show_connection`, `show_rates`, `show_speedtest`, `show_system`, `show_wifi`, `show_phone`, `show_clients`, `show_actions` | Afficher chaque section | `true` |
+| `theme` | Couleurs de la carte | `v2` |
 
 ## Carte Réseau — `custom:serveur-ha-ping-card`
 

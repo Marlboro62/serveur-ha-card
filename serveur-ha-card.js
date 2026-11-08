@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.18.1";
+const CARD_VERSION = "0.19.0-beta.1";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -1018,10 +1018,20 @@ Object.assign(EN_TEXT, {
   "Entrée": "Input", "Sortie": "Output", "Utilisé": "Used", "Cœurs": "Cores", "noyau": "kernel",
   "aucune nouvelle depuis": "no news since", "invités en marche": "guests running", "plus faible": "lowest",
   "Signal faible ou silencieux": "Weak signal or silent", "Coupée": "Down", "secteur": "mains",
+  "Test de débit": "Speed test", "Opérateur": "Provider", "Mesuré": "Measured", "Téléphone": "Phone", "Débits": "Rates",
+  "Aucun appel manqué": "No missed calls", "RAID dégradé": "RAID degraded", "RAID OK": "RAID OK", "Type": "Type",
+  "libre": "free", "Redémarrer la Freebox": "Restart the Freebox", "Couper le Wi-Fi": "Turn Wi-Fi off", "Activer le Wi-Fi": "Turn Wi-Fi on",
+  "Marquer comme lus": "Mark as read", "Aucune Freebox trouvée": "No Freebox found",
+  "Ajoutez l'intégration Freebox dans Paramètres › Appareils et services, acceptez l'accès sur l'écran de la Freebox, puis rechargez la page.": "Add the Freebox integration in Settings › Devices & services, accept the access on the Freebox screen, then reload the page.",
 });
 Object.assign(PL_TEXT, {
   "Utilisé": "Zajęte", "Cœurs": "Rdzenie", "noyau": "jądro", "aucune nouvelle depuis": "brak aktywności od",
   "invités en marche": "uruchomionych", "Coupée": "Rozłączone", "secteur": "sieć",
+  "Test de débit": "Test prędkości", "Opérateur": "Operator", "Mesuré": "Zmierzono", "Téléphone": "Telefon", "Débits": "Przepustowość",
+  "Aucun appel manqué": "Brak nieodebranych połączeń", "RAID dégradé": "RAID zdegradowany", "RAID OK": "RAID OK", "Type": "Typ",
+  "libre": "wolne", "Redémarrer la Freebox": "Uruchom ponownie Freebox", "Couper le Wi-Fi": "Wyłącz Wi-Fi", "Activer le Wi-Fi": "Włącz Wi-Fi",
+  "Marquer comme lus": "Oznacz jako przeczytane", "Aucune Freebox trouvée": "Nie znaleziono Freebox",
+  "Ajoutez l'intégration Freebox dans Paramètres › Appareils et services, acceptez l'accès sur l'écran de la Freebox, puis rechargez la page.": "Dodaj integrację Freebox w Ustawienia › Urządzenia i usługi, zaakceptuj dostęp na ekranie Freebox i odśwież stronę.",
 });
 const EN_KEYS = Object.keys(EN_TEXT).sort((a, b) => b.length - a.length);
 const safeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1404,6 +1414,7 @@ const COUNT_WORDS = Object.freeze({
   eteint: { fr: ["éteint", "éteints"], en: ["off", "off"], pl: ["wyłączony", "wyłączone", "wyłączonych"] },
   pile: { fr: ["pile faible", "piles faibles"], en: ["low battery", "low batteries"], pl: ["słaba bateria", "słabe baterie", "słabych baterii"] },
   serveur: { fr: ["serveur", "serveurs"], en: ["server", "servers"], pl: ["serwer", "serwery", "serwerów"] },
+  appel: { fr: ["appel manqué", "appels manqués"], en: ["missed call", "missed calls"], pl: ["nieodebrane połączenie", "nieodebrane połączenia", "nieodebranych połączeń"] },
   connecte: { fr: ["connecté", "connectés"], en: ["connected", "connected"], pl: ["połączony", "połączone", "połączonych"] },
   disponible: { fr: ["disponible", "disponibles"], en: ["available", "available"], pl: ["dostępny", "dostępne", "dostępnych"] },
   commentaire: { fr: ["commentaire", "commentaires"], en: ["comment", "comments"], pl: ["komentarz", "komentarze", "komentarzy"] },
@@ -2332,8 +2343,16 @@ class ServeurHaNasCard extends HTMLElement {
       let common = names.reduce((a, b) => { let i = 0; while (i < a.length && a[i] === b[i]) i++; return a.slice(0, i); });
       common = names.length > 1 ? common.replace(/_[^_]*$/, "") : common.split("_")[0];
       const prefix = c.prefix || common || names[0].split("_")[0];
-      const byDevice = dsmIds.filter((id) => { const d = reg[id]?.device_id; return d && (d === hub || devs[d]?.via_device_id === hub); });
-      pool = !c.prefix && byDevice.length && Object.keys(devs).length ? byDevice : dsmIds.filter((id) => id.split(".")[1].startsWith(prefix));
+      // appareil propriétaire : le NAS lui-même, ou celui auquel le volume ou le disque est rattaché
+      const ownerOf = (d) => (!d || !devs[d] ? null : devs[d].via_device_id || d);
+      const named = (id) => id.split(".")[1].startsWith(prefix);
+      pool = c.prefix ? dsmIds.filter(named) : dsmIds.filter((id) => {
+        const owner = ownerOf(reg[id]?.device_id);
+        if (owner === hub) return true;
+        // rattaché à un autre NAS connu : écarté ; sans fiche d'appareil : reconnu à son nom
+        if (owner && devs[owner] && !devs[owner].via_device_id) return false;
+        return named(id);
+      });
       this._prefix = prefix;
     } else {
       // Sans registre : préfixe donné, ou « diskstation » par défaut
@@ -3828,6 +3847,299 @@ const ASUS_STYLE = `<style>
 .asus-dev span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .asus-dev small { font-size: .7rem; color: var(--med-muted); white-space: nowrap; }
 .asus-acts .pve-btn span { font-size: .74rem; }
+</style>`;
+
+/* ------------------------------------------------------------ carte Freebox */
+
+const FBX_DEFAULTS = {
+  title: "",
+  icon: "mdi:router-network",
+  icon_color: "",
+  wan_max: 1000, // Mbit/s, pleine échelle des barres de débit (abonnement)
+  temp_warn: 70, temp_alert: 85, // °C
+  show_connection: true, show_rates: true, show_speedtest: true, show_system: true, show_wifi: true, show_phone: true, show_clients: true, show_actions: true,
+  theme: "v2",
+};
+
+/** Rôles des entités de l'intégration Freebox de Home Assistant (plateforme « freebox ») : domaine et fin de l'identifiant. */
+const FBX_ROLES = [
+  ["rx", "sensor", /_download_speed$/],
+  ["tx", "sensor", /_upload_speed$/],
+  ["missed", "sensor", /_missed_calls$/],
+  ["wifi", "switch", /_wifi$/],
+  ["reboot", "button", /^button\.reboot_|_reboot$/],
+  ["calls_read", "button", /mark_calls_as_read$/],
+];
+
+class ServeurHaFreeboxCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("serveur-ha-freebox-card-editor");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
+    this._config = { ...FBX_DEFAULTS, ...(config || {}) };
+    this._map = null;
+    this._sig = null;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    if (!this._clicks) {
+      this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const fold = ev.target.closest?.("[data-fold]");
+        if (fold) {
+          ev.stopPropagation();
+          this._fold = this._fold === fold.dataset.fold ? null : fold.dataset.fold;
+          this._sig = null; this._render(); return;
+        }
+        const press = ev.target.closest?.("[data-press]");
+        if (press) {
+          // redémarrer, Wi-Fi, appels lus : premier clic arme, second clic dans les 5 s confirme
+          ev.stopPropagation();
+          const id = press.dataset.press;
+          if (this._armed === id) {
+            this._armed = null;
+            if (id.startsWith("button.")) this._hass?.callService("button", "press", { entity_id: id });
+            else this._hass?.callService("homeassistant", "toggle", { entity_id: id });
+          } else {
+            this._armed = id;
+            clearTimeout(this._armTimer);
+            this._armTimer = setTimeout(() => { this._armed = null; this._sig = null; this._render(); }, 5000);
+          }
+          this._sig = null; this._render(); return;
+        }
+        const el = ev.target.closest?.("[data-entity]");
+        if (el?.dataset.entity) {
+          const e = new Event("hass-more-info", { bubbles: true, composed: true });
+          e.detail = { entityId: el.dataset.entity };
+          this.dispatchEvent(e);
+        }
+      }));
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    if (this._hass?.entities !== hass.entities || this._hass?.devices !== hass.devices) this._map = null;
+    this._hass = hass;
+    this._render();
+  }
+
+  connectedCallback() {
+    clearInterval(this._tick);
+    this._tick = setInterval(() => { this._sig = null; this._render(); }, 60000);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._tick);
+  }
+
+  getCardSize() {
+    return 9;
+  }
+
+  _st(id) {
+    return id ? this._hass?.states?.[id] : undefined;
+  }
+
+  _num(id) {
+    const s = this._st(id);
+    if (!s || s.state === "unavailable" || s.state === "unknown") return null;
+    const v = Number(s.state);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  _txt(id) {
+    const s = this._st(id)?.state;
+    return s === undefined || s === "unavailable" || s === "unknown" || s === "" ? null : s;
+  }
+
+  _unit(id, d = "") {
+    return cleanUnit(this._st(id)?.attributes?.unit_of_measurement ?? d);
+  }
+
+  /** Freebox (choisie ou la première) : rôles, températures, disques, RAID, appareils suivis, Speedtest. */
+  _resolve() {
+    if (this._map) return this._map;
+    const hass = this._hass, c = this._config;
+    const reg = hass.entities || {}, devs = hass.devices || {}, st = hass.states || {};
+    const all = Object.entries(reg).filter(([id, e]) => e.platform === "freebox" && st[id] && !e.hidden);
+    // Freebox : celle choisie, sinon celle qui porte le débit descendant
+    const devId = c.device || all.find(([id]) => /^sensor\..*_download_speed$/.test(id))?.[1].device_id || all.find(([id]) => !id.startsWith("device_tracker."))?.[1].device_id;
+    const roles = {}, temps = [], disks = [], raid = [];
+    for (const [id, e] of all) {
+      if (devId && e.device_id !== devId) continue;
+      const domain = id.split(".")[0];
+      const role = FBX_ROLES.find(([, d, re]) => d === domain && re.test(id));
+      if (role && !roles[role[0]]) { roles[role[0]] = id; continue; }
+      const a = st[id].attributes || {};
+      if (domain === "sensor" && (a.device_class === "temperature" || /temp/.test(id))) temps.push(id);
+      else if (domain === "sensor" && a.unit_of_measurement === "%" && /free_space|espace|disk|partition/.test(id)) disks.push(id);
+      else if (domain === "binary_sensor" && /raid|degraded/.test(id)) raid.push(id);
+    }
+    // appareils du réseau : suivis par l'intégration (un appareil Home Assistant chacun)
+    const trackers = all.filter(([id]) => id.startsWith("device_tracker.")).map(([id]) => id);
+    // suivi de la Freebox elle-même (IP publique, uptime, type de connexion), s'il existe
+    const box = c.tracker || trackers.find((id) => { const a = st[id].attributes || {}; return a.IPv4 || a.ipv4 || a.connection_type || a.uptime !== undefined; }) || null;
+    // Speedtest : capteurs donnés, sinon intégration Speedtest.net ou Speedtest CLI
+    const sp = (k, re) => c[`speedtest_${k}`] || Object.keys(st).find((id) => id.startsWith("sensor.") && (reg[id]?.platform === "speedtestdotnet" || /speedtest/.test(id)) && re.test(id)) || null;
+    const speed = { down: sp("download", /_download$/), up: sp("upload", /_upload$/), ping: sp("ping", /_ping$/), isp: c.speedtest_isp || Object.keys(st).find((id) => /^sensor\.speedtest.*_isp$/.test(id)) || null };
+    const byId = (a, b) => a.localeCompare(b, "fr", { numeric: true });
+    this._map = { devId, dev: devs[devId], roles, temps: temps.sort(byId), disks: disks.sort(byId), raid, trackers: trackers.filter((id) => id !== box), box, speed };
+    return this._map;
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const m = this._resolve();
+    const r = m.roles;
+    const ids = [...Object.values(r), ...m.temps, ...m.disks, ...m.raid, ...m.trackers, m.box, ...Object.values(m.speed)].filter(Boolean);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._armed}|${this._fold}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => { const s = this._st(id); return s ? `${s.state}|${s.last_updated}` : "-"; }).join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const st = (id) => this._st(id);
+    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(t)}</div>${body}</div>` : "");
+    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined && v !== "").map(([k, v, cls]) => localizeTemplate`<div class="srv-kv"><span>${exactLabel(k)}</span><b class="${cls || ""}">${esc(exactLabel(v))}</b></div>`).join("");
+    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0, cls = "") => (v === null ? "" : localizeTemplate`<div class="srv-g ${cls}" data-entity="${esc(id)}">
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(label)}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
+        <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
+    // débit en Mbit/s, quelle que soit l'unité du capteur (la Freebox donne des ko/s)
+    const mbit = (id) => {
+      const v = this._num(id);
+      if (v === null) return null;
+      const u = String(this._unit(id, "kB/s"));
+      if (/^Gbit|^Gbps/i.test(u)) return v * 1000;
+      if (/^Mbit|^Mbps/i.test(u)) return v;
+      if (/^kbit|^kbps/i.test(u)) return v / 1000;
+      if (/^MB\/s|^Mo\/s|^MiB\/s/i.test(u)) return v * 8;
+      if (/^GB\/s|^Go\/s/i.test(u)) return v * 8000;
+      return (v * 8) / 1000; // ko/s, kB/s, KiB/s
+    };
+    const rate = (id, icon, label, max, cls) => { const v = mbit(id); return v === null ? "" : gauge(id, icon, label, v, "", 101, 101, " Mbit/s", max, v < 10 ? 2 : v < 100 ? 1 : 0, cls); };
+    const btn = (id, icon, label, cls = "") => {
+      if (!id || !st(id)) return "";
+      const armed = this._armed === id;
+      return localizeTemplate`<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(armed ? `${label} : cliquez encore pour confirmer` : label)}" aria-label="${esc(armed ? `Confirmer : ${label}` : label)}"><ha-icon icon="${esc(armed ? "mdi:check-bold" : icon)}"></ha-icon>${armed ? localizeStaticHTML("<span>Confirmer</span>") : ""}</button>`;
+    };
+
+    const dev = m.dev || {};
+    const boxA = st(m.box)?.attributes || {};
+    const ip = c.ip_ext || boxA.IPv4 || boxA.ipv4 || boxA.ip_address || null;
+    const upSec = Number(boxA.uptime);
+    const boot = Number.isFinite(upSec) && upSec > 0 ? new Date(Date.now() - upSec * 1000).toISOString() : null;
+    const missed = this._num(r.missed);
+    const wifiOn = st(r.wifi) ? st(r.wifi).state === "on" : null;
+    const raidBad = m.raid.filter((id) => st(id)?.state === "on");
+    const online = m.box ? st(m.box).state === "home" || !!ip : null;
+
+    const led = (ok, label, id, cls) => (ok === null ? "" : localizeTemplate`<span class="srv-led ${cls || (ok ? "ok" : "bad")}" data-entity="${esc(id || "")}"><i></i>${label}</span>`);
+    const leds = m.devId ? [
+      led(online, "Internet", m.box),
+      led(wifiOn, "Wi-Fi", r.wifi, wifiOn ? "ok" : "na"),
+      missed ? localizeTemplate`<span class="srv-led bad" data-entity="${esc(r.missed)}"><i></i>${countText(missed, "appel")}</span>` : "",
+      raidBad.length ? localizeTemplate`<span class="srv-led bad" data-entity="${esc(raidBad[0])}"><i></i>RAID dégradé</span>` : "",
+    ].join("") : "";
+
+    let body = "";
+    if (!m.devId) {
+      body = localizeTemplate`<div class="empty">Aucune Freebox trouvée<span>Ajoutez l'intégration Freebox dans Paramètres › Appareils et services, acceptez l'accès sur l'écran de la Freebox, puis rechargez la page.</span></div>`;
+    } else {
+      // --- connexion
+      let conn = "";
+      if (c.show_connection !== false) {
+        const info = kv([
+          ["Connexion", online === null ? null : online ? "En ligne" : trLabel("Coupée"), online ? "ok" : "bad"],
+          ["IP publique", ip],
+          ["Type", boxA.connection_type || null],
+          ["Uptime", boot ? since(boot) : null],
+        ]);
+        conn = sec("mdi:web", "Internet", info ? localizeTemplate`<div class="asus-kv" data-entity="${esc(m.box || r.rx || "")}">${info}</div>` : "");
+      }
+      // --- débits en temps réel
+      let rates = "";
+      if (c.show_rates !== false) {
+        const max = Number(c.wan_max) || 1000;
+        const g = [rate(r.rx, "mdi:download", "Download", max, "srv-in"), rate(r.tx, "mdi:upload", "Upload", max, "srv-out")].filter(Boolean);
+        rates = sec("mdi:swap-vertical", "Débits", g.length ? localizeTemplate`<div class="srv-grid">${g.join("")}</div>` : "");
+      }
+      // --- test de débit (Speedtest)
+      let speed = "";
+      if (c.show_speedtest !== false && (m.speed.down || m.speed.up || m.speed.ping)) {
+        const max = Number(c.wan_max) || 1000;
+        const sv = (id) => { const v = this._num(id); if (v === null) return null; return /^Gbit|^Gbps/i.test(this._unit(id, "Mbit/s")) ? v * 1000 : v; };
+        const g = [
+          sv(m.speed.down) === null ? "" : gauge(m.speed.down, "mdi:download", "Download", sv(m.speed.down), "", 101, 101, " Mbit/s", max, 0, "srv-in"),
+          sv(m.speed.up) === null ? "" : gauge(m.speed.up, "mdi:upload", "Upload", sv(m.speed.up), "", 101, 101, " Mbit/s", max, 0, "srv-out"),
+        ].filter(Boolean);
+        const ping = this._num(m.speed.ping);
+        const isp = this._txt(m.speed.isp) || st(m.speed.down)?.attributes?.isp || st(m.speed.down)?.attributes?.server_name || null;
+        const when = st(m.speed.down)?.last_changed;
+        const info = kv([["Ping", ping === null ? null : `${fmt(ping, ping < 10 ? 1 : 0)} ms`, ping === null ? "" : ping < 30 ? "ok" : ping < 80 ? "" : "bad"], ["Opérateur", isp], ["Mesuré", when ? relativeAgo(when) : null]]);
+        speed = sec("mdi:speedometer", "Test de débit", `${g.length ? localizeTemplate`<div class="srv-grid">${g.join("")}</div>` : ""}${info ? localizeTemplate`<div class="asus-kv fbx-kv" data-entity="${esc(m.speed.ping || m.speed.down)}">${info}</div>` : ""}`);
+      }
+      // --- système : températures, disques, RAID
+      let system = "";
+      if (c.show_system !== false) {
+        const name = (id) => String(st(id)?.attributes?.friendly_name || id).replace(/^freebox\s*/i, "").replace(/^(temp(é|e)rature|temp)\s*/i, "").trim() || "Temp.";
+        const t = m.temps.map((id) => gauge(id, "mdi:thermometer", name(id), this._num(id), "", c.temp_warn, c.temp_alert, ` ${esc(this._unit(id, "°C"))}`, 100));
+        const d = m.disks.map((id) => {
+          const free = this._num(id);
+          return free === null ? "" : gauge(id, "mdi:harddisk", String(st(id)?.attributes?.friendly_name || id).replace(/^freebox\s*/i, "").replace(/\s*(free space|espace libre)\s*$/i, "") || trLabel("Disque"), 100 - free, `${fmt(free, 0)} % ${trLabel("libre")}`, 80, 92);
+        });
+        const raid = m.raid.map((id) => localizeTemplate`<span class="omv-svc ${st(id)?.state === "on" ? "" : "on"}" data-entity="${esc(id)}"><i></i>${st(id)?.state === "on" ? "RAID dégradé" : "RAID OK"}</span>`);
+        const res = [...t, ...d].filter(Boolean);
+        system = sec("mdi:information-outline", trLabel("Système"), `${res.length ? localizeTemplate`<div class="srv-grid pve-res">${res.join("")}</div>` : ""}${raid.length ? localizeTemplate`<div class="omv-svcs">${raid.join("")}</div>` : ""}`);
+      }
+      // --- Wi-Fi
+      let wifi = "";
+      if (c.show_wifi !== false && st(r.wifi)) {
+        wifi = sec("mdi:wifi", "Wi-Fi", localizeTemplate`<div class="fbx-row"><span class="omv-svc ${wifiOn ? "on" : ""}" data-entity="${esc(r.wifi)}"><i></i>${wifiOn ? trLabel("Activé") : trLabel("Désactivé")}</span>${btn(r.wifi, wifiOn ? "mdi:wifi-off" : "mdi:wifi", wifiOn ? "Couper le Wi-Fi" : "Activer le Wi-Fi")}</div>`);
+      }
+      // --- téléphone
+      let phone = "";
+      if (c.show_phone !== false && st(r.missed)) {
+        phone = sec("mdi:phone", "Téléphone", localizeTemplate`<div class="fbx-row"><span class="omv-svc ${missed ? "" : "on"}" data-entity="${esc(r.missed)}"><i></i>${missed ? countText(missed, "appel") : "Aucun appel manqué"}</span>${missed ? btn(r.calls_read, "mdi:phone-check", "Marquer comme lus") : ""}</div>`);
+      }
+      // --- appareils connectés
+      let clients = "";
+      if (c.show_clients !== false && m.trackers.length) {
+        const on = m.trackers.filter((id) => st(id)?.state === "home");
+        const open = this._fold === "devs";
+        const label = (id) => String(st(id)?.attributes?.friendly_name || id);
+        const list = open ? on.slice().sort((a, b) => label(a).localeCompare(label(b), "fr", { numeric: true }))
+          .map((id) => localizeTemplate`<div class="asus-dev" data-entity="${esc(id)}"><ha-icon icon="mdi:lan-connect"></ha-icon><span>${esc(label(id))}</span><small>${esc(st(id)?.attributes?.ip || "")}</small></div>`).join("") : "";
+        clients = sec("mdi:devices", localizeTemplate`Appareils connectés <small class="pve-n">${fmt(on.length, 0)} / ${fmt(m.trackers.length, 0)}</small>`,
+          `${open ? localizeTemplate`<div class="asus-devs asus-all">${list || localizeTemplate`<div class="asus-note">Aucun appareil</div>`}</div>` : ""}
+          <button class="asus-more ${open ? "on" : ""}" data-fold="devs"><ha-icon icon="${esc(open ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${open ? trLabel("Réduire") : CURRENT_CARD_LANGUAGE === "en" ? `See ${countText(on.length, "appareil")}` : CURRENT_CARD_LANGUAGE === "pl" ? `Pokaż ${countText(on.length, "appareil")}` : `Voir les ${countText(on.length, "appareil")}`}</button>`);
+      }
+      // --- actions
+      const acts = c.show_actions !== false ? [btn(r.reboot, "mdi:restart", "Redémarrer la Freebox", "stop")].filter(Boolean) : [];
+      body = conn + rates + speed + system + wifi + phone + clients
+        + sec("mdi:gesture-tap-button", "Actions", acts.length ? localizeTemplate`<div class="pve-na asus-acts">${acts.join("")}</div>` : "");
+    }
+
+    const alertCls = m.devId && (online === false || raidBad.length) ? "srv-alert" : "";
+    const model = dev.model || dev.name || "Freebox";
+    const sub = [dev.sw_version ? `Firmware ${dev.sw_version}` : null].filter(Boolean).join(" · ");
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${OMV_STYLE}${ASUS_STYLE}${FBX_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
+      <header>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:router-network")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
+          <div><div class="title">${esc(c.title || dev.name_by_user || model)}</div>${sub ? localizeTemplate`<div class="sub">${esc(sub)}</div>` : ""}</div></div>
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
+      </header>
+      ${body}
+    </ha-card>`;
+  }
+}
+
+const FBX_STYLE = `<style>
+.fbx-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.fbx-row .pve-btn { flex: none; }
+.fbx-kv { margin-top: 8px; margin-bottom: 0; }
 </style>`;
 
 /* ------------------------------------------------------------ carte Réseau (Ping) */
@@ -6921,6 +7233,60 @@ const ASUS_LABELS = {
   theme: "Couleurs de la carte",
 };
 const ServeurHaAsusCardEditor = makeEditor(ASUS_SCHEMA, ASUS_LABELS, ASUS_DEFAULTS, EN_EDITOR_LABELS.ASUS, PL_EDITOR_LABELS.ASUS);
+const FBX_SCHEMA = [
+  { name: "device", selector: { device: { integration: "freebox" } } },
+  { name: "title", selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  { name: "icon_color", selector: { text: {} } },
+  { name: "wan_max", selector: { number: { min: 1, max: 100000, mode: "box", unit_of_measurement: "Mbit/s" } } },
+  { name: "speedtest_download", selector: { entity: { domain: "sensor" } } },
+  { name: "speedtest_upload", selector: { entity: { domain: "sensor" } } },
+  { name: "speedtest_ping", selector: { entity: { domain: "sensor" } } },
+  { name: "show_connection", selector: { boolean: {} } },
+  { name: "show_rates", selector: { boolean: {} } },
+  { name: "show_speedtest", selector: { boolean: {} } },
+  { name: "show_system", selector: { boolean: {} } },
+  { name: "show_wifi", selector: { boolean: {} } },
+  { name: "show_phone", selector: { boolean: {} } },
+  { name: "show_clients", selector: { boolean: {} } },
+  { name: "show_actions", selector: { boolean: {} } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const FBX_LABELS = {
+  device: "Freebox (appareil de l'intégration Freebox, facultatif)",
+  title: "Titre (modèle de la Freebox par défaut)",
+  icon: "Icône",
+  icon_color: "Couleur de l'icône",
+  wan_max: "Pleine échelle des barres de débit (débit de l'abonnement)",
+  speedtest_download: "Test de débit : download (vide = Speedtest trouvé seul)",
+  speedtest_upload: "Test de débit : upload",
+  speedtest_ping: "Test de débit : ping",
+  show_connection: "Section Internet (connexion, IP publique, type, uptime)",
+  show_rates: "Section Débits en temps réel",
+  show_speedtest: "Section Test de débit (Speedtest)",
+  show_system: "Section Système (températures, disques, RAID)",
+  show_wifi: "Section Wi-Fi (activer ou couper, deux clics)",
+  show_phone: "Section Téléphone (appels manqués)",
+  show_clients: "Section Appareils connectés",
+  show_actions: "Bouton Redémarrer (deux clics)",
+  theme: "Couleurs de la carte",
+};
+const ServeurHaFreeboxCardEditor = makeEditor(FBX_SCHEMA, FBX_LABELS, FBX_DEFAULTS, {
+  device: "Freebox (Freebox integration device, optional)", title: "Title (Freebox model by default)", icon: "Icon", icon_color: "Icon color",
+  wan_max: "Full scale of the rate bars (subscription speed)", speedtest_download: "Speed test: download (empty = Speedtest found automatically)",
+  speedtest_upload: "Speed test: upload", speedtest_ping: "Speed test: ping", show_connection: "Internet section (connection, public IP, type, uptime)",
+  show_rates: "Live rates section", show_speedtest: "Speed test section (Speedtest)", show_system: "System section (temperatures, disks, RAID)",
+  show_wifi: "Wi-Fi section (turn on or off, two clicks)", show_phone: "Phone section (missed calls)", show_clients: "Connected devices section",
+  show_actions: "Restart button (two clicks)", theme: "Card colors",
+}, {
+  device: "Freebox (urządzenie integracji Freebox, opcjonalnie)", title: "Tytuł (domyślnie model Freebox)", icon: "Ikona", icon_color: "Kolor ikony",
+  wan_max: "Pełna skala pasków przepustowości", speedtest_download: "Test prędkości: pobieranie (puste = wykryty automatycznie)",
+  speedtest_upload: "Test prędkości: wysyłanie", speedtest_ping: "Test prędkości: ping", show_connection: "Sekcja Internet",
+  show_rates: "Sekcja przepustowości", show_speedtest: "Sekcja testu prędkości", show_system: "Sekcja systemu (temperatury, dyski, RAID)",
+  show_wifi: "Sekcja Wi-Fi", show_phone: "Sekcja telefonu (nieodebrane połączenia)", show_clients: "Sekcja podłączonych urządzeń",
+  show_actions: "Przycisk restartu (dwa kliknięcia)", theme: "Kolory karty",
+});
 const PING_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -7191,7 +7557,7 @@ class ServeurHaOpnsenseMoved extends HTMLElement {
 
 [
   ServeurHaCard, ServeurHaMajCard, ServeurHaNasCard, ServeurHaProxmoxCard,
-  ServeurHaOmvCard, ServeurHaAsusCard, ServeurHaPingCard, ServeurHaZigbeeCard,
+  ServeurHaOmvCard, ServeurHaAsusCard, ServeurHaFreeboxCard, ServeurHaPingCard, ServeurHaZigbeeCard,
   ServeurHaWireguardCard, ServeurHaGlancesCard, ServeurHaMediaCard,
   ServeurHaDnsCard, ServeurHaLinuxCard, ServeurHaGithubCard,
   ServeurHaOpnsenseMoved
@@ -7211,6 +7577,8 @@ if (typeof customElements !== "undefined") {
   define("serveur-ha-omv-card-editor", ServeurHaOmvCardEditor);
   define("serveur-ha-asus-card", ServeurHaAsusCard);
   define("serveur-ha-asus-card-editor", ServeurHaAsusCardEditor);
+  define("serveur-ha-freebox-card", ServeurHaFreeboxCard);
+  define("serveur-ha-freebox-card-editor", ServeurHaFreeboxCardEditor);
   define("serveur-ha-ping-card", ServeurHaPingCard);
   define("serveur-ha-ping-card-editor", ServeurHaPingCardEditor);
   define("serveur-ha-zigbee-card", ServeurHaZigbeeCard);
@@ -7274,6 +7642,14 @@ if (typeof customElements !== "undefined") {
       type: "serveur-ha-asus-card",
       name: "Carte Routeur ASUS",
       description: "Routeur ASUS (AsusRouter) : Internet, débits, Wi-Fi, ports, appareils connectés, VPN, firmware, redémarrage confirmé.",
+      preview: true,
+    });
+  }
+  if (!window.customCards.some((c) => c.type === "serveur-ha-freebox-card")) {
+    window.customCards.push({
+      type: "serveur-ha-freebox-card",
+      name: "Carte Freebox",
+      description: "Freebox (intégration Freebox) : Internet, débits, test de débit, températures, disques, Wi-Fi, appels manqués, appareils connectés, redémarrage confirmé.",
       preview: true,
     });
   }
@@ -7352,6 +7728,7 @@ if (typeof customElements !== "undefined") {
       "serveur-ha-proxmox-card": ["Proxmox VE", "Proxmox nodes, storage, VMs, containers, updates and confirmed power controls."],
       "serveur-ha-omv-card": ["OpenMediaVault", "System, file systems, SMART disk health, services, network, updates and power controls."],
       "serveur-ha-asus-card": ["ASUS Router", "Internet, Wi-Fi, wired ports, clients, VPN, firmware and restart via AsusRouter."],
+      "serveur-ha-freebox-card": ["Freebox", "Freebox Internet, rates, speed test, temperatures, disks, Wi-Fi, missed calls, connected devices and confirmed restart."],
       "serveur-ha-ping-card": ["Network (Ping)", "Ping-monitored devices, online status, latency, jitter and packet loss grouped by room or type."],
       "serveur-ha-zigbee-card": ["Zigbee & Batteries", "Low and critical batteries, offline Zigbee devices, poor links and Zigbee2MQTT bridge status."],
       "serveur-ha-wireguard-card": ["WireGuard VPN", "WGDashboard servers, connected peers, handshakes and incoming/outgoing traffic."],
@@ -7368,6 +7745,7 @@ if (typeof customElements !== "undefined") {
       "serveur-ha-proxmox-card": ["Proxmox VE", "Węzły, pamięć masowa, maszyny wirtualne, kontenery, aktualizacje i sterowanie zasilaniem."],
       "serveur-ha-omv-card": ["OpenMediaVault", "System, systemy plików, SMART dysków, usługi, sieć, aktualizacje i zasilanie."],
       "serveur-ha-asus-card": ["Router ASUS", "Internet, Wi-Fi, porty LAN, klienci, VPN, firmware i ponowne uruchomienie przez AsusRouter."],
+      "serveur-ha-freebox-card": ["Freebox", "Internet, przepustowość, test prędkości, temperatury, dyski, Wi-Fi, nieodebrane połączenia i urządzenia Freebox."],
       "serveur-ha-ping-card": ["Sieć (Ping)", "Monitorowanie dostępności urządzeń, opóźnień i utraty pakietów według typu lub pomieszczenia."],
       "serveur-ha-zigbee-card": ["Zigbee i baterie", "Niskie poziomy baterii, urządzenia Zigbee offline, jakość połączenia i stan bramki Zigbee2MQTT."],
       "serveur-ha-wireguard-card": ["VPN WireGuard", "Serwery WGDashboard, połączone peery, handshake oraz ruch przychodzący i wychodzący."],
