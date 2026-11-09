@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.19.0-beta.1";
+const CARD_VERSION = "0.19.0-beta.2";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -2336,21 +2336,27 @@ class ServeurHaNasCard extends HTMLElement {
       // Les entités DSM sont réparties sur plusieurs appareils : le NAS, et ses volumes et disques
       // rattachés à lui (via_device_id). Avec plusieurs NAS, seuls ceux du NAS choisi sont gardés.
       const devs = hass.devices || {};
-      const hub = c.device || devices.find((d) => devs[d] && !devs[d].via_device_id) || devices[0];
+      const dsmDevs = new Set(devices);
+      // NAS : appareil DSM qui n'est pas rattaché à un autre appareil DSM (un NAS peut l'être à une box)
+      const isHub = (d) => dsmDevs.has(d) && !dsmDevs.has(devs[d]?.via_device_id);
+      // device choisi par son identifiant, ou par son nom
+      const want = String(c.device || "").trim().toLowerCase();
+      const byName = want && !devs[c.device] ? Object.keys(devs).find((d) => [devs[d].name_by_user, devs[d].name].some((n) => String(n || "").toLowerCase() === want)) : null;
+      const hub = byName || c.device || devices.find(isHub) || devices[0];
       const own = dsmIds.filter((id) => reg[id]?.device_id === hub);
       // préfixe commun des entités du NAS (« nas_maison »), coupé au dernier « _ »
       const names = (own.length ? own : dsmIds).map((id) => id.split(".")[1]);
       let common = names.reduce((a, b) => { let i = 0; while (i < a.length && a[i] === b[i]) i++; return a.slice(0, i); });
       common = names.length > 1 ? common.replace(/_[^_]*$/, "") : common.split("_")[0];
       const prefix = c.prefix || common || names[0].split("_")[0];
-      // appareil propriétaire : le NAS lui-même, ou celui auquel le volume ou le disque est rattaché
-      const ownerOf = (d) => (!d || !devs[d] ? null : devs[d].via_device_id || d);
+      // NAS propriétaire : l'appareil lui-même, ou le NAS auquel le volume ou le disque est rattaché
+      const ownerOf = (d) => (d && dsmDevs.has(devs[d]?.via_device_id) ? devs[d].via_device_id : d);
       const named = (id) => id.split(".")[1].startsWith(prefix);
       pool = c.prefix ? dsmIds.filter(named) : dsmIds.filter((id) => {
-        const owner = ownerOf(reg[id]?.device_id);
-        if (owner === hub) return true;
-        // rattaché à un autre NAS connu : écarté ; sans fiche d'appareil : reconnu à son nom
-        if (owner && devs[owner] && !devs[owner].via_device_id) return false;
+        const d = reg[id]?.device_id;
+        if (d && (d === hub || ownerOf(d) === hub)) return true;
+        // appartient à un autre NAS : écarté ; sans fiche d'appareil : reconnu à son nom
+        if (d && devs[d] && dsmDevs.has(ownerOf(d))) return false;
         return named(id);
       });
       this._prefix = prefix;
