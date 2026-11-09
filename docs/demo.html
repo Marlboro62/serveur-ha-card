@@ -95,7 +95,7 @@
     <aside class="panel" aria-label="Réglages de la démo">
       <h2>Carte</h2>
       <div class="ctl"><div class="seg" data-key="card">
-        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="ping">Réseau</button><button data-v="wg">WireGuard</button><button data-v="gl">Glances</button><button data-v="media">Multimédia</button><button data-v="zb">Zigbee et piles</button><button data-v="gh">GitHub</button><button data-v="all">Les 14</button></div></div>
+        <button data-v="serveur">Serveur</button><button data-v="maj">Home Assistant</button><button data-v="nas">NAS Synology</button><button data-v="pve">Proxmox</button><button data-v="dns">DNS</button><button data-v="lnx">Linux</button><button data-v="omv">OpenMediaVault</button><button data-v="asus">Routeur ASUS</button><button data-v="fbx">Freebox</button><button data-v="ping">Réseau</button><button data-v="wg">WireGuard</button><button data-v="gl">Glances</button><button data-v="media">Multimédia</button><button data-v="zb">Zigbee et piles</button><button data-v="gh">GitHub</button><button data-v="all">Les 15</button></div></div>
 
       <h2>Affichage</h2>
       <div class="ctl"><div class="ctl-l">Page</div><div class="seg" data-key="page">
@@ -138,6 +138,8 @@
         <button data-v="ok"><i class="sw green"></i>Tout va bien</button><button data-v="low"><i class="sw orange"></i>Piles faibles</button><button data-v="down"><i class="sw red"></i>Hors ligne, pont coupé</button></div></div>
       <div class="ctl" data-for="asus all"><div class="ctl-l">Routeur ASUS</div><div class="seg" data-key="asus">
         <button data-v="ok"><i class="sw green"></i>Normal</button><button data-v="busy"><i class="sw orange"></i>Chargé, mise à jour</button><button data-v="down"><i class="sw red"></i>Internet coupé</button></div></div>
+      <div class="ctl" data-for="fbx all"><div class="ctl-l">Freebox</div><div class="seg" data-key="fbx">
+        <button data-v="fbx-ok"><i class="sw green"></i>Normale</button><button data-v="fbx-calls"><i class="sw orange"></i>Appels manqués</button><button data-v="fbx-down"><i class="sw red"></i>Internet coupé, RAID dégradé</button></div></div>
     </aside>
 
     <main class="stage">
@@ -183,8 +185,8 @@
     });
   }
 
-  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card", ping: "serveur-ha-ping-card", wg: "serveur-ha-wireguard-card", gl: "serveur-ha-glances-card", media: "serveur-ha-media-card", zb: "serveur-ha-zigbee-card", gh: "serveur-ha-github-card" };
-  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok", ping: "ok", wg: "some", gl: "ok", media: "play", zb: "low" };
+  const TAGS = { serveur: "serveur-ha-card", maj: "serveur-ha-maj-card", nas: "serveur-ha-nas-card", pve: "serveur-ha-proxmox-card", dns: "serveur-ha-dns-card", lnx: "serveur-ha-linux-card", omv: "serveur-ha-omv-card", asus: "serveur-ha-asus-card", fbx: "serveur-ha-freebox-card", ping: "serveur-ha-ping-card", wg: "serveur-ha-wireguard-card", gl: "serveur-ha-glances-card", media: "serveur-ha-media-card", zb: "serveur-ha-zigbee-card", gh: "serveur-ha-github-card" };
+  const defaults = { card: "all", page: "dark", theme: "v2", width: "mobile", host: "pi", srv: "ok", fan: "on", upd: "1", ssl: "24", nas: "ok", pve: "ok", dns: "ok", lnx: "upd", omv: "ok", asus: "ok", fbx: "fbx-ok", ping: "ok", wg: "some", gl: "ok", media: "play", zb: "low" };
   let state = { ...defaults };
   try { state = { ...defaults, ...JSON.parse(localStorage.getItem("serveur-ha-demo") || "{}") }; } catch (e) { /* ignoré */ }
 
@@ -473,6 +475,26 @@
     aa("switch", "block_internet", "off");
     for (const b of ["reboot", "restart_wireless", "refresh_clients"]) aa("button", b, "unknown");
     aa("light", "led", "on");
+    // --- Freebox (noms fictifs, entités au format de l'intégration officielle « freebox »)
+    const F = "freebox", fc = state.fbx === "fbx-calls", fd = state.fbx === "fbx-down";
+    devices.fbx = { id: "fbx", name: "Freebox Server (r2)", manufacturer: "Freebox SAS", model: "Freebox Server (r2)", sw_version: "4.9.5" };
+    const fb = (id, s, attrs = {}) => add(id, s, attrs, F, null, "fbx");
+    fb("sensor.freebox_download_speed", fd ? 0 : 1834.6, { unit_of_measurement: "kB/s", device_class: "data_rate" });
+    fb("sensor.freebox_upload_speed", fd ? 0 : 412.3, { unit_of_measurement: "kB/s", device_class: "data_rate" });
+    fb("sensor.freebox_missed_calls", fc ? 2 : 0);
+    fb("switch.freebox_wifi", "on");
+    fb("button.reboot_freebox", "unknown");
+    fb("button.freebox_mark_calls_as_read", "unknown");
+    fb("sensor.freebox_temperature_cpu_m", 58, { unit_of_measurement: "°C", device_class: "temperature", friendly_name: "Freebox Température CPU M" });
+    fb("sensor.freebox_temperature_switch", 52, { unit_of_measurement: "°C", device_class: "temperature", friendly_name: "Freebox Température Switch" });
+    fb("sensor.freebox_disque_dur_free_space", fd ? 4.1 : 61.8, { unit_of_measurement: "%", friendly_name: "Freebox Disque dur free space" });
+    fb("binary_sensor.freebox_raid_array_0_degraded", fd ? "on" : "off", { device_class: "problem" });
+    fb("device_tracker.freebox_server_r2", fd ? "not_home" : "home", { IPv4: fd ? null : "203.0.113.84", connection_type: "ftth", uptime: 12 * 86400 + 3 * 3600 });
+    [["Téléviseur salon", "home"], ["Ordinateur portable", "home"], ["Tablette", "not_home"], ["Box TV", "home"], ["Console", "not_home"]].forEach(([n, st0], i) =>
+      add(`device_tracker.freebox_client_${i + 1}`, st0, { friendly_name: n, ip: `192.168.1.${60 + i}` }, F, null, "fbx"));
+    add("sensor.speedtest_download", fd ? 0 : 942.1, { unit_of_measurement: "Mbit/s" }, "speedtestdotnet", null, "speedtest");
+    add("sensor.speedtest_upload", fd ? 0 : 701.4, { unit_of_measurement: "Mbit/s" }, "speedtestdotnet", null, "speedtest");
+    add("sensor.speedtest_ping", fd ? 0 : 4, { unit_of_measurement: "ms" }, "speedtestdotnet", null, "speedtest");
     aa("update", "firmware_update", ab ? "on" : "off", { installed_version: "3.0.0.6.102_35404", latest_version: ab ? "3.0.0.6.102_37000" : "3.0.0.6.102_35404" });
     // --- réseau (noms et adresses fictifs, entités au format de l'intégration Ping)
     const ps = state.ping === "slow", pd = state.ping === "down";
@@ -592,6 +614,7 @@
       lnx: { type: "custom:serveur-ha-linux-card", theme: t },
       omv: { type: "custom:serveur-ha-omv-card", title: "NAS maison", power_on: "button.wake_on_lan_00_11_22_33_44_66", ups_name: "Green Cell 600VA", theme: t },
       asus: { type: "custom:serveur-ha-asus-card", theme: t },
+      fbx: { type: "custom:serveur-ha-freebox-card", wan_max: 8000, theme: t },
       ping: { type: "custom:serveur-ha-ping-card", theme: t },
       wg: { type: "custom:serveur-ha-wireguard-card", theme: t },
       gl: { type: "custom:serveur-ha-glances-card", theme: t },
