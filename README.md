@@ -423,6 +423,7 @@ type: custom:serveur-ha-freebox-card
 | `device` | Freebox (appareil de l'intégration Freebox), si vous en avez plusieurs | la première |
 | `title`, `icon`, `icon_color` | Titre, icône et sa couleur | modèle de la Freebox |
 | `wan_max` | Pleine échelle des barres de débit, en Mbit/s (débit de l'abonnement) | `1000` |
+| `download`, `upload`, `wifi` | Débit descendant, débit montant et interrupteur Wi-Fi de la Freebox | trouvés seuls (identifiants en anglais, français ou polonais) |
 | `speedtest_download`, `speedtest_upload`, `speedtest_ping` | Capteurs du test de débit | ceux de Speedtest trouvés seuls |
 | `tracker` | Suivi de la Freebox (IP publique, uptime, type de connexion) | trouvé seul |
 | `temp_warn`, `temp_alert` | Seuils orange et rouge des températures, en °C | `70`, `85` |

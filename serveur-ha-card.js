@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.19.0-beta.3";
+const CARD_VERSION = "0.19.0-beta.4";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -3891,15 +3891,22 @@ const FBX_DEFAULTS = {
   theme: "v2",
 };
 
-/** Rôles des entités de l'intégration Freebox de Home Assistant (plateforme « freebox ») : domaine et fin de l'identifiant. */
+/** Rôles des entités de l'intégration Freebox de Home Assistant (plateforme « freebox ») : domaine et fin de
+ *  l'identifiant. L'identifiant suit la langue de Home Assistant à l'ajout de l'intégration : anglais, français
+ *  (sensor.freebox_…_vitesse_de_telechargement) ou polonais. */
 const FBX_ROLES = [
-  ["rx", "sensor", /_download_speed$/],
-  ["tx", "sensor", /_upload_speed$/],
-  ["missed", "sensor", /_missed_calls$/],
-  ["wifi", "switch", /_wifi$/],
-  ["reboot", "button", /^button\.reboot_|_reboot$/],
-  ["calls_read", "button", /mark_calls_as_read$/],
+  ["rx", "sensor", /_download_speed$|_vitesse_de_telechargement$|_predkosc_pobierania$/],
+  ["tx", "sensor", /_upload_speed$|_vitesse_d_envoi$|_vitesse_de_televersement$|_predkosc_wysylania$/],
+  ["missed", "sensor", /_missed_calls$|_appels_manques$|_nieodebrane_polaczenia$/],
+  ["wifi", "switch", /_wi_?fi$/],
+  ["reboot", "button", /^button\.reboot_|_reboot$|_redemarrer$|_restart$|_uruchom_ponownie$/],
+  ["calls_read", "button", /mark_calls_as_read$|_marquer_les_appels_comme_lus$|_appels_comme_lus$/],
 ];
+/** Rôles donnés dans la configuration : option, puis anciens noms acceptés. */
+const FBX_ROLE_OPTIONS = {
+  rx: ["download", "entity_download"], tx: ["upload", "entity_upload"], wifi: ["wifi", "entity_wifi"],
+  missed: ["missed_calls", "entity_missed_calls"], reboot: ["reboot", "entity_reboot"],
+};
 
 class ServeurHaFreeboxCard extends HTMLElement {
   static getConfigElement() {
@@ -3996,8 +4003,11 @@ class ServeurHaFreeboxCard extends HTMLElement {
     const hass = this._hass, c = this._config;
     const reg = hass.entities || {}, devs = hass.devices || {}, st = hass.states || {};
     const all = Object.entries(reg).filter(([id, e]) => e.platform === "freebox" && st[id] && !e.hidden);
-    // Freebox : celle choisie, sinon celle qui porte le débit descendant
-    const devId = c.device || all.find(([id]) => /^sensor\..*_download_speed$/.test(id))?.[1].device_id || all.find(([id]) => !id.startsWith("device_tracker."))?.[1].device_id;
+    // Freebox : celle choisie, sinon celle de l'entité donnée en option, sinon celle qui porte le débit descendant
+    const given = (role) => FBX_ROLE_OPTIONS[role].map((k) => c[k]).find((id) => typeof id === "string" && st[id]) || null;
+    const rxRe = FBX_ROLES.find(([k]) => k === "rx")[2];
+    const devId = c.device || reg[given("rx")]?.device_id || all.find(([id]) => id.startsWith("sensor.") && rxRe.test(id))?.[1].device_id
+      || all.find(([id]) => st[id].attributes?.device_class === "data_rate")?.[1].device_id || all.find(([id]) => !id.startsWith("device_tracker."))?.[1].device_id;
     const roles = {}, temps = [], disks = [], raid = [];
     for (const [id, e] of all) {
       if (devId && e.device_id !== devId) continue;
@@ -4009,6 +4019,16 @@ class ServeurHaFreeboxCard extends HTMLElement {
       else if (domain === "sensor" && a.unit_of_measurement === "%" && /free_space|espace|disk|partition/.test(id)) disks.push(id);
       else if (domain === "binary_sensor" && /raid|degraded/.test(id)) raid.push(id);
     }
+    // débits non reconnus à leur identifiant (autre langue) : capteurs de classe « débit » de la Freebox,
+    // descendant ou montant d'après l'identifiant, le nom ou la clé de traduction
+    if (!roles.rx || !roles.tx) {
+      const rates = all.filter(([id, e]) => (!devId || e.device_id === devId) && id.startsWith("sensor.") && st[id].attributes?.device_class === "data_rate");
+      const text = ([id, e]) => `${id} ${e.translation_key || ""} ${st[id].attributes?.friendly_name || ""}`.toLowerCase();
+      roles.rx ||= rates.find((x) => /down|t[ée]l[ée]charg|pobier|r[ée]ception/.test(text(x)))?.[0];
+      roles.tx ||= rates.find((x) => /(^|[^a-z])up|upload|envoi|t[ée]l[ée]vers|wysy|[ée]mission/.test(text(x)) && x[0] !== roles.rx)?.[0];
+    }
+    // entités données dans la configuration : prioritaires
+    for (const role of Object.keys(FBX_ROLE_OPTIONS)) { const id = given(role); if (id) roles[role] = id; }
     // appareils du réseau : suivis par l'intégration (un appareil Home Assistant chacun)
     const trackers = all.filter(([id]) => id.startsWith("device_tracker.")).map(([id]) => id);
     // suivi de la Freebox elle-même (IP publique, uptime, type de connexion), s'il existe
@@ -7269,6 +7289,9 @@ const FBX_SCHEMA = [
   { name: "icon", selector: { icon: {} } },
   { name: "icon_color", selector: { text: {} } },
   { name: "wan_max", selector: { number: { min: 1, max: 100000, mode: "box", unit_of_measurement: "Mbit/s" } } },
+  { name: "download", selector: { entity: { domain: "sensor", integration: "freebox" } } },
+  { name: "upload", selector: { entity: { domain: "sensor", integration: "freebox" } } },
+  { name: "wifi", selector: { entity: { domain: "switch", integration: "freebox" } } },
   { name: "speedtest_download", selector: { entity: { domain: "sensor" } } },
   { name: "speedtest_upload", selector: { entity: { domain: "sensor" } } },
   { name: "speedtest_ping", selector: { entity: { domain: "sensor" } } },
@@ -7289,6 +7312,9 @@ const FBX_LABELS = {
   icon: "Icône",
   icon_color: "Couleur de l'icône",
   wan_max: "Pleine échelle des barres de débit (débit de l'abonnement)",
+  download: "Débit descendant de la Freebox (vide = trouvé seul)",
+  upload: "Débit montant de la Freebox (vide = trouvé seul)",
+  wifi: "Interrupteur Wi-Fi de la Freebox (vide = trouvé seul)",
   speedtest_download: "Test de débit : download (vide = Speedtest trouvé seul)",
   speedtest_upload: "Test de débit : upload",
   speedtest_ping: "Test de débit : ping",
@@ -7304,14 +7330,18 @@ const FBX_LABELS = {
 };
 const ServeurHaFreeboxCardEditor = makeEditor(FBX_SCHEMA, FBX_LABELS, FBX_DEFAULTS, {
   device: "Freebox (Freebox integration device, optional)", title: "Title (Freebox model by default)", icon: "Icon", icon_color: "Icon color",
-  wan_max: "Full scale of the rate bars (subscription speed)", speedtest_download: "Speed test: download (empty = Speedtest found automatically)",
+  wan_max: "Full scale of the rate bars (subscription speed)", download: "Freebox download rate (empty = found automatically)",
+  upload: "Freebox upload rate (empty = found automatically)", wifi: "Freebox Wi-Fi switch (empty = found automatically)",
+  speedtest_download: "Speed test: download (empty = Speedtest found automatically)",
   speedtest_upload: "Speed test: upload", speedtest_ping: "Speed test: ping", show_connection: "Internet section (connection, public IP, type, uptime)",
   show_rates: "Live rates section", show_speedtest: "Speed test section (Speedtest)", show_system: "System section (temperatures, disks, RAID)",
   show_wifi: "Wi-Fi section (turn on or off, two clicks)", show_phone: "Phone section (missed calls)", show_clients: "Connected devices section",
   show_actions: "Restart button (two clicks)", theme: "Card colors",
 }, {
   device: "Freebox (urządzenie integracji Freebox, opcjonalnie)", title: "Tytuł (domyślnie model Freebox)", icon: "Ikona", icon_color: "Kolor ikony",
-  wan_max: "Pełna skala pasków przepustowości", speedtest_download: "Test prędkości: pobieranie (puste = wykryty automatycznie)",
+  wan_max: "Pełna skala pasków przepustowości", download: "Pobieranie Freebox (puste = wykryte automatycznie)",
+  upload: "Wysyłanie Freebox (puste = wykryte automatycznie)", wifi: "Przełącznik Wi-Fi Freebox (puste = wykryty automatycznie)",
+  speedtest_download: "Test prędkości: pobieranie (puste = wykryty automatycznie)",
   speedtest_upload: "Test prędkości: wysyłanie", speedtest_ping: "Test prędkości: ping", show_connection: "Sekcja Internet",
   show_rates: "Sekcja przepustowości", show_speedtest: "Sekcja testu prędkości", show_system: "Sekcja systemu (temperatury, dyski, RAID)",
   show_wifi: "Sekcja Wi-Fi", show_phone: "Sekcja telefonu (nieodebrane połączenia)", show_clients: "Sekcja podłączonych urządzeń",
