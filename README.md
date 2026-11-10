@@ -45,7 +45,7 @@
 | `custom:serveur-ha-linux-card` | **Serveurs Linux** ([Linux Update Dashboard](https://github.com/TheDuffman85/linux-update-dashboard)) : mises à jour en attente, sécurité, paquets, redémarrage requis, installation confirmée en deux clics |
 | `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
 | `custom:serveur-ha-asus-card` | **Routeur ASUS** ([AsusRouter](https://github.com/Vaskivskyi/ha-asusrouter)) : Internet et IP publique, débits, Wi-Fi et réseaux invités, ports Ethernet, appareils connectés, VPN, firmware, températures, redémarrage confirmé en deux clics |
-| `custom:serveur-ha-freebox-card` | **Freebox** (intégration Freebox) : Internet et IP publique, débits, test de débit (Speedtest), températures, disques et RAID, Wi-Fi, appels manqués, appareils connectés, redémarrage confirmé *(bêta)* |
+| `custom:serveur-ha-freebox-card` | **Freebox** (intégration Freebox) : Internet et IP publique, débits, test de débit (Speedtest), températures, disques et RAID, Wi-Fi, appels manqués, appareils connectés, redémarrage confirmé |
 | `custom:serveur-ha-ping-card` | **Réseau** (intégration Ping) : appareils en ligne ou hors ligne, latence, gigue et perte de paquets, groupés par type ou par pièce, groupes dépliables |
 | `custom:serveur-ha-zigbee-card` | **Zigbee et piles** : piles à changer et piles faibles, appareils Zigbee hors ligne, signal faible ou silencieux, état du pont Zigbee2MQTT |
 | `custom:serveur-ha-wireguard-card` | **VPN WireGuard** ([WGDashboard](https://github.com/donaldzou/WGDashboard)) : serveurs, pairs connectés, dernier handshake, données reçues et envoyées |
@@ -400,7 +400,7 @@ wan_max: 500
 latest: 0
 ```
 
-## Carte Freebox — `custom:serveur-ha-freebox-card` *(bêta)*
+## Carte Freebox — `custom:serveur-ha-freebox-card`
 
 Pour la Freebox, avec l'intégration officielle **Freebox** de Home Assistant (**Paramètres › Appareils et services › Ajouter une intégration › Freebox**, puis accepter l'accès sur l'écran de la Freebox). Les capteurs sont trouvés tout seuls.
 
