@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.19.0-beta.2";
+const CARD_VERSION = "0.19.0-beta.3";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -2360,11 +2360,35 @@ class ServeurHaNasCard extends HTMLElement {
         return named(id);
       });
       this._prefix = prefix;
+      // Traceur réseau du NAS : celui de l'appareil, sinon celui qui porte son adresse (adresse de
+      // configuration DSM) ou sa MAC, sinon celui qui porte son nom ; jamais celui d'un autre NAS
+      const low = (t) => String(t || "").trim().toLowerCase();
+      const norm = (t) => low(t).replace(/[^a-z0-9]/g, "");
+      const hostOf = (d) => { try { return d?.configuration_url ? low(new URL(d.configuration_url).hostname) : null; } catch (e) { return null; } };
+      const macsOf = (d) => (d?.connections || []).filter((x) => x[0] === "mac").map((x) => low(x[1]));
+      const hubs = [...new Set([hub, ...devices.filter(isHub)])].filter((d) => devs[d]);
+      const nasOf = hubs.map((d) => ({ d, host: hostOf(devs[d]), macs: macsOf(devs[d]), names: [devs[d].name_by_user, devs[d].name].map(norm).filter(Boolean) }));
+      const score = (id, n) => {
+        const a = hass.states[id]?.attributes || {};
+        const tIp = [a.ip, a.ip_address, a.host].map(low).filter(Boolean);
+        const tName = [a.friendly_name, id.split(".")[1]].map(norm);
+        if (reg[id]?.device_id === n.d) return 4;
+        if (n.host && tIp.includes(n.host)) return 3;
+        if (a.mac && n.macs.includes(low(a.mac))) return 3;
+        if (tName.some((t) => n.names.includes(t))) return 2;
+        return 0;
+      };
+      const trackers = ids.filter((id) => id.startsWith("device_tracker."));
+      const mine = nasOf.find((n) => n.d === hub);
+      const claimed = (id) => nasOf.some((n) => n.d !== hub && score(id, n) > 0);
+      const best = mine && trackers.map((id) => [id, score(id, mine)]).filter(([id, s]) => s > 0 && !(s < 3 && claimed(id))).sort((x, y) => y[1] - x[1])[0];
+      this._tracker = best ? best[0] : trackers.find((id) => id.split(".")[1].startsWith(prefix) && !claimed(id)) || null;
     } else {
       // Sans registre : préfixe donné, ou « diskstation » par défaut
       const prefix = c.prefix || "diskstation";
       pool = ids.filter((id) => id.split(".")[1]?.startsWith(prefix));
       this._prefix = prefix;
+      this._tracker = ids.find((id) => id.startsWith("device_tracker.") && id.includes(prefix)) || null;
     }
     const key = (id) => reg[id]?.translation_key;
     const find = (f, domain = "sensor") => pool.filter((id) => id.startsWith(domain + ".") && (NAS_KEYS[f].includes(key(id)) || (!key(id) && NAS_RE[f].test(id))));
@@ -2381,10 +2405,10 @@ class ServeurHaNasCard extends HTMLElement {
     for (const f of ["drv_bad", "drv_life"]) for (const id of find(f, "binary_sensor")) { const n = numIn(id); drives.set(n, { ...(drives.get(n) || { n }), [f]: id }); }
     map.drives = [...drives.values()].sort((a, b) => a.n - b.n);
     const isFan = (id) => id.startsWith("select.") && /fan|ventil/.test(id);
-    map.fan = c.fan || pool.find(isFan) || ids.find((id) => isFan(id) && id.includes(this._prefix)) || null;
+    map.fan = c.fan || pool.find(isFan) || ids.find((id) => isFan(id) && reg[id]?.platform !== "synology_dsm" && id.includes(this._prefix)) || null;
     // reboot: null dans la configuration masque le bouton ; absent, il est détecté
     map.reboot = Object.prototype.hasOwnProperty.call(c, "reboot") ? c.reboot : (pool.find((id) => id.startsWith("button.") && (key(id) === "reboot" || /_reboot$|_redemarrer$/.test(id))) || null);
-    map.tracker = c.tracker || ids.find((id) => id.startsWith("device_tracker.") && id.includes(this._prefix)) || null;
+    map.tracker = c.tracker || this._tracker || null;
     // Marche / arrêt : bouton « Arrêter » de DSM (shutdown: null le masque) ; allumage par Wake on LAN,
     // prise ou script (power_on), sinon bouton Wake on LAN dont le nom contient celui du NAS
     const has = (k) => Object.prototype.hasOwnProperty.call(c, k);
