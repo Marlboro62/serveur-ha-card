@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.19.0";
+const CARD_VERSION = "0.19.1";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -4142,7 +4142,7 @@ class ServeurHaFreeboxCard extends HTMLElement {
         });
         const raid = m.raid.map((id) => localizeTemplate`<span class="omv-svc ${st(id)?.state === "on" ? "" : "on"}" data-entity="${esc(id)}"><i></i>${st(id)?.state === "on" ? "RAID dégradé" : "RAID OK"}</span>`);
         const res = [...t, ...d].filter(Boolean);
-        system = sec("mdi:information-outline", trLabel("Système"), `${res.length ? localizeTemplate`<div class="srv-grid pve-res">${res.join("")}</div>` : ""}${raid.length ? localizeTemplate`<div class="omv-svcs">${raid.join("")}</div>` : ""}`);
+        system = sec("mdi:information-outline", trLabel("Système"), `${res.length ? localizeTemplate`<div class="srv-grid pve-res">${res.join("")}</div>` : ""}${raid.length ? localizeTemplate`<div class="omv-svcs fbx-raid">${raid.join("")}</div>` : ""}`);
       }
       // --- Wi-Fi
       let wifi = "";
@@ -4190,6 +4190,7 @@ const FBX_STYLE = `<style>
 .fbx-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .fbx-row .pve-btn { flex: none; }
 .fbx-kv { margin-top: 8px; margin-bottom: 0; }
+.srv-grid + .fbx-raid { margin-top: 10px; }
 </style>`;
 
 /* ------------------------------------------------------------ carte Réseau (Ping) */
