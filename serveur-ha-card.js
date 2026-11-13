@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.19.1";
+const CARD_VERSION = "0.20.0-beta.1";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -900,6 +900,7 @@ const PL_EDITOR_LABELS = {
     sort: 'Sortowanie maszyn', hide_stopped: 'Ukryj zatrzymane maszyny',
     show_node: 'Sekcja węzła', show_storage: 'Sekcja dysków', show_guests: 'Sekcja maszyn wirtualnych',
     show_actions: 'Przyciski uruchamiania, zatrzymania i restartu (potwierdzenie drugim kliknięciem)',
+    collapse_guests: 'Sekcja maszyn zwinięta na starcie (przycisk, aby ją rozwinąć)',
   },
   OMV: {
     device: 'Urządzenie integracji OpenMediaVault (opcjonalnie)', title: 'Tytuł (domyślnie OpenMediaVault)',
@@ -2666,6 +2667,7 @@ const PVE_DEFAULTS = {
   hide_stopped: false,
   show_node: true, show_storage: true, show_guests: true, show_actions: true,
   show_ups: true, // section Onduleur, quand un onduleur NUT est trouvé
+  collapse_guests: false, // section Invités repliée au premier affichage
   theme: "v2",
 };
 
@@ -2735,6 +2737,12 @@ class ServeurHaProxmoxCard extends HTMLElement {
         if (tab) {
           this._tab = tab.dataset.tab;
           try { localStorage.setItem(this._tabKey(), JSON.stringify(this._tab)); } catch (e) { /* stockage indisponible */ }
+          this._sig = null; this._render(); return;
+        }
+        if (ev.target.closest?.("[data-fold]")) {
+          // Section Invités : replier / déplier, mémorisé par carte
+          this._guestsOpen = !this._guestsOpen;
+          try { localStorage.setItem(`${this._tabKey()}:guests`, JSON.stringify(this._guestsOpen)); } catch (e) { /* stockage indisponible */ }
           this._sig = null; this._render(); return;
         }
         const press = ev.target.closest?.("[data-press]");
@@ -2903,10 +2911,15 @@ class ServeurHaProxmoxCard extends HTMLElement {
     const c = this._config;
     const m = this._resolve();
     if (this._tab === undefined) { try { this._tab = JSON.parse(localStorage.getItem(this._tabKey()) || "null"); } catch (e) { this._tab = null; } }
+    if (this._guestsOpen === undefined) {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(`${this._tabKey()}:guests`) || "null"); } catch (e) { /* stockage indisponible */ }
+      this._guestsOpen = typeof saved === "boolean" ? saved : !c.collapse_guests;
+    }
     const node = m.nodes.find((n) => n.id === this._tab) || m.nodes[0];
     const ids = [...[...m.nodes, ...m.guests, ...m.storages].flatMap((d) => Object.values(d.roles)), ...Object.values(m.ups || {})];
     // en attendant l'identifiant unique, seule la première série d'un stockage est rattachée à son nœud
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${node?.id}|${this._armed}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${node?.id}|${this._armed}|${this._guestsOpen}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
     if (sig === this._sig) return;
     this._sig = sig;
 
@@ -3011,7 +3024,9 @@ class ServeurHaProxmoxCard extends HTMLElement {
 
       body = tabs + nodeHtml
         + sec("mdi:harddisk", "Stockage", stor.length ? localizeTemplate`<div class="srv-grid pve-res">${stor.join("")}</div>` : "")
-        + sec(node.other ? "mdi:help-circle-outline" : "mdi:cube-outline", localizeTemplate`Invités <small class="pve-n">${node.guests.filter(running).length}/${node.guests.length} en marche</small>`, rows.length ? localizeTemplate`<div class="pve-list">${head}${rows.join("")}</div>` : "")
+        + sec(node.other ? "mdi:help-circle-outline" : "mdi:cube-outline", localizeTemplate`Invités <small class="pve-n">${node.guests.filter(running).length}/${node.guests.length} en marche</small>`,
+          rows.length ? (this._guestsOpen ? localizeTemplate`<div class="pve-list">${head}${rows.join("")}</div>` : `<div class="pve-folded"></div>`) : "",
+          rows.length ? `<button class="pve-fold ${this._guestsOpen ? "on" : ""}" data-fold="guests" aria-expanded="${this._guestsOpen}" title="${esc(trLabel(this._guestsOpen ? "Réduire" : "Déplier"))}" aria-label="${esc(trLabel(this._guestsOpen ? "Réduire" : "Déplier"))}"><ha-icon icon="mdi:chevron-down"></ha-icon></button>` : "")
         + sec("mdi:power-plug-battery-outline", "Onduleur", ups.html)
         + sec("mdi:gesture-tap-button", trLabel("Actions du nœud"), nodeActs.length ? localizeTemplate`<div class="pve-na">${nodeActs.join("")}</div>${guard ? localizeTemplate`<div class="srv-gs pve-guard"><ha-icon icon="mdi:shield-lock-outline"></ha-icon>Redémarrage et arrêt masqués : ce nœud fait tourner Home Assistant.</div>` : ""}` : "");
     }
@@ -3029,6 +3044,13 @@ class ServeurHaProxmoxCard extends HTMLElement {
 }
 
 const PVE_STYLE = `<style>
+.pve-fold { all: unset; cursor: pointer; margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 24px;
+  border-radius: 8px; border: 1px solid var(--med-line); background: var(--med-surface); color: var(--med-muted); --mdc-icon-size: 18px; }
+.pve-fold ha-icon { transition: transform .2s ease; transform: rotate(-90deg); }
+.pve-fold.on ha-icon { transform: none; }
+.pve-fold:hover { color: var(--primary-text-color, inherit); }
+.pve-fold:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
+.pve-folded { display: none; }
 .pve-tabs { display: flex; gap: 6px; padding: 2px 12px 0; overflow-x: auto; scrollbar-width: none; }
 .pve-tab { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; white-space: nowrap;
   border: 1px solid var(--med-line); background: var(--med-surface); font-size: .82rem; font-weight: 600; }
@@ -6866,6 +6888,7 @@ const EN_EDITOR_LABELS = {
     sort: "Guest sorting", hide_stopped: "Hide stopped guests",
     show_node: "Node section", show_storage: "Storage section", show_guests: "Guests section",
     show_actions: "Start, stop and restart buttons (two-click confirmation)",
+    collapse_guests: "Guests section collapsed at first (button to expand it)",
   },
   OMV: {
     device: "OpenMediaVault integration device (optional)", title: "Title (defaults to OpenMediaVault)",
@@ -7183,6 +7206,7 @@ const PVE_SCHEMA = [
   { name: "show_guests", selector: { boolean: {} } },
   { name: "show_actions", selector: { boolean: {} } },
   { name: "show_ups", selector: { boolean: {} } },
+  { name: "collapse_guests", selector: { boolean: {} } },
   { name: "ups_device", selector: { device: { integration: "nut" } } },
   { name: "ups_name", selector: { text: {} } },
   THEME_SELECT,
@@ -7201,6 +7225,7 @@ const PVE_LABELS = {
   show_guests: "Section Invités",
   show_actions: "Boutons démarrer, arrêter, redémarrer (deux clics)",
   show_ups: "Section Onduleur (NUT)",
+  collapse_guests: "Section Invités repliée au départ (bouton pour la déplier)",
   ups_device: "Onduleur (appareil NUT, facultatif)",
   ups_name: "Nom de l'onduleur (facultatif)",
   theme: "Couleurs de la carte",

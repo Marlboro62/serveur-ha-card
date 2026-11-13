@@ -309,6 +309,7 @@ Tout est détecté à partir de l'intégration **Proxmox VE** de Home Assistant 
 | `hide_stopped` | Masquer les invités arrêtés | `false` |
 | `ups_device`, `ups_name`, `ups` | Onduleur NUT (appareil, nom, capteurs) | le premier trouvé |
 | `show_node`, `show_storage`, `show_guests`, `show_actions`, `show_ups` | Afficher chaque section, et les boutons | `true` |
+| `collapse_guests` | Section Invités repliée au premier affichage ; le bouton ⌄ de l'en-tête la replie ou la déplie, et la carte s'en souvient | `false` |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ```yaml
