@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.20.0-beta.1";
+const CARD_VERSION = "0.20.0-beta.2";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -3065,6 +3065,8 @@ const PVE_STYLE = `<style>
 .pve-st.ok { color: var(--med-down); } .pve-st.ok i { background: var(--med-down); }
 .pve-st.bad { color: var(--t-red); } .pve-st.bad i { background: var(--t-red); }
 .pve-res { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin-top: 8px; }
+/* nom de stockage long (omv-proxmox-backup) : passe à la ligne au lieu d'être coupé */
+.pve-res .srv-gt span { white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
 .srv-sec > .pve-res:first-child { margin-top: 0; }
 .pve-n { font-weight: 500; color: var(--med-muted); font-size: .76rem; margin-left: 4px; }
 .pve-list { display: grid; gap: 4px; }
