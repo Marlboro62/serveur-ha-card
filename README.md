@@ -276,6 +276,7 @@ Les entités sont trouvées via l'intégration **Synology DSM**, pour **tous les
 | `temp_warn` / `temp_alert` | Seuils de température | `45` / `55` °C |
 | `navigation_path` | Page ouverte en cliquant sur le titre | — |
 | `show_info`, `show_resources`, `show_thermal`, `show_actions`, `show_network`, `show_ups` | Afficher chaque section | `true` |
+| `collapse_ups` | Section Onduleur repliée au premier affichage ; le bouton ⌄ de l'en-tête la replie ou la déplie, et la carte s'en souvient | `false` |
 | `show_fan` | Afficher le ventilateur (tuile et mode). `false` le masque même s'il est détecté | `true` |
 
 D'autres exemples sont dans [`exemples/`](https://github.com/Marlboro62/serveur-ha-card/blob/main/exemples/).
@@ -310,6 +311,7 @@ Tout est détecté à partir de l'intégration **Proxmox VE** de Home Assistant 
 | `ups_device`, `ups_name`, `ups` | Onduleur NUT (appareil, nom, capteurs) | le premier trouvé |
 | `show_node`, `show_storage`, `show_guests`, `show_actions`, `show_ups` | Afficher chaque section, et les boutons | `true` |
 | `collapse_guests` | Section Invités repliée au premier affichage ; le bouton ⌄ de l'en-tête la replie ou la déplie, et la carte s'en souvient | `false` |
+| `collapse_ups` | Section Onduleur repliée au premier affichage ; le bouton ⌄ de l'en-tête la replie ou la déplie, et la carte s'en souvient | `false` |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ```yaml
@@ -351,6 +353,7 @@ Tout est ensuite détecté :
 | `temp_warn`, `temp_alert` | Seuils de température des disques et du processeur (°C) | `45`, `55` |
 | `ups_device`, `ups_name`, `ups` | Onduleur NUT (appareil, nom, capteurs) | le premier trouvé |
 | `show_system`, `show_storage`, `show_disks`, `show_services`, `show_network`, `show_actions`, `show_ups` | Afficher chaque section, et les boutons | `true` |
+| `collapse_ups` | Section Onduleur repliée au premier affichage ; le bouton ⌄ de l'en-tête la replie ou la déplie, et la carte s'en souvient | `false` |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ```yaml
