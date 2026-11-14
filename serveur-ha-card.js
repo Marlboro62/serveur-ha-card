@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.20.0-beta.2";
+const CARD_VERSION = "0.20.0-beta.3";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -2462,7 +2462,10 @@ class ServeurHaNasCard extends HTMLElement {
 
     // --- en-tête
     const trk = this._st(m.tracker);
-    const online = trk ? trk.state === "home" : this._txt(m.cpu) !== null;
+    // Capteurs DSM à jour : le NAS répond, même si le traceur réseau le croit absent (traceur de box ou de routeur
+    // qui perd un appareil peu bavard) ; sans eux, le traceur décide
+    const dsmLive = [m.cpu, m.ram, m.temperature].some((id) => this._txt(id) !== null);
+    const online = dsmLive || (trk ? trk.state === "home" : false);
     // IP : option ip (adresse ou entité), sinon traceur réseau, sinon adresse de configuration de l'appareil DSM
     const devOf = Object.values(this._hass.devices || {}).find((d) => d.id === this._hass.entities?.[m.cpu]?.device_id);
     const cfgHost = (() => { try { return devOf?.configuration_url ? new URL(devOf.configuration_url).hostname : null; } catch (e) { return null; } })();
