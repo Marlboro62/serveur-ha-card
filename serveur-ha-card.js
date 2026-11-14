@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.20.0-beta.3";
+const CARD_VERSION = "0.20.0-beta.4";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -893,6 +893,7 @@ const PL_EDITOR_LABELS = {
     actions: 'Dodatkowe przełączniki i przyciski (gniazdka, mini-PC…)',
     usb: 'Dyski USB: czujniki procentowego użycia (puste = automatyczne wykrywanie Synology DSM)',
     show_ups: 'Sekcja UPS',
+    collapse_ups: 'Sekcja UPS zwinięta na starcie (przycisk, aby ją rozwinąć)',
   },
   PVE: {
     nodes: 'Widoczne węzły (puste = wszystkie)',
@@ -901,6 +902,7 @@ const PL_EDITOR_LABELS = {
     show_node: 'Sekcja węzła', show_storage: 'Sekcja dysków', show_guests: 'Sekcja maszyn wirtualnych',
     show_actions: 'Przyciski uruchamiania, zatrzymania i restartu (potwierdzenie drugim kliknięciem)',
     collapse_guests: 'Sekcja maszyn zwinięta na starcie (przycisk, aby ją rozwinąć)',
+    collapse_ups: 'Sekcja UPS zwinięta na starcie (przycisk, aby ją rozwinąć)',
   },
   OMV: {
     device: 'Urządzenie integracji OpenMediaVault (opcjonalnie)', title: 'Tytuł (domyślnie OpenMediaVault)',
@@ -910,6 +912,7 @@ const PL_EDITOR_LABELS = {
     show_storage: 'Sekcja systemów plików', show_disks: 'Sekcja dysków (temperatura, SMART)',
     show_services: 'Sekcja usług (NFS, SMB, SSH…)',
     show_actions: 'Przyciski restartu, uśpienia i wyłączenia (potwierdzenie drugim kliknięciem)',
+    collapse_ups: 'Sekcja UPS zwinięta na starcie (przycisk, aby ją rozwinąć)',
   },
   ASUS: {
     device: 'Router (urządzenie integracji AsusRouter, opcjonalnie)',
@@ -1799,6 +1802,12 @@ class ServeurHaCard extends HTMLElement {
 }
 
 const SRV_STYLE = `<style>
+.srv-fold { all: unset; cursor: pointer; margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 24px;
+  border-radius: 8px; border: 1px solid var(--med-line); background: var(--med-surface); color: var(--med-muted); --mdc-icon-size: 18px; }
+.srv-fold ha-icon { transition: transform .2s ease; transform: rotate(-90deg); }
+.srv-fold.on ha-icon { transform: none; }
+.srv-fold:hover { color: var(--primary-text-color, inherit); }
+.srv-fold:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
 ha-card { display: block; padding-bottom: 12px; }
 ha-card.srv-alert { border-color: var(--t-red); }
 .brand .srv-box { fill: none; stroke: var(--med-green); stroke-width: 2.4; }
@@ -2106,6 +2115,7 @@ const NAS_DEFAULTS = {
   net_max: 1000, // Mbit/s, pleine échelle des barres réseau
   temp_warn: 45, temp_alert: 55, // °C, disques et NAS
   show_info: true, show_resources: true, show_thermal: true, show_actions: true, show_network: true, show_ups: true, show_fan: true,
+  collapse_ups: false, // section Onduleur repliée au premier affichage
   theme: "v2",
 };
 
@@ -2184,7 +2194,29 @@ const nutMap = (hass, c) => {
   return out;
 };
 
-/** Section Onduleur (cartes NAS et Proxmox) : état secteur ou batterie, tensions, charge, batterie. */
+/** Sections repliables (Invités, Onduleur) : chevron dans l'en-tête, état mémorisé par carte dans le navigateur,
+ * sinon option collapse_<clé> (repliée au premier affichage). */
+const foldKey = (card, k) => `serveur-ha-fold:${card.localName}:${card._config.title || ""}:${k}`;
+const foldOpen = (card, k) => {
+  card._folds ||= {};
+  if (card._folds[k] === undefined) {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(foldKey(card, k)) || "null"); } catch (e) { /* stockage indisponible */ }
+    card._folds[k] = typeof saved === "boolean" ? saved : card._config[`collapse_${k}`] !== true;
+  }
+  return card._folds[k];
+};
+const foldToggle = (card, k) => {
+  card._folds[k] = !foldOpen(card, k);
+  try { localStorage.setItem(foldKey(card, k), JSON.stringify(card._folds[k])); } catch (e) { /* stockage indisponible */ }
+};
+const foldSec = (card, k, icon, title, body) => {
+  if (!body) return "";
+  const open = foldOpen(card, k), label = esc(trLabel(open ? "Réduire" : "Déplier"));
+  return localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(title)}<button class="srv-fold ${open ? "on" : ""}" data-secfold="${k}" aria-expanded="${open}" title="${label}" aria-label="${label}"><ha-icon icon="mdi:chevron-down"></ha-icon></button></div>${open ? body : ""}</div>`;
+};
+
+/** Section Onduleur (cartes NAS, Proxmox et OpenMediaVault) : état secteur ou batterie, tensions, charge, batterie. */
 const upsBlock = (card, u, c) => {
   if (!Object.keys(u).length) return { html: "", ok: null };
   const st = card._txt(u.status), raw = card._txt(u.status_raw);
@@ -2244,6 +2276,8 @@ class ServeurHaNasCard extends HTMLElement {
       for (const t of ["pointerup", "pointerleave", "pointercancel"]) this.shadowRoot.addEventListener(t, () => clearTimeout(holdTimer));
       this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
         if (this._held) { this._held = false; return; }
+        const sf = ev.target.closest?.("[data-secfold]");
+        if (sf) { foldToggle(this, sf.dataset.secfold); this._sig = null; this._render(); return; }
         const panel = ev.target.closest?.("[data-panel]");
         if (panel) { this._open = !this._open; this._sig = null; this._render(); return; }
         const press = ev.target.closest?.("[data-press]");
@@ -2612,7 +2646,7 @@ class ServeurHaNasCard extends HTMLElement {
       c.show_thermal !== false ? sec("mdi:thermometer-lines", trLabel("Températures et ventilation"), thermal.length ? localizeTemplate`<div class="srv-bk">${thermal.join("")}</div>` : "") : "",
       c.show_actions !== false ? sec("mdi:gesture-tap-button", "Actions", acts.length ? localizeTemplate`<div class="srv-bk">${acts.join("")}</div>` : "") : "",
       c.show_network !== false ? sec("mdi:swap-vertical", trLabel("Débits réseau"), nets.length ? localizeTemplate`<div class="srv-grid">${nets.join("")}</div>` : "") : "",
-      c.show_ups !== false ? sec("mdi:power-plug-battery-outline", "Onduleur", ups) : "",
+      c.show_ups !== false ? foldSec(this, "ups", "mdi:power-plug-battery-outline", "Onduleur", ups) : "",
     ].join("");
 
     const alertCls = online === false || hddOk === false || secOk === false || upsOk === false ? "srv-alert" : "";
@@ -2670,7 +2704,7 @@ const PVE_DEFAULTS = {
   hide_stopped: false,
   show_node: true, show_storage: true, show_guests: true, show_actions: true,
   show_ups: true, // section Onduleur, quand un onduleur NUT est trouvé
-  collapse_guests: false, // section Invités repliée au premier affichage
+  collapse_guests: false, collapse_ups: false, // sections Invités et Onduleur repliées au premier affichage
   theme: "v2",
 };
 
@@ -2742,12 +2776,8 @@ class ServeurHaProxmoxCard extends HTMLElement {
           try { localStorage.setItem(this._tabKey(), JSON.stringify(this._tab)); } catch (e) { /* stockage indisponible */ }
           this._sig = null; this._render(); return;
         }
-        if (ev.target.closest?.("[data-fold]")) {
-          // Section Invités : replier / déplier, mémorisé par carte
-          this._guestsOpen = !this._guestsOpen;
-          try { localStorage.setItem(`${this._tabKey()}:guests`, JSON.stringify(this._guestsOpen)); } catch (e) { /* stockage indisponible */ }
-          this._sig = null; this._render(); return;
-        }
+        const sf = ev.target.closest?.("[data-secfold]");
+        if (sf) { foldToggle(this, sf.dataset.secfold); this._sig = null; this._render(); return; }
         const press = ev.target.closest?.("[data-press]");
         if (press) {
           // Bouton (démarrer, arrêter, redémarrer) : premier clic arme, second clic dans les 5 s confirme
@@ -2914,15 +2944,10 @@ class ServeurHaProxmoxCard extends HTMLElement {
     const c = this._config;
     const m = this._resolve();
     if (this._tab === undefined) { try { this._tab = JSON.parse(localStorage.getItem(this._tabKey()) || "null"); } catch (e) { this._tab = null; } }
-    if (this._guestsOpen === undefined) {
-      let saved = null;
-      try { saved = JSON.parse(localStorage.getItem(`${this._tabKey()}:guests`) || "null"); } catch (e) { /* stockage indisponible */ }
-      this._guestsOpen = typeof saved === "boolean" ? saved : !c.collapse_guests;
-    }
     const node = m.nodes.find((n) => n.id === this._tab) || m.nodes[0];
     const ids = [...[...m.nodes, ...m.guests, ...m.storages].flatMap((d) => Object.values(d.roles)), ...Object.values(m.ups || {})];
     // en attendant l'identifiant unique, seule la première série d'un stockage est rattachée à son nœud
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${node?.id}|${this._armed}|${this._guestsOpen}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${node?.id}|${this._armed}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
     if (sig === this._sig) return;
     this._sig = sig;
 
@@ -3027,10 +3052,9 @@ class ServeurHaProxmoxCard extends HTMLElement {
 
       body = tabs + nodeHtml
         + sec("mdi:harddisk", "Stockage", stor.length ? localizeTemplate`<div class="srv-grid pve-res">${stor.join("")}</div>` : "")
-        + sec(node.other ? "mdi:help-circle-outline" : "mdi:cube-outline", localizeTemplate`Invités <small class="pve-n">${node.guests.filter(running).length}/${node.guests.length} en marche</small>`,
-          rows.length ? (this._guestsOpen ? localizeTemplate`<div class="pve-list">${head}${rows.join("")}</div>` : `<div class="pve-folded"></div>`) : "",
-          rows.length ? `<button class="pve-fold ${this._guestsOpen ? "on" : ""}" data-fold="guests" aria-expanded="${this._guestsOpen}" title="${esc(trLabel(this._guestsOpen ? "Réduire" : "Déplier"))}" aria-label="${esc(trLabel(this._guestsOpen ? "Réduire" : "Déplier"))}"><ha-icon icon="mdi:chevron-down"></ha-icon></button>` : "")
-        + sec("mdi:power-plug-battery-outline", "Onduleur", ups.html)
+        + foldSec(this, "guests", node.other ? "mdi:help-circle-outline" : "mdi:cube-outline", localizeTemplate`Invités <small class="pve-n">${node.guests.filter(running).length}/${node.guests.length} en marche</small>`,
+          rows.length ? localizeTemplate`<div class="pve-list">${head}${rows.join("")}</div>` : "")
+        + foldSec(this, "ups", "mdi:power-plug-battery-outline", "Onduleur", ups.html)
         + sec("mdi:gesture-tap-button", trLabel("Actions du nœud"), nodeActs.length ? localizeTemplate`<div class="pve-na">${nodeActs.join("")}</div>${guard ? localizeTemplate`<div class="srv-gs pve-guard"><ha-icon icon="mdi:shield-lock-outline"></ha-icon>Redémarrage et arrêt masqués : ce nœud fait tourner Home Assistant.</div>` : ""}` : "");
     }
 
@@ -3047,13 +3071,6 @@ class ServeurHaProxmoxCard extends HTMLElement {
 }
 
 const PVE_STYLE = `<style>
-.pve-fold { all: unset; cursor: pointer; margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 24px;
-  border-radius: 8px; border: 1px solid var(--med-line); background: var(--med-surface); color: var(--med-muted); --mdc-icon-size: 18px; }
-.pve-fold ha-icon { transition: transform .2s ease; transform: rotate(-90deg); }
-.pve-fold.on ha-icon { transform: none; }
-.pve-fold:hover { color: var(--primary-text-color, inherit); }
-.pve-fold:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
-.pve-folded { display: none; }
 .pve-tabs { display: flex; gap: 6px; padding: 2px 12px 0; overflow-x: auto; scrollbar-width: none; }
 .pve-tab { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; white-space: nowrap;
   border: 1px solid var(--med-line); background: var(--med-surface); font-size: .82rem; font-weight: 600; }
@@ -3115,6 +3132,7 @@ const OMV_DEFAULTS = {
   temp_warn: 45, temp_alert: 55, // °C, disques et processeur
   show_system: true, show_storage: true, show_disks: true, show_services: true, show_network: true, show_actions: true,
   show_ups: true, // section Onduleur, quand un onduleur NUT est trouvé
+  collapse_ups: false, // section Onduleur repliée au premier affichage
   theme: "v2",
 };
 
@@ -3160,6 +3178,8 @@ class ServeurHaOmvCard extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     if (!this._clicks) {
       this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const sf = ev.target.closest?.("[data-secfold]");
+        if (sf) { foldToggle(this, sf.dataset.secfold); this._sig = null; this._render(); return; }
         const press = ev.target.closest?.("[data-press]");
         if (press) {
           // Redémarrer, éteindre, veille, allumer : premier clic arme, second clic dans les 5 s confirme
@@ -3406,7 +3426,7 @@ class ServeurHaOmvCard extends HTMLElement {
         + sec("mdi:harddisk", "Disques", diskHtml.length ? localizeTemplate`<div class="tiles srv-tiles omv-disks">${diskHtml.join("")}</div>` : "")
         + sec("mdi:cog-outline", localizeTemplate`Services <small class="pve-n">${svc.length ? localizeTextTemplate`${m.hub.services.filter((id) => this._st(id)?.state === "on").length}/${svc.length} en cours` : ""}</small>`, svc.length ? localizeTemplate`<div class="omv-svcs">${svc.join("")}</div>` : "")
         + sec("mdi:swap-vertical", trLabel("Débits réseau"), nets.length ? localizeTemplate`<div class="srv-grid">${nets.join("")}</div>` : "")
-        + sec("mdi:power-plug-battery-outline", "Onduleur", ups.html)
+        + foldSec(this, "ups", "mdi:power-plug-battery-outline", "Onduleur", ups.html)
         + sec("mdi:gesture-tap-button", "Actions", acts.length ? localizeTemplate`<div class="pve-na">${acts.join("")}</div>` : "");
     }
 
@@ -6886,6 +6906,7 @@ const EN_EDITOR_LABELS = {
     actions: "Additional switches and buttons (smart plugs, mini-PCs…)",
     usb: "USB disks: percent used sensors (empty = auto-detect from Synology DSM)",
     show_ups: "UPS section",
+    collapse_ups: "UPS section collapsed at first (button to expand it)",
   },
   PVE: {
     nodes: "Visible nodes (empty = all)",
@@ -6894,6 +6915,7 @@ const EN_EDITOR_LABELS = {
     show_node: "Node section", show_storage: "Storage section", show_guests: "Guests section",
     show_actions: "Start, stop and restart buttons (two-click confirmation)",
     collapse_guests: "Guests section collapsed at first (button to expand it)",
+    collapse_ups: "UPS section collapsed at first (button to expand it)",
   },
   OMV: {
     device: "OpenMediaVault integration device (optional)", title: "Title (defaults to OpenMediaVault)",
@@ -6903,6 +6925,7 @@ const EN_EDITOR_LABELS = {
     show_storage: "File systems section", show_disks: "Disks section (temperature, SMART)",
     show_services: "Services section (NFS, SMB, SSH…)",
     show_actions: "Restart, standby and power-off buttons (two-click confirmation)",
+    collapse_ups: "UPS section collapsed at first (button to expand it)",
   },
   ASUS: {
     device: "Router (AsusRouter integration device, optional)",
@@ -7167,6 +7190,7 @@ const NAS_SCHEMA = [
   { name: "show_actions", selector: { boolean: {} } },
   { name: "show_network", selector: { boolean: {} } },
   { name: "show_ups", selector: { boolean: {} } },
+  { name: "collapse_ups", selector: { boolean: {} } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -7194,6 +7218,7 @@ const NAS_LABELS = {
   show_actions: "Section Actions",
   show_network: "Section Débits réseau",
   show_ups: "Section Onduleur",
+  collapse_ups: "Section Onduleur repliée au départ (bouton pour la déplier)",
   theme: "Couleurs de la carte",
 };
 const ServeurHaNasCardEditor = makeEditor(NAS_SCHEMA, NAS_LABELS, NAS_DEFAULTS, EN_EDITOR_LABELS.NAS, PL_EDITOR_LABELS.NAS);
@@ -7211,6 +7236,7 @@ const PVE_SCHEMA = [
   { name: "show_guests", selector: { boolean: {} } },
   { name: "show_actions", selector: { boolean: {} } },
   { name: "show_ups", selector: { boolean: {} } },
+  { name: "collapse_ups", selector: { boolean: {} } },
   { name: "collapse_guests", selector: { boolean: {} } },
   { name: "ups_device", selector: { device: { integration: "nut" } } },
   { name: "ups_name", selector: { text: {} } },
@@ -7230,6 +7256,7 @@ const PVE_LABELS = {
   show_guests: "Section Invités",
   show_actions: "Boutons démarrer, arrêter, redémarrer (deux clics)",
   show_ups: "Section Onduleur (NUT)",
+  collapse_ups: "Section Onduleur repliée au départ (bouton pour la déplier)",
   collapse_guests: "Section Invités repliée au départ (bouton pour la déplier)",
   ups_device: "Onduleur (appareil NUT, facultatif)",
   ups_name: "Nom de l'onduleur (facultatif)",
@@ -7251,6 +7278,7 @@ const OMV_SCHEMA = [
   { name: "show_network", selector: { boolean: {} } },
   { name: "show_actions", selector: { boolean: {} } },
   { name: "show_ups", selector: { boolean: {} } },
+  { name: "collapse_ups", selector: { boolean: {} } },
   { name: "ups_device", selector: { device: { integration: "nut" } } },
   { name: "ups_name", selector: { text: {} } },
   THEME_SELECT,
@@ -7271,6 +7299,7 @@ const OMV_LABELS = {
   show_network: "Section Débits réseau",
   show_actions: "Boutons redémarrer, veille, éteindre (deux clics)",
   show_ups: "Section Onduleur (NUT)",
+  collapse_ups: "Section Onduleur repliée au départ (bouton pour la déplier)",
   ups_device: "Onduleur (appareil NUT, facultatif)",
   ups_name: "Nom de l'onduleur (facultatif)",
   theme: "Couleurs de la carte",
