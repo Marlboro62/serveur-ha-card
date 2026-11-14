@@ -261,7 +261,7 @@ Les entités sont trouvées via l'intégration **Synology DSM**, pour **tous les
 | `device` | Appareil Synology DSM | le premier trouvé |
 | `prefix` | Préfixe des entités, si le registre ne suffit pas | `diskstation` |
 | `title`, `icon`, `icon_color` | En-tête | nom de l'appareil, `mdi:nas` |
-| `tracker` | `device_tracker` du NAS (adresse IP) | détecté (traceur de l’appareil, sinon celui qui porte l’adresse ou la MAC du NAS, sinon son nom) |
+| `tracker` | `device_tracker` du NAS (adresse IP ; NAS éteint s’il est absent et que les capteurs DSM sont indisponibles) | détecté (traceur de l’appareil, sinon celui qui porte l’adresse ou la MAC du NAS, sinon son nom) |
 | `ip` | Adresse IP du NAS (ex. `192.168.1.20`) ou entité qui la porte | traceur, sinon adresse de l'intégration Synology DSM |
 | `dsm_update` | Entité de mise à jour DSM (`null` pour masquer la tuile) | détectée |
 | `volume_name` | Nom du volume 1 | `Volume 1` |
