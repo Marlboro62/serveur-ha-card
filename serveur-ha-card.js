@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.21.0-beta.2";
+const CARD_VERSION = "0.21.0";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -6783,7 +6783,8 @@ class ServeurHaGithubCard extends HTMLElement {
     const key = `serveur-ha-github-user:${user.toLowerCase()}`;
     const refresh = Math.max(5, Number(this._config.refresh) || 10) * 60000;
     const mem = GH_CACHE[key] || (GH_CACHE[key] = { data: ghStore.get(key), pending: null, until: 0 });
-    const fresh = mem.data && Date.now() - mem.data.at < refresh;
+    // une lecture d'une version précédente (sans la liste des dépôts) est relue tout de suite
+    const fresh = mem.data && Array.isArray(mem.data.list) && Date.now() - mem.data.at < refresh;
     if ((fresh && !force) || mem.pending || Date.now() < mem.until) return;
     mem.pending = (async () => {
       try {
@@ -6880,7 +6881,10 @@ class ServeurHaGithubCard extends HTMLElement {
     if (this._config.show_profile === false) return "";
     const api = GH_CACHE[`serveur-ha-github-user:${user.toLowerCase()}`]?.data || {};
     const ha = this._haProfile(user) || {};
-    const val = (k) => (ha[k] ? ha[k].n : api[k] ?? null);
+    // étoiles : même calcul que la section « Mes dépôts » (sans les dépôts exclus ni archivés)
+    const skip = ghList(this._config.exclude);
+    const stars = Array.isArray(api.list) ? api.list.filter((r) => !skip.includes(r.name.toLowerCase()) && !r.archived).reduce((t, r) => t + r.stars, 0) : api.stars;
+    const val = (k) => (k === "stars" ? stars ?? null : ha[k] ? ha[k].n : api[k] ?? null);
     const u = encodeURIComponent(user);
     const cell = (k, icon, href) => {
       const n = val(k);
