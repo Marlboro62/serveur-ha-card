@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.20.0";
+const CARD_VERSION = "0.21.0-beta.1";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -985,6 +985,7 @@ const PL_EDITOR_LABELS = {
     exclude_authors: 'Autorzy do pominięcia', refresh: 'Sprawdzaj GitHub co (minuty, minimum 5)',
     max_items: 'Maksymalna liczba elementów', expanded: 'Domyślnie rozwiń repozytoria',
     show_labels: 'Etykiety (błąd, propozycja funkcji…)',
+    show_profile: 'Profil konta (obserwujący, obserwowani, repozytoria, gwiazdki, gisty)',
   },
 };
 
@@ -6618,6 +6619,7 @@ const GH_DEFAULTS = {
   max_items: 50, // éléments affichés au plus
   expanded: true, // dépôts dépliés à l'ouverture
   show_labels: true,
+  show_profile: true, // profil du compte : abonnés, abonnements, dépôts publics, étoiles, gists
   theme: "v2",
 };
 
@@ -6698,6 +6700,7 @@ class ServeurHaGithubCard extends HTMLElement {
   async _load(force) {
     const q = this._query();
     if (!q) { this._data = null; this._render(); return; }
+    if (this._config.show_profile !== false) this._loadProfile(force);
     const refresh = Math.max(5, Number(this._config.refresh) || 10) * 60000;
     const key = `serveur-ha-github:${q}`;
     const mem = GH_CACHE[key] || (GH_CACHE[key] = { data: ghStore.get(key), pending: null, until: 0 });
@@ -6742,6 +6745,92 @@ class ServeurHaGithubCard extends HTMLElement {
     this._render();
   }
 
+  /** Capteurs du compte créés par l'intégration GitHub de Home Assistant (appareil au nom du compte :
+   *  abonnés, abonnements, dépôts publics, gists publics ; désactivés par défaut dans l'intégration). */
+  _haProfile(user) {
+    const h = this._hass;
+    if (!h?.entities || !h?.devices) return null;
+    const out = {};
+    for (const e of Object.values(h.entities)) {
+      if (e.platform !== "github" || !e.device_id) continue;
+      const dev = h.devices[e.device_id];
+      if (String(dev?.name_by_user || dev?.name || "").toLowerCase() !== user.toLowerCase()) continue;
+      const id = `${e.translation_key || ""} ${e.entity_id}`.toLowerCase();
+      const k = /following/.test(id) ? "following" : /follower/.test(id) ? "followers" : /gist/.test(id) ? "gists" : /repo/.test(id) ? "repos" : null;
+      const v = Number(h.states[e.entity_id]?.state);
+      if (k && Number.isFinite(v)) out[k] = { n: v, id: e.entity_id };
+    }
+    return Object.keys(out).length ? out : null;
+  }
+
+  /** Profil lu sur GitHub (sans jeton : 60 lectures par heure et par adresse), gardé `refresh` minutes :
+   *  compte (seulement si l'intégration GitHub ne le donne pas) et total des étoiles des dépôts publics. */
+  async _loadProfile(force) {
+    const user = String(this._config.user || "").trim();
+    const key = `serveur-ha-github-user:${user.toLowerCase()}`;
+    const refresh = Math.max(5, Number(this._config.refresh) || 10) * 60000;
+    const mem = GH_CACHE[key] || (GH_CACHE[key] = { data: ghStore.get(key), pending: null, until: 0 });
+    const fresh = mem.data && Date.now() - mem.data.at < refresh;
+    if ((fresh && !force) || mem.pending || Date.now() < mem.until) return;
+    mem.pending = (async () => {
+      try {
+        const get = (path) => fetch(`https://api.github.com/${path}`, { headers: { Accept: "application/vnd.github+json" } });
+        const ha = this._haProfile(user);
+        const [ru, rr] = await Promise.all([
+          ha ? null : get(`users/${encodeURIComponent(user)}`),
+          get(`users/${encodeURIComponent(user)}/repos?type=owner&per_page=100`),
+        ]);
+        const limited = [ru, rr].some((r) => r && (r.status === 403 || r.status === 429));
+        const u = ru && ru.ok ? await ru.json() : null;
+        const repos = rr.ok ? await rr.json() : null;
+        mem.data = {
+          at: Date.now(),
+          followers: u ? Number(u.followers) || 0 : mem.data?.followers ?? null,
+          following: u ? Number(u.following) || 0 : mem.data?.following ?? null,
+          repos: u ? Number(u.public_repos) || 0 : mem.data?.repos ?? null,
+          gists: u ? Number(u.public_gists) || 0 : mem.data?.gists ?? null,
+          // au-delà de 100 dépôts, le total ne compte que les 100 premiers
+          stars: Array.isArray(repos) ? repos.reduce((t, r) => t + (Number(r.stargazers_count) || 0), 0) : mem.data?.stars ?? null,
+        };
+        ghStore.set(key, mem.data);
+        if (limited) mem.until = Date.now() + 600000;
+      } catch (e) {
+        mem.until = Date.now() + 120000;
+      } finally {
+        mem.pending = null;
+      }
+    })();
+    await mem.pending;
+    this._sig = null;
+    this._render();
+  }
+
+  /** Ligne du profil sous l'en-tête : capteurs de l'intégration GitHub en priorité, sinon lecture de GitHub. */
+  _profile(user) {
+    if (this._config.show_profile === false) return "";
+    const api = GH_CACHE[`serveur-ha-github-user:${user.toLowerCase()}`]?.data || {};
+    const ha = this._haProfile(user) || {};
+    const val = (k) => (ha[k] ? ha[k].n : api[k] ?? null);
+    const L = {
+      en: { followers: "followers", following: "following", repos: "public repos", stars: "stars", gists: "public gists" },
+      pl: { followers: "obserwujący", following: "obserwowani", repos: "publiczne repozytoria", stars: "gwiazdki", gists: "publiczne gisty" },
+    }[CURRENT_CARD_LANGUAGE] || { followers: "abonnés", following: "abonnements", repos: "dépôts publics", stars: "étoiles", gists: "gists publics" };
+    const u = encodeURIComponent(user);
+    const cell = (k, icon, href) => {
+      const n = val(k);
+      if (n === null || n === undefined) return "";
+      return `<a class="gh-p" href="${esc(href)}" target="_blank" rel="noopener noreferrer"${ha[k] ? ` title="${esc(ha[k].id)}"` : ""}><ha-icon icon="${icon}"></ha-icon><b>${esc(String(n))}</b><span>${esc(L[k])}</span></a>`;
+    };
+    const cells = [
+      cell("followers", "mdi:account-multiple", `https://github.com/${u}?tab=followers`),
+      cell("following", "mdi:account-arrow-right", `https://github.com/${u}?tab=following`),
+      cell("repos", "mdi:source-repository", `https://github.com/${u}?tab=repositories`),
+      cell("stars", "mdi:star-outline", `https://github.com/${u}?tab=repositories&sort=stargazers`),
+      cell("gists", "mdi:code-braces", `https://gist.github.com/${u}`),
+    ].join("");
+    return cells ? `<div class="gh-prof">${cells}</div>` : "";
+  }
+
   _render() {
     if (!this._config || !this.shadowRoot) return;
     const c = this._config, q = this._query();
@@ -6755,7 +6844,8 @@ class ServeurHaGithubCard extends HTMLElement {
       : typeof errorData === "string" ? errorData : null;
     const d = this._data;
     const seen = Number(ghStore.get(this._seenKey())) || 0;
-    const sig = `${c.theme}|${this._hass?.themes?.darkMode}|${d?.at}|${err}|${seen}|${[...(this._open || [])].join(",")}|${Math.floor(Date.now() / 60000)}`;
+    const profSig = q && c.show_profile !== false ? `${GH_CACHE[`serveur-ha-github-user:${String(c.user).trim().toLowerCase()}`]?.data?.at}:${JSON.stringify(this._haProfile(String(c.user).trim()))}` : "";
+    const sig = `${c.theme}|${this._hass?.themes?.darkMode}|${d?.at}|${profSig}|${err}|${seen}|${[...(this._open || [])].join(",")}|${Math.floor(Date.now() / 60000)}`;
     if (sig === this._sig) return;
     this._sig = sig;
 
@@ -6829,6 +6919,7 @@ class ServeurHaGithubCard extends HTMLElement {
           <div><div class="title">${esc(c.title || "GitHub")}</div><div class="sub">${user ? localizeTemplate`<a href="https://github.com/${esc(user)}" target="_blank" rel="noopener noreferrer">${esc(user)}</a>` : trLabel("Issues et pull requests")}</div></div></div>
         ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
       </header>
+      ${q ? this._profile(user) : ""}
       ${body}
     </ha-card>`;
   }
@@ -6856,6 +6947,12 @@ const GH_STYLE = `<style>
 .gh-f { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 12px 12px; font-size: .7rem; color: var(--med-muted); }
 .gh-f button { font: inherit; font-size: .72rem; color: var(--med-text); background: var(--med-surface); border: 1px solid var(--med-line); border-radius: 999px; padding: 4px 10px; cursor: pointer; margin-left: 6px; }
 .gh-f button:hover { border-color: var(--med-accent, var(--med-blue)); }
+.gh-prof { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px; }
+.gh-p { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; text-decoration: none; color: var(--med-muted);
+  border: 1px solid var(--med-line); background: var(--med-surface); font-size: .72rem; white-space: nowrap; }
+.gh-p:hover { border-color: var(--med-accent, var(--med-blue)); }
+.gh-p ha-icon { --mdc-icon-size: 15px; color: var(--med-accent, var(--med-blue)); }
+.gh-p b { color: var(--med-text); font-size: .8rem; }
 </style>`;
 
 /* ----------------------------------------------------------------- éditeur */
@@ -6998,6 +7095,7 @@ const EN_EDITOR_LABELS = {
     exclude_authors: "Authors to ignore", refresh: "Check GitHub every (minutes, minimum 5)",
     max_items: "Maximum displayed items", expanded: "Expand repositories by default",
     show_labels: "Labels (bug, feature request…)",
+    show_profile: "Account profile (followers, following, repositories, stars, gists)",
   },
 };
 const LANGUAGE_SELECT = {
@@ -7622,6 +7720,7 @@ const GH_SCHEMA = [
   { name: "max_items", selector: { number: { min: 5, max: 100, step: 5, mode: "box" } } },
   { name: "expanded", selector: { boolean: {} } },
   { name: "show_labels", selector: { boolean: {} } },
+  { name: "show_profile", selector: { boolean: {} } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -7639,6 +7738,7 @@ const GH_LABELS = {
   max_items: "Nombre d'éléments affichés au plus",
   expanded: "Dépôts dépliés à l'ouverture",
   show_labels: "Étiquettes (bug, demande…)",
+  show_profile: "Profil du compte (abonnés, abonnements, dépôts publics, étoiles, gists)",
   theme: "Couleurs de la carte",
 };
 const ServeurHaGithubCardEditor = makeEditor(GH_SCHEMA, GH_LABELS, GH_DEFAULTS, EN_EDITOR_LABELS.GH, PL_EDITOR_LABELS.GH);
