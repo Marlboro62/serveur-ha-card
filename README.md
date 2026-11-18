@@ -538,6 +538,7 @@ Sans jeton, GitHub accepte **10 recherches par minute** depuis une même adresse
 | `max_items` | Nombre d'éléments affichés au plus | `50` |
 | `expanded` | Dépôts dépliés à l'ouverture (sinon, seuls ceux avec du nouveau) | `true` |
 | `show_labels` | Étiquettes des issues | `true` |
+| `show_profile` | Ligne du profil sous l'en-tête : abonnés, abonnements, dépôts publics, étoiles et gists publics. Les capteurs de l'[intégration GitHub](https://www.home-assistant.io/integrations/github) de Home Assistant sont utilisés s'ils sont activés (appareil au nom du compte), sinon la carte lit GitHub | `true` |
 | `title`, `icon`, `icon_color`, `theme` | En-tête et couleurs | `GitHub`, `mdi:github`, `v2` |
 
 ```yaml
