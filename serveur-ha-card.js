@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.21.0";
+const CARD_VERSION = "0.21.1-beta.1";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -178,7 +178,7 @@ const EN_TEXT = {
   "Historique": "History", "Dernier": "Last", "Dernière": "Last",
   "Base de données": "Database", "Certificat SSL": "SSL certificate",
   "expire le": "expires on", "expiré": "expired", "encore": "remaining",
-  "installation…": "installing…", "disponible": "available",
+  "installation…": "installing…", "disponible": "available", "ignorée": "skipped",
   "sur": "of", "depuis": "since", "il y a": "ago", "dans": "in",
   "moins d'une minute": "less than a minute", "j": "d", "Go": "GB", "To": "TB", "Mo": "MB",
   "n°": "#",
@@ -661,6 +661,7 @@ const PL_TEXT = {
   "encore": "pozostało",
   "installation…": "instalowanie…",
   "disponible": "dostępna",
+  "ignorée": "pominięta",
   "sur": "z",
   "depuis": "od",
   "il y a": "temu",
@@ -1988,19 +1989,23 @@ class ServeurHaMajCard extends HTMLElement {
     const m = this._resolve();
     const watch = [...Object.values(m.system), m.database, m.ssl, ...m.apps.map((a) => a.entity)];
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|${new Date().toDateString()}|` +
-      watch.map((id) => { const s = this._st(id); return s ? `${s.state}${s.attributes?.installed_version}${s.attributes?.in_progress}` : "-"; }).join("|");
+      watch.map((id) => { const s = this._st(id); return s ? `${s.state}${s.attributes?.installed_version}${s.attributes?.in_progress}${s.attributes?.latest_version}${s.attributes?.skipped_version}` : "-"; }).join("|");
     if (sig === this._sig) return;
     this._sig = sig;
 
     const ver = (s) => s?.attributes?.installed_version || null;
     const latest = (s) => s?.attributes?.latest_version || null;
     const core = this._st(m.system.core);
+    // version disponible ignorée (bouton « Ignorer ») : Home Assistant met l'entité à « off », mais la carte le montre
+    const skipped = (s) => !!latest(s) && s?.attributes?.skipped_version === latest(s) && latest(s) !== ver(s);
+    // mise à jour disponible : état « on », ou versions installée et disponible différentes sans être ignorée
+    const pending = (s) => s?.state === "on" || (!!latest(s) && !!ver(s) && latest(s) !== ver(s) && !skipped(s));
 
-    // Voyants de l'en-tête : vert = à jour, orange = mise à jour disponible, gris = inconnu
+    // Voyants de l'en-tête : vert = à jour, orange = mise à jour disponible (ou ignorée), gris = inconnu
     const led = (label, id) => {
       const s = this._st(id);
       if (!s) return "";
-      const cls = s.state === "on" ? "upd" : s.state === "off" ? "ok" : "na";
+      const cls = pending(s) || skipped(s) ? "upd" : s.state === "off" ? "ok" : "na";
       return localizeTemplate`<span class="srv-led ${cls}" data-entity="${esc(id)}"><i></i>${label}</span>`;
     };
     const leds = MAJ_SYSTEM.map((x) => led(x.label.replace("HA ", ""), m.system[x.id])).join("");
@@ -2009,12 +2014,13 @@ class ServeurHaMajCard extends HTMLElement {
     const sysTiles = MAJ_SYSTEM.map((x) => {
       const s = this._st(m.system[x.id]);
       if (!s) return "";
-      const on = s.state === "on";
+      const on = pending(s);
+      const skip = !on && skipped(s);
       const busy = s.attributes?.in_progress;
-      return localizeTemplate`<div class="tile maj-sys ${on ? "upd" : ""}" data-entity="${esc(m.system[x.id])}">
+      return localizeTemplate`<div class="tile maj-sys ${on || skip ? "upd" : ""}" data-entity="${esc(m.system[x.id])}">
         <div class="tile-l">${x.label}</div>
         <div class="maj-v">${esc(ver(s) || "—")}</div>
-        <div class="tile-n">${busy ? "installation…" : on ? localizeTemplate`→ <b>${esc(latest(s) || "?")}</b> disponible` : trLabel("à jour")}</div>
+        <div class="tile-n">${busy ? "installation…" : on ? localizeTemplate`→ <b>${esc(latest(s) || "?")}</b> disponible` : skip ? localizeTemplate`→ <b>${esc(latest(s))}</b> ignorée` : trLabel("à jour")}</div>
       </div>`;
     }).filter(Boolean);
 
