@@ -21,7 +21,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.21.0-beta.1";
+const CARD_VERSION = "0.21.0-beta.2";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -986,6 +986,7 @@ const PL_EDITOR_LABELS = {
     max_items: 'Maksymalna liczba elementów', expanded: 'Domyślnie rozwiń repozytoria',
     show_labels: 'Etykiety (błąd, propozycja funkcji…)',
     show_profile: 'Profil konta (obserwujący, obserwowani, repozytoria, gwiazdki, gisty)',
+    show_repos: 'Sekcja „Moje repozytoria” (gwiazdki, forki, wersja i pobrania przez integrację GitHub)',
   },
 };
 
@@ -6620,6 +6621,7 @@ const GH_DEFAULTS = {
   expanded: true, // dépôts dépliés à l'ouverture
   show_labels: true,
   show_profile: true, // profil du compte : abonnés, abonnements, dépôts publics, étoiles, gists
+  show_repos: true, // section repliable « Mes dépôts » : étoiles, forks, et version / téléchargements via l'intégration GitHub
   theme: "v2",
 };
 
@@ -6631,6 +6633,17 @@ const ghStore = {
   get(k) { try { return JSON.parse(window.localStorage.getItem(k) || "null"); } catch (e) { return null; } },
   set(k, v) { try { window.localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* stockage indisponible */ } },
 };
+
+/** Libellés propres au profil et à la liste des dépôts (français, anglais, polonais). */
+const GH_TXT = {
+  fr: { followers: "abonnés", following: "abonnements", repos: "dépôts publics", stars: "étoiles", gists: "gists publics",
+    mine: "Mes dépôts", forks: "forks", dl: "téléchargements", updated: "mis à jour", fork: "copie" },
+  en: { followers: "followers", following: "following", repos: "public repos", stars: "stars", gists: "public gists",
+    mine: "My repositories", forks: "forks", dl: "downloads", updated: "updated", fork: "fork" },
+  pl: { followers: "obserwujący", following: "obserwowani", repos: "publiczne repozytoria", stars: "gwiazdki", gists: "publiczne gisty",
+    mine: "Moje repozytoria", forks: "forki", dl: "pobrania", updated: "aktualizacja", fork: "fork" },
+};
+const ghTxt = (k) => (GH_TXT[CURRENT_CARD_LANGUAGE] || GH_TXT.fr)[k];
 
 class ServeurHaGithubCard extends HTMLElement {
   static getConfigElement() {
@@ -6700,7 +6713,7 @@ class ServeurHaGithubCard extends HTMLElement {
   async _load(force) {
     const q = this._query();
     if (!q) { this._data = null; this._render(); return; }
-    if (this._config.show_profile !== false) this._loadProfile(force);
+    if (this._config.show_profile !== false || this._config.show_repos !== false) this._loadProfile(force);
     const refresh = Math.max(5, Number(this._config.refresh) || 10) * 60000;
     const key = `serveur-ha-github:${q}`;
     const mem = GH_CACHE[key] || (GH_CACHE[key] = { data: ghStore.get(key), pending: null, until: 0 });
@@ -6791,6 +6804,10 @@ class ServeurHaGithubCard extends HTMLElement {
           gists: u ? Number(u.public_gists) || 0 : mem.data?.gists ?? null,
           // au-delà de 100 dépôts, le total ne compte que les 100 premiers
           stars: Array.isArray(repos) ? repos.reduce((t, r) => t + (Number(r.stargazers_count) || 0), 0) : mem.data?.stars ?? null,
+          list: Array.isArray(repos) ? repos.map((r) => ({
+            name: String(r.name || ""), url: String(r.html_url || ""), stars: Number(r.stargazers_count) || 0, forks: Number(r.forks_count) || 0,
+            pushed: r.pushed_at, fork: !!r.fork, archived: !!r.archived,
+          })) : mem.data?.list ?? null,
         };
         ghStore.set(key, mem.data);
         if (limited) mem.until = Date.now() + 600000;
@@ -6805,21 +6822,70 @@ class ServeurHaGithubCard extends HTMLElement {
     this._render();
   }
 
+  /** Dépôts suivis par l'intégration GitHub de Home Assistant (un appareil par dépôt, nommé « compte/dépôt ») :
+   *  dernière version et téléchargements de ses fichiers joints, par nom de dépôt. */
+  _haRepos(user) {
+    const h = this._hass, out = {};
+    if (!h?.entities || !h?.devices) return out;
+    for (const e of Object.values(h.entities)) {
+      if (e.platform !== "github" || !e.device_id) continue;
+      const name = String(h.devices[e.device_id]?.name || "");
+      const m = /^([^/\s]+)\/([^/\s]+)$/.exec(name);
+      if (!m || m[1].toLowerCase() !== user.toLowerCase()) continue;
+      const repo = (out[m[2].toLowerCase()] ||= {});
+      const id = `${e.translation_key || ""} ${e.entity_id}`.toLowerCase();
+      const st = h.states[e.entity_id];
+      if (!st || ["unknown", "unavailable"].includes(st.state)) continue;
+      if (/download/.test(id)) { const v = Number(st.state); if (Number.isFinite(v)) repo.downloads = v; }
+      else if (/latest_release/.test(id)) repo.version = st.attributes?.tag || st.state;
+    }
+    return out;
+  }
+
+  /** Section repliable « Mes dépôts » : étoiles, forks, dernière activité ; version et téléchargements si
+   *  l'intégration GitHub suit le dépôt. Les dépôts exclus (option exclude) ne sont pas listés. */
+  _repoList(user) {
+    if (this._config.show_repos === false) return "";
+    const list = GH_CACHE[`serveur-ha-github-user:${user.toLowerCase()}`]?.data?.list;
+    if (!Array.isArray(list) || !list.length) return "";
+    const skip = ghList(this._config.exclude), ha = this._haRepos(user);
+    const repos = list.filter((r) => !skip.includes(r.name.toLowerCase()) && !r.archived)
+      .sort((a, b) => b.stars - a.stars || new Date(b.pushed) - new Date(a.pushed));
+    if (!repos.length) return "";
+    const open = this._open?.has("__depots");
+    const total = repos.reduce((t, r) => t + r.stars, 0);
+    const rows = repos.map((r) => {
+      const x = ha[r.name.toLowerCase()] || {};
+      const meta = [
+        x.version ? esc(x.version) : "",
+        Number.isFinite(x.downloads) ? `${x.downloads} ${ghTxt("dl")}` : "",
+        r.fork ? ghTxt("fork") : "",
+        r.pushed ? `${ghTxt("updated")} ${esc(relativeAgo(r.pushed) || "")}` : "",
+      ].filter(Boolean).join(" · ");
+      return `<a class="gh-r" href="${esc(/^https:\/\/github\.com\//.test(r.url) ? r.url : "#")}" target="_blank" rel="noopener noreferrer">
+        <div class="gh-t"><span>${esc(r.name)}</span>${meta ? `<small>${meta}</small>` : ""}</div>
+        <span class="gh-rs" title="${esc(ghTxt("stars"))}"><ha-icon icon="mdi:star-outline"></ha-icon>${r.stars}</span>
+        <span class="gh-rs" title="${esc(ghTxt("forks"))}"><ha-icon icon="mdi:source-fork"></ha-icon>${r.forks}</span>
+      </a>`;
+    }).join("");
+    return `<div class="srv-sec gh-mine"><div class="ping-g ${open ? "open" : ""}">
+      <button class="ping-gh" data-fold="__depots" aria-expanded="${!!open}"><ha-icon icon="mdi:source-repository-multiple"></ha-icon><span class="ping-gl">${esc(ghTxt("mine"))}</span>
+        <span class="gh-sp"></span><b>${repos.length}</b><span class="gh-rs"><ha-icon icon="mdi:star-outline"></ha-icon>${total}</span><ha-icon class="ping-chev" icon="${open ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button>
+      ${open ? `<div class="gh-list">${rows}</div>` : ""}
+    </div></div>`;
+  }
+
   /** Ligne du profil sous l'en-tête : capteurs de l'intégration GitHub en priorité, sinon lecture de GitHub. */
   _profile(user) {
     if (this._config.show_profile === false) return "";
     const api = GH_CACHE[`serveur-ha-github-user:${user.toLowerCase()}`]?.data || {};
     const ha = this._haProfile(user) || {};
     const val = (k) => (ha[k] ? ha[k].n : api[k] ?? null);
-    const L = {
-      en: { followers: "followers", following: "following", repos: "public repos", stars: "stars", gists: "public gists" },
-      pl: { followers: "obserwujący", following: "obserwowani", repos: "publiczne repozytoria", stars: "gwiazdki", gists: "publiczne gisty" },
-    }[CURRENT_CARD_LANGUAGE] || { followers: "abonnés", following: "abonnements", repos: "dépôts publics", stars: "étoiles", gists: "gists publics" };
     const u = encodeURIComponent(user);
     const cell = (k, icon, href) => {
       const n = val(k);
       if (n === null || n === undefined) return "";
-      return `<a class="gh-p" href="${esc(href)}" target="_blank" rel="noopener noreferrer"${ha[k] ? ` title="${esc(ha[k].id)}"` : ""}><ha-icon icon="${icon}"></ha-icon><b>${esc(String(n))}</b><span>${esc(L[k])}</span></a>`;
+      return `<a class="gh-p" href="${esc(href)}" target="_blank" rel="noopener noreferrer"${ha[k] ? ` title="${esc(ha[k].id)}"` : ""}><b><ha-icon icon="${icon}"></ha-icon>${esc(String(n))}</b><span>${esc(ghTxt(k))}</span></a>`;
     };
     const cells = [
       cell("followers", "mdi:account-multiple", `https://github.com/${u}?tab=followers`),
@@ -6844,7 +6910,7 @@ class ServeurHaGithubCard extends HTMLElement {
       : typeof errorData === "string" ? errorData : null;
     const d = this._data;
     const seen = Number(ghStore.get(this._seenKey())) || 0;
-    const profSig = q && c.show_profile !== false ? `${GH_CACHE[`serveur-ha-github-user:${String(c.user).trim().toLowerCase()}`]?.data?.at}:${JSON.stringify(this._haProfile(String(c.user).trim()))}` : "";
+    const profSig = q && c.show_profile !== false ? `${GH_CACHE[`serveur-ha-github-user:${String(c.user).trim().toLowerCase()}`]?.data?.at}:${JSON.stringify(this._haProfile(String(c.user).trim()))}:${JSON.stringify(this._haRepos(String(c.user).trim()))}` : "";
     const sig = `${c.theme}|${this._hass?.themes?.darkMode}|${d?.at}|${profSig}|${err}|${seen}|${[...(this._open || [])].join(",")}|${Math.floor(Date.now() / 60000)}`;
     if (sig === this._sig) return;
     this._sig = sig;
@@ -6909,6 +6975,7 @@ class ServeurHaGithubCard extends HTMLElement {
           <div><b>${repos.length}</b><span>${ghCount("repo", repos.length)}</span></div>
         </div>
         ${items.length ? localizeTemplate`<div class="srv-sec ping-groups">${groups}</div>` : localizeTemplate`<div class="empty gh-ok"><ha-icon icon="mdi:check-circle-outline"></ha-icon>Rien d'ouvert : tout est traité.</div>`}
+        ${this._repoList(user)}
         <div class="gh-f"><span>${err ? `${esc(err)} · ` : ""}Lu ${Date.now() - d.at < 60000 ? trLabel("à l'instant") : esc(ago(new Date(d.at).toISOString()))}</span>
           <span>${nNew ? localizeTemplate`<button data-act="seen">Tout marquer comme vu</button>` : ""}<button data-act="reload" title="Relire maintenant">Actualiser</button></span></div>`;
     }
@@ -6947,12 +7014,20 @@ const GH_STYLE = `<style>
 .gh-f { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 12px 12px; font-size: .7rem; color: var(--med-muted); }
 .gh-f button { font: inherit; font-size: .72rem; color: var(--med-text); background: var(--med-surface); border: 1px solid var(--med-line); border-radius: 999px; padding: 4px 10px; cursor: pointer; margin-left: 6px; }
 .gh-f button:hover { border-color: var(--med-accent, var(--med-blue)); }
-.gh-prof { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px; }
-.gh-p { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; text-decoration: none; color: var(--med-muted);
-  border: 1px solid var(--med-line); background: var(--med-surface); font-size: .72rem; white-space: nowrap; }
+.gh-prof { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 6px; margin: 0 12px 8px; }
+.gh-p { display: grid; justify-items: center; gap: 2px; padding: 7px 4px; border-radius: 12px; text-decoration: none; color: var(--med-muted);
+  border: 1px solid var(--med-line); background: var(--med-surface); min-width: 0; }
 .gh-p:hover { border-color: var(--med-accent, var(--med-blue)); }
+.gh-p b { display: inline-flex; align-items: center; gap: 4px; color: var(--med-text); font-size: 1rem; }
 .gh-p ha-icon { --mdc-icon-size: 15px; color: var(--med-accent, var(--med-blue)); }
-.gh-p b { color: var(--med-text); font-size: .8rem; }
+.gh-p span { font-size: .66rem; text-align: center; line-height: 1.2; }
+.gh-mine { margin-top: 8px; }
+.gh-sp { flex: 1; }
+.gh-r { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 10px; text-decoration: none; color: inherit;
+  border: 1px solid var(--med-line); background: var(--med-surface); min-width: 0; }
+.gh-r:hover { border-color: var(--med-accent, var(--med-blue)); }
+.gh-rs { display: inline-flex; align-items: center; gap: 3px; font-size: .74rem; color: var(--med-muted); white-space: nowrap; }
+.gh-rs ha-icon { --mdc-icon-size: 14px; }
 </style>`;
 
 /* ----------------------------------------------------------------- éditeur */
@@ -7096,6 +7171,7 @@ const EN_EDITOR_LABELS = {
     max_items: "Maximum displayed items", expanded: "Expand repositories by default",
     show_labels: "Labels (bug, feature request…)",
     show_profile: "Account profile (followers, following, repositories, stars, gists)",
+    show_repos: "“My repositories” section (stars, forks, version and downloads through the GitHub integration)",
   },
 };
 const LANGUAGE_SELECT = {
@@ -7721,6 +7797,7 @@ const GH_SCHEMA = [
   { name: "expanded", selector: { boolean: {} } },
   { name: "show_labels", selector: { boolean: {} } },
   { name: "show_profile", selector: { boolean: {} } },
+  { name: "show_repos", selector: { boolean: {} } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -7739,6 +7816,7 @@ const GH_LABELS = {
   expanded: "Dépôts dépliés à l'ouverture",
   show_labels: "Étiquettes (bug, demande…)",
   show_profile: "Profil du compte (abonnés, abonnements, dépôts publics, étoiles, gists)",
+  show_repos: "Section « Mes dépôts » (étoiles, forks ; version et téléchargements par l'intégration GitHub)",
   theme: "Couleurs de la carte",
 };
 const ServeurHaGithubCardEditor = makeEditor(GH_SCHEMA, GH_LABELS, GH_DEFAULTS, EN_EDITOR_LABELS.GH, PL_EDITOR_LABELS.GH);

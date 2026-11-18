@@ -539,6 +539,7 @@ Sans jeton, GitHub accepte **10 recherches par minute** depuis une même adresse
 | `expanded` | Dépôts dépliés à l'ouverture (sinon, seuls ceux avec du nouveau) | `true` |
 | `show_labels` | Étiquettes des issues | `true` |
 | `show_profile` | Ligne du profil sous l'en-tête : abonnés, abonnements, dépôts publics, étoiles et gists publics. Les capteurs de l'[intégration GitHub](https://www.home-assistant.io/integrations/github) de Home Assistant sont utilisés s'ils sont activés (appareil au nom du compte), sinon la carte lit GitHub | `true` |
+| `show_repos` | Section repliable « Mes dépôts » : chaque dépôt public avec ses étoiles, ses forks et sa dernière activité, triés par étoiles. Pour les dépôts suivis par l'intégration GitHub de Home Assistant, la dernière version et les téléchargements de ses fichiers joints s'ajoutent (GitHub ne compte que les fichiers joints aux releases). Les dépôts de `exclude` ne sont pas listés | `true` |
 | `title`, `icon`, `icon_color`, `theme` | En-tête et couleurs | `GitHub`, `mdi:github`, `v2` |
 
 ```yaml
