@@ -12,7 +12,7 @@ A collection of **14 independent Home Assistant Lovelace cards in one JavaScript
 | --- | --- |
 | `custom:serveur-ha-card` | Home Assistant host / Raspberry Pi / mini-PC: CPU, temperature, RAM, disks, network, uptime, fan, power supply and backups |
 | `custom:serveur-ha-maj-card` | Home Assistant: Core, Supervisor, OS and add-on updates, database size and SSL certificate expiry |
-| `custom:serveur-ha-nas-card` | Synology NAS: volumes, SMART / disk health, CPU, RAM, temperatures, fan, network, power actions and UPS |
+| `custom:serveur-ha-nas-card` | Synology NAS: volumes, SMART / disk health, CPU, RAM, temperatures, fan, network, power actions, UPS and Home Assistant backups stored on the NAS |
 | `custom:serveur-ha-dns-card` | AdGuard Home and Pi-hole: DNS requests, blocking percentage, response times, protection, switches, pauses and updates |
 | `custom:serveur-ha-linux-card` | Linux Update Dashboard: outstanding system/security updates, pending packages, reboot status and confirmed updates |
 | `custom:serveur-ha-proxmox-card` | Proxmox VE: nodes, storage, VMs, LXC containers, updates and confirmed power actions |
@@ -22,7 +22,7 @@ A collection of **14 independent Home Assistant Lovelace cards in one JavaScript
 | `custom:serveur-ha-wireguard-card` | WireGuard WGDashboard: servers, connected peers, handshakes, traffic received and sent |
 | `custom:serveur-ha-glances-card` | Glances: host CPU, RAM, disks, temperatures, fans, network and processes |
 | `custom:serveur-ha-media-card` | Plex, Jellyfin and Emby: current playback, active players, player controls, media libraries and server updates |
-| `custom:serveur-ha-omv-card` | OpenMediaVault: uptime, CPU, RAM, disks and SMART health, file systems, services, network and power actions |
+| `custom:serveur-ha-omv-card` | OpenMediaVault: uptime, CPU, RAM, disks and SMART health, file systems, services, network, power actions and Home Assistant backups stored on the NAS |
 | `custom:serveur-ha-github-card` | GitHub (beta): open issues and pull requests by repository; indicates newly created items |
 
 The separate OPNsense card has moved to its own repository: [opnsense-card](https://github.com/Marlboro62/opnsense-card). The old tag displays a migration message.

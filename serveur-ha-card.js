@@ -22,7 +22,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.22.0-beta.2";
+const CARD_VERSION = "0.23.0-beta.1";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -83,6 +83,9 @@ const EN_TEXT = {
   "Mise à jour": "Update", "Mises à jour": "Updates", "Mises à jour système": "System updates",
   "Redémarrage requis": "Restart required", "redémarrage requis": "restart required",
   "Redémarrages": "Restarts", "Réparations": "Repairs", "Voir toutes les réparations": "See all repairs",
+  "Sauvegardes HA": "HA backups", "Sur le NAS": "On the NAS", "Espace": "Space", "Partage": "Share", "Monté": "Mounted",
+  "Non monté": "Not mounted", "Manuelle": "Manual", "Automatique": "Automatic", "Il y a": "Age", "Taille": "Size",
+  "Aucune sauvegarde": "No backup",
   "en 24 h": "in 24 h", "en 7 jours": "in 7 days", "7 jours": "7 days", "Redémarrages de Home Assistant": "Home Assistant restarts",
   "À jour": "Up to date", "à jour": "up to date", "À installer": "Pending installation",
   "Applications": "Applications", "Application": "Application", "Détails": "Details",
@@ -409,6 +412,17 @@ const PL_TEXT = {
   "Redémarrages": "Ponowne uruchomienia",
   "Réparations": "Naprawy",
   "Voir toutes les réparations": "Zobacz wszystkie naprawy",
+  "Sauvegardes HA": "Kopie zapasowe HA",
+  "Sur le NAS": "Na NAS",
+  "Espace": "Miejsce",
+  "Partage": "Udział",
+  "Monté": "Zamontowany",
+  "Non monté": "Niezamontowany",
+  "Manuelle": "Ręczna",
+  "Automatique": "Automatyczna",
+  "Il y a": "Wiek",
+  "Taille": "Rozmiar",
+  "Aucune sauvegarde": "Brak kopii zapasowej",
   "en 24 h": "w 24 h",
   "en 7 jours": "w 7 dni",
   "7 jours": "7 dni",
@@ -906,6 +920,8 @@ const PL_EDITOR_LABELS = {
     usb: 'Dyski USB: czujniki procentowego użycia (puste = automatyczne wykrywanie Synology DSM)',
     show_ups: 'Sekcja UPS',
     collapse_ups: 'Sekcja UPS zwinięta na starcie (przycisk, aby ją rozwinąć)',
+    show_backups: 'Kopie zapasowe Home Assistant na tym NAS', backup_warn_days: 'Dni bez pełnej kopii przed alertem',
+    backup_agent: 'Agent kopii zapasowych (puste = wykryj, np. hassio.Backups)',
   },
   PVE: {
     nodes: 'Widoczne węzły (puste = wszystkie)',
@@ -925,6 +941,8 @@ const PL_EDITOR_LABELS = {
     show_services: 'Sekcja usług (NFS, SMB, SSH…)',
     show_actions: 'Przyciski restartu, uśpienia i wyłączenia (potwierdzenie drugim kliknięciem)',
     collapse_ups: 'Sekcja UPS zwinięta na starcie (przycisk, aby ją rozwinąć)',
+    show_backups: 'Kopie zapasowe Home Assistant na tym NAS', backup_warn_days: 'Dni bez pełnej kopii przed alertem',
+    backup_agent: 'Agent kopii zapasowych (puste = wykryj, np. hassio.Backups)',
   },
   ASUS: {
     device: 'Router (urządzenie integracji AsusRouter, opcjonalnie)',
@@ -2195,6 +2213,8 @@ const NAS_DEFAULTS = {
   temp_warn: 45, temp_alert: 55, // °C, disques et NAS
   show_info: true, show_resources: true, show_thermal: true, show_actions: true, show_network: true, show_ups: true, show_fan: true,
   collapse_ups: false, // section Onduleur repliée au premier affichage
+  show_backups: true, // sauvegardes de Home Assistant envoyées sur ce NAS (agent Synology DSM ou partage réseau)
+  backup_warn_days: 8, // jours sans sauvegarde complète avant l'alerte
   theme: "v2",
 };
 
@@ -2565,11 +2585,19 @@ class ServeurHaNasCard extends HTMLElement {
     const c = this._config;
     const m = { ...this._resolve() };
     if (c.show_fan === false) m.fan = null; // option : masquer le ventilateur
+    {
+      // sauvegardes : agent de l'intégration (synology_dsm.<numéro de série>) et partages réseau dont le serveur est ce NAS
+      const d0 = this._hass.devices?.[this._hass.entities?.[m.cpu]?.device_id] || {};
+      const serial = (d0.identifiers || []).find((x) => x[0] === "synology_dsm" && !String(x[1]).includes("_"))?.[1];
+      let ch = null; try { ch = d0.configuration_url ? new URL(d0.configuration_url).hostname : null; } catch (e) { /* adresse invalide */ }
+      const t0 = this._st(m.tracker)?.attributes || {};
+      refreshNasBackups(this, { hosts: [/^[a-z_]+\.[a-z0-9_]+$/.test(c.ip || "") ? this._txt(c.ip) : c.ip, ch, t0.ip, t0.ip_address], agents: serial ? [`synology_dsm.${serial}`] : [], pathRe: /^\/volume\d+\// });
+    }
     const all = [m.cpu, m.ram, m.last_boot, m.net_down, m.net_up, m.security, m.temperature, m.fan, m.reboot, m.tracker, m.shutdown, m.power_on, m.dsm_update,
       /^[a-z_]+\.[a-z0-9_]+$/.test(c.ip || "") ? c.ip : null, ...m.usb.map((u) => u.entity),
       ...m.volumes.flatMap((v) => [v.status, v.used]), ...m.drives.flatMap((d) => Object.values(d)), ...Object.values(m.ups), ...m.actions.map((a) => a.entity),
       typeof m.ip_ext === "object" ? m.ip_ext?.entity : m.ip_ext];
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._open}|${this._armed}|` + all.map((id) => (typeof id === "string" ? this._st(id)?.state ?? "-" : "")).join("|");
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._open}|${this._armed}|${this._bkAt}|` + all.map((id) => (typeof id === "string" ? this._st(id)?.state ?? "-" : "")).join("|");
     if (sig === this._sig) return;
     this._sig = sig;
 
@@ -2595,7 +2623,9 @@ class ServeurHaNasCard extends HTMLElement {
     const upsRaw = this._txt(m.ups.status_raw);
     const upsOk = !m.ups.status && !m.ups.status_raw ? null : (upsRaw ? /\bOL\b/.test(upsRaw) && !/\b(OB|LB|RB|OVER)\b/.test(upsRaw) : /online|en ligne/i.test(upsSt || ""));
     const led = (ok, label, id) => (ok === null ? "" : localizeTemplate`<span class="srv-led ${ok ? "ok" : "bad"}" data-entity="${esc(id || "")}"><i></i>${label}</span>`);
-    const leds = [led(online, "NAS", m.tracker || m.cpu), led(hddOk, "HDD", vol1?.status), led(secOk, trLabel("Sécurité"), m.security), led(upsOk, "UPS", m.ups.status || m.ups.status_raw)].join("");
+    const bk = nasBackupBlock(this, this._bk, c);
+    const leds = [led(online, "NAS", m.tracker || m.cpu), led(hddOk, "HDD", vol1?.status), led(secOk, trLabel("Sécurité"), m.security), led(upsOk, "UPS", m.ups.status || m.ups.status_raw),
+      bk.ok === null ? "" : localizeTemplate`<span class="srv-led ${bk.ok ? "ok" : "bad"}" data-nav="/config/backup"><i></i>Backup</span>`].join("");
     const dev = Object.values(this._hass.devices || {}).find((d) => d.id === this._hass.entities?.[m.cpu]?.device_id);
     const title = c.title || dev?.name_by_user || dev?.name || "NAS";
     const sub2 = [ip, vol1State ? `${uiText("storage.volume")} ${fr(vol1State).toLowerCase()}` : null].filter(Boolean).join(" · ");
@@ -2725,6 +2755,7 @@ class ServeurHaNasCard extends HTMLElement {
       c.show_thermal !== false ? sec("mdi:thermometer-lines", trLabel("Températures et ventilation"), thermal.length ? localizeTemplate`<div class="srv-bk">${thermal.join("")}</div>` : "") : "",
       c.show_actions !== false ? sec("mdi:gesture-tap-button", "Actions", acts.length ? localizeTemplate`<div class="srv-bk">${acts.join("")}</div>` : "") : "",
       c.show_network !== false ? sec("mdi:swap-vertical", trLabel("Débits réseau"), nets.length ? localizeTemplate`<div class="srv-grid">${nets.join("")}</div>` : "") : "",
+      sec("mdi:backup-restore", "Sauvegardes HA", bk.html),
       c.show_ups !== false ? foldSec(this, "ups", "mdi:power-plug-battery-outline", "Onduleur", ups) : "",
     ].join("");
 
@@ -2743,6 +2774,9 @@ class ServeurHaNasCard extends HTMLElement {
 }
 
 const NAS_STYLE = `<style>
+.nas-bks { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.nas-bk { cursor: pointer; } .nas-bk.warn { border-color: var(--pc-warn, #f0a33a); } .nas-bk.bad { border-color: color-mix(in srgb, var(--t-red) 60%, transparent); }
+.nas-bk.bad .tile-l ha-icon { color: var(--t-red); }
 .srv-kv b.ok { color: var(--med-down); } .srv-kv b.bad { color: var(--t-red); }
 .nas-health { cursor: pointer; }
 .nas-health.bad { border-color: var(--t-red); }
@@ -3201,6 +3235,85 @@ const PVE_STYLE = `<style>
 @container (max-width: 360px) { .pve-g, .pve-gh { grid-template-columns: 20px minmax(0, 1fr) 80px 64px; gap: 6px; } }
 </style>`;
 
+/* ------------------------------------------------------------ sauvegardes de Home Assistant sur un NAS */
+
+/** Sauvegardes de Home Assistant envoyées sur ce NAS : par un partage réseau du Supervisor (usage « backup »)
+ *  dont le serveur est le NAS, ou par l'agent de sauvegarde de l'intégration (Synology DSM : synology_dsm.<numéro de série>).
+ *  `hosts` : adresses connues du NAS ; `agents` : agents déjà connus ; `pathRe` : chemin d'export typique du NAS,
+ *  retenu seulement s'il désigne un seul partage. Option `backup_agent` : agents choisis à la main. null si rien n'est trouvé. */
+const loadNasBackups = async (hass, c, { hosts = [], agents = [], pathRe = null } = {}) => {
+  if (!hass?.callWS || hass.user?.is_admin === false) return null;
+  const info = await hass.callWS({ type: "backup/info" });
+  let list = [].concat(c.backup_agent || []).filter(Boolean).map(String);
+  let mounts = [];
+  try {
+    const r = await hass.callWS({ type: "supervisor/api", endpoint: "/mounts", method: "get" });
+    mounts = (r?.mounts || []).filter((x) => x.usage === "backup");
+  } catch (e) { /* pas de Supervisor : agents de l'intégration seulement */ }
+  if (!list.length) {
+    const hs = hosts.filter(Boolean).map((h) => String(h).toLowerCase());
+    let mine = mounts.filter((x) => hs.includes(String(x.server || "").toLowerCase()));
+    if (!mine.length && pathRe) { const byPath = mounts.filter((x) => pathRe.test(String(x.path || x.share || ""))); if (byPath.length === 1) mine = byPath; }
+    list = [...mine.map((x) => `hassio.${x.name}`), ...agents];
+  }
+  const known = new Set([...(info?.backups || []).flatMap((b) => Object.keys(b.agents || {})), ...list.filter((a) => a.startsWith("synology_dsm."))]);
+  list = [...new Set(list)].filter((a) => known.has(a) || a.startsWith("hassio."));
+  if (!list.length) return null;
+  const mount = mounts.find((x) => list.includes(`hassio.${x.name}`)) || null;
+  const here = (info?.backups || []).filter((b) => list.some((a) => b.agents?.[a]))
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const sizeOf = (b) => Math.max(0, ...list.map((a) => Number(b.agents?.[a]?.size) || 0));
+  const auto = (info?.backups || []).filter((b) => b.with_automatic_settings).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+  // échec : dernière sauvegarde automatique non envoyée sur ce NAS, ou tentative sans sauvegarde terminée
+  const sendFail = auto && list.some((a) => (auto.failed_agent_ids || []).includes(a)) ? auto.date : null;
+  const la = info?.last_attempted_automatic_backup, lc = info?.last_completed_automatic_backup;
+  const tryFail = la && (!lc || new Date(la) > new Date(lc)) ? la : null;
+  return {
+    agents: list, mount: mount ? { name: mount.name, state: mount.state, server: mount.server, type: mount.type } : null,
+    count: here.length, size: here.reduce((t, b) => t + sizeOf(b), 0),
+    // dernière sauvegarde complète (Home Assistant inclus), sinon la dernière tout court (application seule…)
+    last: ((b) => (b ? { date: b.date, name: b.name, size: sizeOf(b), full: !!b.homeassistant_included } : null))(here.find((b) => b.homeassistant_included) || here[0]),
+    lastFull: here.find((b) => b.homeassistant_included)?.date || null,
+    fail: sendFail || tryFail, next: info?.next_automatic_backup || null,
+  };
+};
+
+/** Section « Sauvegardes HA » et voyant Backup des cartes NAS. `ok` : null sans données, sinon vrai ou faux. */
+const nasBackupBlock = (card, data, c) => {
+  if (!data || c.show_backups === false) return { html: "", ok: null };
+  const fmtSize = (b) => (b >= 1e12 ? `${fmt(b / 1e12, 2)} ${byteUnit("To")}` : b >= 1e9 ? `${fmt(b / 1e9, 1)} ${byteUnit("Go")}` : b >= 1e6 ? `${fmt(b / 1e6, 0)} ${byteUnit("Mo")}` : `${fmt(Math.max(1, b / 1e3), 0)} ${byteUnit("Ko")}`);
+  const warnDays = Number(c.backup_warn_days) > 0 ? Number(c.backup_warn_days) : 8;
+  const ref = data.lastFull || data.last?.date;
+  const age = ref ? (Date.now() - new Date(ref).getTime()) / 86400e3 : null;
+  const stale = age === null || age > warnDays;
+  const mountBad = data.mount && data.mount.state && data.mount.state !== "active";
+  const ok = !stale && !data.fail && !mountBad;
+  const when = (iso) => new Date(iso).toLocaleString(cardLocale(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const tiles = [
+    data.last ? localizeTemplate`<div class="tile srv-t nas-bk ${stale ? "warn" : ""}" data-nav="/config/backup/backups" title="${esc(data.last.name)}"><div class="tile-l"><ha-icon icon="mdi:backup-restore"></ha-icon>Dernière</div>
+      ${kvRows([[trLabel("Il y a"), since(data.last.date), stale ? "bad" : "ok"], [trLabel("Taille"), data.last.size ? fmtSize(data.last.size) : null]])}</div>`
+      : localizeTemplate`<div class="tile srv-t nas-bk warn" data-nav="/config/backup/backups"><div class="tile-l"><ha-icon icon="mdi:backup-restore"></ha-icon>Dernière</div><div class="srv-kv"><span>Aucune sauvegarde</span></div></div>`,
+    localizeTemplate`<div class="tile srv-t nas-bk" data-nav="/config/backup/backups"><div class="tile-l"><ha-icon icon="mdi:archive-outline"></ha-icon>Sur le NAS</div>
+      ${kvRows([[trLabel("Sauvegardes"), fmt(data.count, 0)], [trLabel("Espace"), data.size ? fmtSize(data.size) : null]])}</div>`,
+    localizeTemplate`<div class="tile srv-t nas-bk ${data.fail || mountBad ? "bad" : ""}" data-nav="/config/backup/settings"><div class="tile-l"><ha-icon icon="${esc(data.fail || mountBad ? "mdi:alert-circle-outline" : "mdi:calendar-clock")}"></ha-icon>${data.mount ? esc(data.mount.name) : trLabel("Automatique")}</div>
+      ${kvRows([
+        mountBad ? [trLabel("Partage"), trLabel("Non monté"), "bad"] : data.mount ? [trLabel("Partage"), trLabel("Monté"), "ok"] : null,
+        data.fail ? [trLabel("Échec"), when(data.fail), "bad"] : [trLabel("Prochaine"), data.next ? when(data.next) : trLabel("Manuelle")],
+      ].filter(Boolean))}</div>`,
+  ];
+  return { ok, html: localizeTemplate`<div class="tiles srv-tiles nas-bks">${tiles.join("")}</div>` };
+};
+/** Lignes clé / valeur (libellés déjà traduits). */
+const kvRows = (rows) => rows.filter(([, v]) => v !== null && v !== undefined && v !== "").map(([k, v, cls]) => `<div class="srv-kv"><span>${esc(k)}</span><b class="${cls || ""}">${esc(v)}</b></div>`).join("");
+/** Relit les sauvegardes du NAS toutes les 10 min (cartes OMV et Synology). */
+const refreshNasBackups = (card, opts) => {
+  const c = card._config;
+  if (c.show_backups === false || card._bkBusy || Date.now() - (card._bkAt || 0) < 10 * 60e3) return;
+  card._bkBusy = true;
+  loadNasBackups(card._hass, c, opts).then((d) => { card._bk = d; }).catch(() => { card._bk = null; })
+    .finally(() => { card._bkAt = Date.now(); card._bkBusy = false; card._sig = null; card._render(); });
+};
+
 /* ------------------------------------------------------------ carte OpenMediaVault */
 
 const OMV_DEFAULTS = {
@@ -3212,6 +3325,8 @@ const OMV_DEFAULTS = {
   show_system: true, show_storage: true, show_disks: true, show_services: true, show_network: true, show_actions: true,
   show_ups: true, // section Onduleur, quand un onduleur NUT est trouvé
   collapse_ups: false, // section Onduleur repliée au premier affichage
+  show_backups: true, // sauvegardes de Home Assistant envoyées sur ce NAS (partage réseau du Supervisor)
+  backup_warn_days: 8, // jours sans sauvegarde complète avant l'alerte
   theme: "v2",
 };
 
@@ -3259,6 +3374,8 @@ class ServeurHaOmvCard extends HTMLElement {
       this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
         const sf = ev.target.closest?.("[data-secfold]");
         if (sf) { foldToggle(this, sf.dataset.secfold); this._sig = null; this._render(); return; }
+        const nav = ev.target.closest?.("[data-nav]");
+        if (nav) { history.pushState(null, "", nav.dataset.nav); window.dispatchEvent(new CustomEvent("location-changed")); return; }
         const press = ev.target.closest?.("[data-press]");
         if (press) {
           // Redémarrer, éteindre, veille, allumer : premier clic arme, second clic dans les 5 s confirme
@@ -3385,9 +3502,15 @@ class ServeurHaOmvCard extends HTMLElement {
     const c = this._config;
     const m = this._resolve();
     const r = m.hub.roles;
+    if (m.hubId) {
+      const d0 = m.dev || {};
+      let ch = null; try { ch = d0.configuration_url ? new URL(d0.configuration_url).hostname : null; } catch (e) { /* adresse invalide */ }
+      // OpenMediaVault exporte ses partages NFS sous /export/
+      refreshNasBackups(this, { hosts: [c.ip, ch, (/\(([^)]+)\)/.exec(d0.name || "") || [])[1]], pathRe: /^\/export\// });
+    }
     const ids = [...Object.values(r), ...m.hub.services, ...Object.values(m.hub.ifaces).flatMap((x) => Object.values(x)),
       ...m.disks.flatMap((d) => Object.values(d.roles)), ...m.fs.flatMap((f) => [f.id, f.used_size, f.total_size]), ...Object.values(m.ups || {}), c.power_on];
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._armed}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._armed}|${Math.floor(Date.now() / 60000)}|${this._bkAt}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|");
     if (sig === this._sig) return;
     this._sig = sig;
 
@@ -3417,6 +3540,7 @@ class ServeurHaOmvCard extends HTMLElement {
     const pkg = this._num(r.pkg);
     const needUpd = upd?.state === "on" || (pkg !== null && pkg > 0);
     const rebootReq = this._st(r.reboot_req)?.state === "on";
+    const bk = nasBackupBlock(this, this._bk, c);
     const ups = upsBlock(this, m.ups || {}, c);
     const led = (ok, label, id, cls = "") => localizeTemplate`<span class="srv-led ${ok ? "ok" : "bad"} ${cls}" data-entity="${esc(id || "")}"><i></i>${label}</span>`;
     const leds = m.hubId ? [
@@ -3424,6 +3548,7 @@ class ServeurHaOmvCard extends HTMLElement {
       m.disks.length ? led(!disksBad, trLabel("Disques"), m.disks[0].roles.smart || m.disks[0].roles.temp) : "",
       needUpd ? localizeTemplate`<span class="srv-led upd" data-entity="${esc(r.update || r.pkg || "")}"><i></i>Mise à jour</span>` : "",
       rebootReq ? localizeTemplate`<span class="srv-led upd" data-entity="${esc(r.reboot_req)}"><i></i>Redémarrage requis</span>` : "",
+      bk.ok === null ? "" : localizeTemplate`<span class="srv-led ${bk.ok ? "ok" : "bad"}" data-nav="/config/backup"><i></i>Backup</span>`,
       ups.ok === null ? "" : led(ups.ok, "UPS", m.ups.status || m.ups.status_raw),
     ].join("") : "";
 
@@ -3505,6 +3630,7 @@ class ServeurHaOmvCard extends HTMLElement {
         + sec("mdi:harddisk", "Disques", diskHtml.length ? localizeTemplate`<div class="tiles srv-tiles omv-disks">${diskHtml.join("")}</div>` : "")
         + sec("mdi:cog-outline", localizeTemplate`Services <small class="pve-n">${svc.length ? localizeTextTemplate`${m.hub.services.filter((id) => this._st(id)?.state === "on").length}/${svc.length} en cours` : ""}</small>`, svc.length ? localizeTemplate`<div class="omv-svcs">${svc.join("")}</div>` : "")
         + sec("mdi:swap-vertical", trLabel("Débits réseau"), nets.length ? localizeTemplate`<div class="srv-grid">${nets.join("")}</div>` : "")
+        + sec("mdi:backup-restore", "Sauvegardes HA", bk.html)
         + foldSec(this, "ups", "mdi:power-plug-battery-outline", "Onduleur", ups.html)
         + sec("mdi:gesture-tap-button", "Actions", acts.length ? localizeTemplate`<div class="pve-na">${acts.join("")}</div>` : "");
     }
@@ -7161,6 +7287,8 @@ const EN_EDITOR_LABELS = {
     usb: "USB disks: percent used sensors (empty = auto-detect from Synology DSM)",
     show_ups: "UPS section",
     collapse_ups: "UPS section collapsed at first (button to expand it)",
+    show_backups: "Home Assistant backups on this NAS", backup_warn_days: "Days without a full backup before the alert",
+    backup_agent: "Backup agent (empty = detected, e.g. hassio.Backups)",
   },
   PVE: {
     nodes: "Visible nodes (empty = all)",
@@ -7180,6 +7308,8 @@ const EN_EDITOR_LABELS = {
     show_services: "Services section (NFS, SMB, SSH…)",
     show_actions: "Restart, standby and power-off buttons (two-click confirmation)",
     collapse_ups: "UPS section collapsed at first (button to expand it)",
+    show_backups: "Home Assistant backups on this NAS", backup_warn_days: "Days without a full backup before the alert",
+    backup_agent: "Backup agent (empty = detected, e.g. hassio.Backups)",
   },
   ASUS: {
     device: "Router (AsusRouter integration device, optional)",
@@ -7451,6 +7581,9 @@ const NAS_SCHEMA = [
   { name: "show_network", selector: { boolean: {} } },
   { name: "show_ups", selector: { boolean: {} } },
   { name: "collapse_ups", selector: { boolean: {} } },
+  { name: "show_backups", selector: { boolean: {} } },
+  { name: "backup_warn_days", selector: { number: { min: 1, max: 60, mode: "box" } } },
+  { name: "backup_agent", selector: { text: {} } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -7479,6 +7612,9 @@ const NAS_LABELS = {
   show_network: "Section Débits réseau",
   show_ups: "Section Onduleur",
   collapse_ups: "Section Onduleur repliée au départ (bouton pour la déplier)",
+  show_backups: "Sauvegardes de Home Assistant sur ce NAS",
+  backup_warn_days: "Jours sans sauvegarde complète avant l'alerte",
+  backup_agent: "Agent de sauvegarde (vide = détecté, ex. hassio.Backups)",
   theme: "Couleurs de la carte",
 };
 const ServeurHaNasCardEditor = makeEditor(NAS_SCHEMA, NAS_LABELS, NAS_DEFAULTS, EN_EDITOR_LABELS.NAS, PL_EDITOR_LABELS.NAS);
@@ -7539,6 +7675,9 @@ const OMV_SCHEMA = [
   { name: "show_actions", selector: { boolean: {} } },
   { name: "show_ups", selector: { boolean: {} } },
   { name: "collapse_ups", selector: { boolean: {} } },
+  { name: "show_backups", selector: { boolean: {} } },
+  { name: "backup_warn_days", selector: { number: { min: 1, max: 60, mode: "box" } } },
+  { name: "backup_agent", selector: { text: {} } },
   { name: "ups_device", selector: { device: { integration: "nut" } } },
   { name: "ups_name", selector: { text: {} } },
   THEME_SELECT,
@@ -7560,6 +7699,9 @@ const OMV_LABELS = {
   show_actions: "Boutons redémarrer, veille, éteindre (deux clics)",
   show_ups: "Section Onduleur (NUT)",
   collapse_ups: "Section Onduleur repliée au départ (bouton pour la déplier)",
+  show_backups: "Sauvegardes de Home Assistant sur ce NAS",
+  backup_warn_days: "Jours sans sauvegarde complète avant l'alerte",
+  backup_agent: "Agent de sauvegarde (vide = détecté, ex. hassio.Backups)",
   ups_device: "Onduleur (appareil NUT, facultatif)",
   ups_name: "Nom de l'onduleur (facultatif)",
   theme: "Couleurs de la carte",

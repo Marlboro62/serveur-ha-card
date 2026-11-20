@@ -257,6 +257,7 @@ actions:
 - **Températures et ventilation** : NAS et chaque disque (orange à 45 °C, rouge à 55 °C), mode du ventilateur (**appui long** : mode suivant).
 - **Actions** : **Éteindre / Allumer** le NAS (arrêt propre par DSM quand il est allumé, Wake on LAN ou prise quand il est éteint), **Redémarrer** (confirmation en deux clics pour les deux) et vos interrupteurs (**appui long** : marche / arrêt).
 - **Débits réseau** et **onduleur** NUT : état, tension d'entrée et de sortie, charge, batterie.
+- **Sauvegardes HA** : les sauvegardes de Home Assistant envoyées sur ce NAS, par l'agent de sauvegarde de Synology DSM ou par un partage réseau du Supervisor dont le serveur est le NAS. La carte affiche la dernière sauvegarde complète (âge et taille), le nombre de sauvegardes et l'espace occupé, et la prochaine sauvegarde automatique, ou la date du dernier échec d'envoi. Le voyant **Backup** passe au rouge après un échec, ou sans sauvegarde complète depuis `backup_warn_days` jours. Un clic ouvre la page des sauvegardes. Il faut un compte administrateur.
 
 Les entités sont trouvées via l'intégration **Synology DSM**, pour **tous les volumes et tous les disques**. Les états (Normal, Dégradé, En panne…) sont traduits en français.
 
@@ -282,6 +283,9 @@ Les entités sont trouvées via l'intégration **Synology DSM**, pour **tous les
 | `show_info`, `show_resources`, `show_thermal`, `show_actions`, `show_network`, `show_ups` | Afficher chaque section | `true` |
 | `collapse_ups` | Section Onduleur repliée au premier affichage ; le bouton ⌄ de l'en-tête la replie ou la déplie, et la carte s'en souvient | `false` |
 | `show_fan` | Afficher le ventilateur (tuile et mode). `false` le masque même s'il est détecté | `true` |
+| `show_backups` | Section **Sauvegardes HA** et voyant **Backup** | `true` |
+| `backup_warn_days` | Jours sans sauvegarde complète sur ce NAS avant l'alerte (orange, voyant rouge) | `8` |
+| `backup_agent` | Agent de sauvegarde à suivre, ou liste d'agents (ex. `hassio.Backups`, `synology_dsm.<numéro de série>`) | détecté |
 
 D'autres exemples sont dans [`exemples/`](https://github.com/Marlboro62/serveur-ha-card/blob/main/exemples/).
 
@@ -345,6 +349,7 @@ Tout est ensuite détecté :
 - **Services** : NFS, SMB/CIFS, SSH, Rsync… en cours (vert) ou arrêtés (gris). Un clic ouvre la fiche du service.
 - **Débits réseau** : download et upload de chaque interface.
 - **Onduleur** : comme les cartes NAS et Proxmox, si un onduleur est suivi par **Network UPS Tools (NUT)**.
+- **Sauvegardes HA** : les sauvegardes de Home Assistant envoyées sur OMV par un partage réseau du Supervisor (**Paramètres › Système › Stockage**, usage « Sauvegarde »). La carte affiche la dernière sauvegarde complète (âge et taille), le nombre de sauvegardes et l'espace occupé, l'état du partage (monté ou non) et la prochaine sauvegarde automatique, ou la date du dernier échec d'envoi. Le partage est reconnu par son serveur (option `ip` ou adresse de l'intégration), sinon par son chemin d'export `/export/…` s'il est le seul. Le voyant **Backup** passe au rouge après un échec, si le partage n'est pas monté, ou sans sauvegarde complète depuis `backup_warn_days` jours. Il faut un compte administrateur.
 - **Actions** : **Redémarrer**, **Veille** et **Éteindre** quand OMV est allumé, **Allumer** quand il est éteint (option `power_on` : Wake on LAN, prise ou script). Chaque bouton demande **un second clic dans les 5 secondes**.
 
 | Option | Rôle | Défaut |
@@ -358,6 +363,9 @@ Tout est ensuite détecté :
 | `ups_device`, `ups_name`, `ups` | Onduleur NUT (appareil, nom, capteurs) | le premier trouvé |
 | `show_system`, `show_storage`, `show_disks`, `show_services`, `show_network`, `show_actions`, `show_ups` | Afficher chaque section, et les boutons | `true` |
 | `collapse_ups` | Section Onduleur repliée au premier affichage ; le bouton ⌄ de l'en-tête la replie ou la déplie, et la carte s'en souvient | `false` |
+| `show_backups` | Section **Sauvegardes HA** et voyant **Backup** | `true` |
+| `backup_warn_days` | Jours sans sauvegarde complète sur ce NAS avant l'alerte (orange, voyant rouge) | `8` |
+| `backup_agent` | Agent de sauvegarde à suivre, ou liste d'agents (ex. `hassio.Backups`, `synology_dsm.<numéro de série>`) | détecté |
 | `theme` | `v2`, `auto` ou `ha` | `v2` |
 
 ```yaml
