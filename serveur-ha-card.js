@@ -22,7 +22,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.23.0-beta.2";
+const CARD_VERSION = "0.23.0-beta.3";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -2619,9 +2619,11 @@ class ServeurHaNasCard extends HTMLElement {
     const vol1 = m.volumes[0];
     const vol1State = this._txt(vol1?.status);
     const drivesBad = m.drives.some((d) => this._st(d.drv_bad)?.state === "on" || this._st(d.drv_life)?.state === "on" || (this._txt(d.drv_status) && !okWord(this._txt(d.drv_status))));
-    const hddOk = !m.volumes.length && !m.drives.length ? null : m.volumes.every((v) => okWord(this._txt(v.status))) && !drivesBad;
+    // NAS éteint : capteurs indisponibles, ce ne sont pas des alertes (voyants HDD et Sécurité masqués)
+    const off = online === false;
+    const hddOk = off || (!m.volumes.length && !m.drives.length) ? null : m.volumes.every((v) => okWord(this._txt(v.status))) && !drivesBad;
     const secSt = this._st(m.security)?.state;
-    const secOk = secSt === undefined ? null : secSt === "off";
+    const secOk = off || secSt === undefined ? null : secSt === "off";
     const upsSt = this._txt(m.ups.status);
     const upsRaw = this._txt(m.ups.status_raw);
     const upsOk = !m.ups.status && !m.ups.status_raw ? null : (upsRaw ? /\bOL\b/.test(upsRaw) && !/\b(OB|LB|RB|OVER)\b/.test(upsRaw) : /online|en ligne/i.test(upsSt || ""));
@@ -2646,7 +2648,7 @@ class ServeurHaNasCard extends HTMLElement {
         ${kv([["Version", short(inst)], upd.state === "on" ? ["Dispo", short(last) || "Oui", "bad"] : [trLabel("État"), "À jour", "ok"]])}</div>` : "";
     const info = [
       ip || ipExt ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(m.tracker || "")}"><div class="tile-l"><ha-icon icon="mdi:ip-network-outline"></ha-icon>Réseau</div>${kv([["Interne", ip || "—"], ["Externe", ipExt || null]])}</div>` : "",
-      m.volumes.length || m.security ? localizeTemplate`<div class="tile srv-t nas-health ${hddOk === false || secOk === false ? "bad" : ""}" data-panel="1" title="Afficher l'état des disques">
+      !off && (m.volumes.length || m.security) ? localizeTemplate`<div class="tile srv-t nas-health ${hddOk === false || secOk === false ? "bad" : ""}" data-panel="1" title="Afficher l'état des disques">
         <div class="tile-l"><ha-icon icon="${esc(hddOk === false ? "mdi:shield-alert-outline" : "mdi:shield-check-outline")}"></ha-icon>Santé<ha-icon class="nas-chev" icon="mdi:chevron-${this._open ? "up" : "down"}"></ha-icon></div>
         ${kv([[uiText("storage.volume"), fr(vol1State), okWord(vol1State) ? "ok" : "bad"], [trLabel("Sécurité"), secSt === undefined ? null : secOk ? trLabel("Sécurisé") : trLabel("Alerte"), secOk ? "ok" : "bad"]])}</div>` : "",
       boot ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(m.last_boot)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(since(boot))}</div></div>` : "",
@@ -2755,9 +2757,9 @@ class ServeurHaNasCard extends HTMLElement {
     const body = [
       c.show_info !== false ? sec("mdi:information-outline", "Informations", info.length ? localizeTemplate`<div class="tiles srv-tiles">${info.join("")}</div>${panel}` : "") : "",
       c.show_resources !== false ? sec("mdi:speedometer", "Ressources", res.length ? localizeTemplate`<div class="srv-grid nas-res">${res.join("")}</div>` : "") : "",
-      c.show_thermal !== false ? sec("mdi:thermometer-lines", trLabel("Températures et ventilation"), thermal.length ? localizeTemplate`<div class="srv-bk">${thermal.join("")}</div>` : "") : "",
+      c.show_thermal !== false && !off ? sec("mdi:thermometer-lines", trLabel("Températures et ventilation"), thermal.length ? localizeTemplate`<div class="srv-bk">${thermal.join("")}</div>` : "") : "",
       c.show_actions !== false ? sec("mdi:gesture-tap-button", "Actions", acts.length ? localizeTemplate`<div class="srv-bk">${acts.join("")}</div>` : "") : "",
-      c.show_network !== false ? sec("mdi:swap-vertical", trLabel("Débits réseau"), nets.length ? localizeTemplate`<div class="srv-grid">${nets.join("")}</div>` : "") : "",
+      c.show_network !== false && !off ? sec("mdi:swap-vertical", trLabel("Débits réseau"), nets.length ? localizeTemplate`<div class="srv-grid">${nets.join("")}</div>` : "") : "",
       sec("mdi:backup-restore", "Sauvegardes HA", bk.html),
       c.show_ups !== false ? foldSec(this, "ups", "mdi:power-plug-battery-outline", "Onduleur", ups) : "",
     ].join("");
