@@ -119,6 +119,9 @@ show_network: true
 show_power: true
 show_backup: true
 show_fan: true # false ukrywa wentylator
+show_restarts: true # restarty HA w 24 h i 7 dni, pod czasem pracy
+restart_warn: 3 # pomarańczowy od 3 restartów w 24 h
+show_repairs: true # otwarte naprawy (Ustawienia › System › Naprawy)
 ```
 
 **Aktualizacje Home Assistant:**

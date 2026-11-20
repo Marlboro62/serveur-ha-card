@@ -117,6 +117,9 @@ show_network: true
 show_power: true
 show_backup: true
 show_fan: true # false hides the fan
+show_restarts: true # HA restarts over 24 h and 7 days, under the uptime
+restart_warn: 3 # orange from 3 restarts in 24 h
+show_repairs: true # open repairs (Settings › System › Repairs)
 ```
 
 The card discovers supported sensors from System Monitor, Local IP, Uptime, Raspberry Pi Power Supply Checker, backup events, and Google Drive Backup. System Monitor sensors may require enabling in **Settings → Devices & services → System Monitor**.

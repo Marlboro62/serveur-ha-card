@@ -3,7 +3,8 @@
  * MyElectricalData new (Carte Enedis Linky New) :
  *
  *   custom:serveur-ha-card       état du serveur : CPU, température, RAM, disque, réseau,
- *                                uptime, alimentation, ventilateur et sauvegardes
+ *                                uptime et redémarrages de HA, réparations en cours,
+ *                                alimentation, ventilateur et sauvegardes
  *   custom:serveur-ha-maj-card   Home Assistant : version, mises à jour Core / Supervisor / OS,
  *                                base de données, certificat SSL et applications
  *   custom:serveur-ha-nas-card   NAS Synology : santé des volumes et disques, ressources,
@@ -21,7 +22,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.21.1";
+const CARD_VERSION = "0.22.0-beta.1";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -81,6 +82,8 @@ const EN_TEXT = {
   "Secteurs défectueux": "Bad sectors", "Erreurs CRC": "CRC errors", "Durée de vie": "Lifespan",
   "Mise à jour": "Update", "Mises à jour": "Updates", "Mises à jour système": "System updates",
   "Redémarrage requis": "Restart required", "redémarrage requis": "restart required",
+  "Redémarrages": "Restarts", "Réparations": "Repairs", "Voir toutes les réparations": "See all repairs",
+  "en 24 h": "in 24 h", "en 7 jours": "in 7 days", "Redémarrages de Home Assistant": "Home Assistant restarts",
   "À jour": "Up to date", "à jour": "up to date", "À installer": "Pending installation",
   "Applications": "Applications", "Application": "Application", "Détails": "Details",
   "Services": "Services", "Actions": "Actions", "Réglages": "Settings", "Paramètres": "Settings",
@@ -403,6 +406,12 @@ const PL_TEXT = {
   "Mises à jour système": "Aktualizacje systemu",
   "Redémarrage requis": "Wymagane ponowne uruchomienie",
   "redémarrage requis": "wymagane ponowne uruchomienie",
+  "Redémarrages": "Ponowne uruchomienia",
+  "Réparations": "Naprawy",
+  "Voir toutes les réparations": "Zobacz wszystkie naprawy",
+  "en 24 h": "w 24 h",
+  "en 7 jours": "w 7 dni",
+  "Redémarrages de Home Assistant": "Ponowne uruchomienia Home Assistant",
   "À jour": "Aktualny",
   "à jour": "aktualny",
   "À installer": "Do zainstalowania",
@@ -871,6 +880,7 @@ const PL_EDITOR_LABELS = {
     backup_title: 'Tytuł sekcji kopii zapasowych (opcjonalnie)',
     temp_warn: 'Temperatura: próg ostrzegawczy', temp_alert: 'Temperatura: próg alarmowy',
     show_power: 'Sekcja zasilania', show_backup: 'Sekcja kopii zapasowych',
+    show_restarts: 'Liczba ponownych uruchomień HA (24 h i 7 dni)', show_repairs: 'Sekcja napraw',
   },
   MAJ: {
     database: 'Rozmiar bazy danych (opcjonalnie, domyślnie wykrywany automatycznie)',
@@ -1329,6 +1339,9 @@ const SRV_DEFAULTS = {
   ram_warn: 75, ram_alert: 90,
   disk_warn: 75, disk_alert: 90,
   show_info: true, show_resources: true, show_network: true, show_power: true, show_backup: true, show_fan: true,
+  show_restarts: true, // redémarrages de HA sur 24 h et 7 jours (historique du capteur Uptime)
+  show_repairs: true, // réparations en cours (Paramètres › Réparations), compte administrateur
+  restart_warn: 3, // redémarrages en 24 h au-delà desquels la tuile passe en orange
   icon: "", // ex. mdi:raspberry-pi
   icon_color: "", // ex. #E30B5D
   ram_total: null, // MiB : la barre « RAM libre » devient libre / total
@@ -1635,6 +1648,44 @@ class ServeurHaCard extends HTMLElement {
     }
   }
 
+  /** Redémarrages de HA sur 7 jours (valeurs successives du capteur Uptime) et réparations en cours, relus toutes les 10 min. */
+  async _loadHealth(startId) {
+    const h = this._hass;
+    if (!h || this._healthBusy) return;
+    this._healthBusy = true;
+    const c = this._config, out = { restarts: null, repairs: null };
+    try {
+      if (startId && c.show_restarts !== false && h.callApi) {
+        const end = Date.now(), start = end - 7 * 86400e3;
+        const path = `history/period/${encodeURIComponent(new Date(start).toISOString())}?filter_entity_id=${encodeURIComponent(startId)}` +
+          `&end_time=${encodeURIComponent(new Date(end).toISOString())}&minimal_response&no_attributes`;
+        const rows = (await h.callApi("GET", path))?.[0] || [];
+        // le capteur donne l'heure de démarrage : chaque valeur différente est un redémarrage
+        const times = [...new Set(rows.map((r) => String(r.state ?? "")))].map((v) => new Date(v).getTime())
+          .filter((t) => Number.isFinite(t) && t >= start && t <= end).sort((a, b) => b - a);
+        out.restarts = times;
+      }
+    } catch (err) { out.restarts = null; }
+    try {
+      if (c.show_repairs !== false && h.callWS && h.user?.is_admin !== false) {
+        const r = await h.callWS({ type: "repairs/list_issues" });
+        const issues = (r?.issues || []).filter((i) => !i.ignored && !i.dismissed_version);
+        const domains = [...new Set(issues.map((i) => i.domain).filter(Boolean))];
+        if (domains.length && h.loadBackendTranslation) { try { await h.loadBackendTranslation("issues", domains); } catch (e) { /* titres bruts */ } }
+        out.repairs = issues.map((i) => ({
+          id: i.issue_id, domain: i.domain, severity: i.severity,
+          title: (h.localize && h.localize(`component.${i.domain}.issues.${i.translation_key || i.issue_id}.title`, i.translation_placeholders || {}))
+            || String(i.translation_key || i.issue_id).replace(/_/g, " "),
+        }));
+      }
+    } catch (err) { out.repairs = null; }
+    this._health = out;
+    this._healthAt = Date.now();
+    this._healthBusy = false;
+    this._sig = null;
+    this._render();
+  }
+
   _timeline(id) {
     if (!this._hist || this._hist.id !== id || Date.now() - (this._histAt || 0) > 5 * 60e3) this._loadHistory(id);
     const h = this._hist?.id === id ? this._hist : null;
@@ -1675,7 +1726,8 @@ class ServeurHaCard extends HTMLElement {
     const m = { ...this._resolve() };
     if (c.show_fan === false) m.fan = null; // option : masquer le ventilateur
     const ids = Object.entries(m).filter(([k]) => k !== "ip_ext_attr").map(([, v]) => v);
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._histAt || 0}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|") + `|${this._st(m.fan)?.attributes?.percentage}|${this._st(m.backup_event)?.attributes?.event_type}`;
+    if (Date.now() - (this._healthAt || 0) > 10 * 60e3 && !this._healthBusy) this._loadHealth(m.ha_start);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._histAt || 0}|${this._healthAt || 0}|` + ids.map((id) => this._st(id)?.state ?? "-").join("|") + `|${this._st(m.fan)?.attributes?.percentage}|${this._st(m.backup_event)?.attributes?.event_type}`;
     if (sig === this._sig) return;
     this._sig = sig;
 
@@ -1726,9 +1778,17 @@ class ServeurHaCard extends HTMLElement {
     const sec = (icon, title, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(title)}</div>${body}</div>` : "");
     const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => localizeTemplate`<div class="srv-kv"><span>${exactLabel(k)}</span><b>${esc(exactLabel(v))}</b></div>`).join("");
 
+    const rs = c.show_restarts !== false && m.ha_start ? this._health?.restarts || null : null;
+    const rs24 = rs ? rs.filter((t) => Date.now() - t < 86400e3).length : 0;
+    const rsWarn = rs && rs24 >= Number(c.restart_warn || 3);
+    const rsTip = rs && rs.length ? `${trLabel("Redémarrages de Home Assistant")} : ${rs.slice(0, 8).map((t) => new Date(t).toLocaleString(cardLocale(), { weekday: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })).join(", ")}${rs.length > 8 ? "…" : ""}` : "";
+    const reps = c.show_repairs !== false ? this._health?.repairs || [] : [];
+    const SEV = { critical: ["mdi:alert-octagon", "bad"], error: ["mdi:alert-circle", "bad"], warning: ["mdi:alert", "warn"] };
+    const repairs = reps.length ? localizeTemplate`<div class="srv-rp">${reps.slice(0, 6).map((r) => { const [ic, cl] = SEV[r.severity] || ["mdi:wrench-outline", "warn"]; return localizeTemplate`<div class="srv-rpi ${cl}" data-nav="/config/repairs"><ha-icon icon="${ic}"></ha-icon><span>${esc(r.title)}</span><small>${esc(r.domain || "")}</small></div>`; }).join("")}
+      <div class="srv-rpi more" data-nav="/config/repairs"><ha-icon icon="mdi:open-in-new"></ha-icon><span>${trLabel("Voir toutes les réparations")}${reps.length > 6 ? ` (${reps.length})` : ""}</span></div></div>` : "";
     const infoTiles = [
       ip || ipExt ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(m.ip || m.ip_ext)}"><div class="tile-l"><ha-icon icon="mdi:ip-network-outline"></ha-icon>Adresses IP</div>${kv([[trLabel("Interne"), ip ?? "—"], [trLabel("Externe"), ipExt ?? (m.ip_ext ? trLabel("indisponible") : null)]])}</div>` : "",
-      boot || haStart ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(m.last_boot || m.ha_start)}"><div class="tile-l"><ha-icon icon="mdi:timer-outline"></ha-icon>Uptime</div>${kv([["Reboot", boot ? since(boot) : null], ["Restart", haStart ? since(haStart) : null]])}</div>` : "",
+      boot || haStart ? localizeTemplate`<div class="tile srv-t${rsWarn ? " srv-rs-warn" : ""}" data-entity="${esc(m.ha_start || m.last_boot)}"${rsTip ? ` title="${esc(rsTip)}"` : ""}><div class="tile-l"><ha-icon icon="mdi:timer-outline"></ha-icon>Uptime</div>${kv([["Reboot", boot ? since(boot) : null], ["Restart", haStart ? since(haStart) : null]])}${rs ? localizeTemplate`<div class="srv-kv srv-rs"><span>${trLabel("Redémarrages")}</span><b>${esc(String(rs24))} ${trLabel("en 24 h")} · ${esc(String(rs.length))} ${trLabel("en 7 jours")}</b></div>` : ""}</div>` : "",
       m.fan ? localizeTemplate`<div class="tile srv-t srv-fan ${fanOn === true ? "on" : fanOn === false ? "off" : ""}" data-entity="${esc(m.fan)}"${fanIsEntity ? ` data-hold="${esc(m.fan)}" title="Appui long : marche / arrêt"` : ""}>
         <div class="tile-l"><ha-icon icon="mdi:fan"></ha-icon>Ventilateur</div>
         <div class="tile-v">${fanOn === null && fan === null ? "—" : fanOn === false ? trLabel("Éteint") : fan !== null ? localizeTemplate`${fmt(fan, 0)}<span>${esc(fanUnit)}</span>` : trLabel("Allumé")}</div>
@@ -1786,6 +1846,7 @@ class ServeurHaCard extends HTMLElement {
       ? localizeTemplate`<div class="empty">Aucun capteur trouvé<span>Ajoutez l'intégration System Monitor (Paramètres → Appareils et services) ou indiquez vos capteurs dans <code>entities:</code> (voir le README).</span></div>`
       : [
         c.show_info !== false ? sec("mdi:information-outline", trLabel("Informations"), infoTiles.length ? localizeTemplate`<div class="tiles srv-tiles">${infoTiles.join("")}</div>` : "") : "",
+        c.show_repairs !== false ? sec("mdi:wrench-outline", `${trLabel("Réparations")} · ${reps.length}`, repairs) : "",
         c.show_resources !== false ? sec("mdi:speedometer", trLabel("Ressources"), gauges.length ? localizeTemplate`<div class="srv-grid">${gauges.join("")}</div>` : "") : "",
         c.show_network !== false ? sec("mdi:swap-vertical", trLabel("Débits réseau"), nets.length ? localizeTemplate`<div class="srv-grid">${nets.join("")}</div>` : "") : "",
         c.show_power !== false ? sec("mdi:power-plug-outline", trLabel("Alimentation"), power) : "",
@@ -1813,6 +1874,14 @@ const SRV_STYLE = `<style>
 .srv-fold:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
 ha-card { display: block; padding-bottom: 12px; }
 ha-card.srv-alert { border-color: var(--t-red); }
+.srv-rs-warn { border-color: var(--pc-warn, #f0a33a) !important; } .srv-rs-warn .srv-rs b { color: var(--pc-warn, #f0a33a); }
+.srv-rp { display: grid; gap: 6px; }
+.srv-rpi { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--med-line); background: var(--med-surface); cursor: pointer; font-size: .82rem; }
+.srv-rpi ha-icon { --mdc-icon-size: 18px; flex: none; }
+.srv-rpi span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srv-rpi small { color: var(--med-muted); font-size: .72rem; }
+.srv-rpi.warn ha-icon { color: var(--pc-warn, #f0a33a); } .srv-rpi.bad { border-color: color-mix(in srgb, var(--t-red) 50%, transparent); } .srv-rpi.bad ha-icon { color: var(--t-red); }
+.srv-rpi.more { justify-content: center; color: var(--med-muted); } .srv-rpi.more span { flex: none; }
 .brand .srv-box { fill: none; stroke: var(--med-green); stroke-width: 2.4; }
 .srv-head { margin-top: 2px; font-variant-numeric: tabular-nums; }
 .srv-leds { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -7065,6 +7134,7 @@ const EN_EDITOR_LABELS = {
     backup_title: "Backup section title (optional)",
     temp_warn: "Temperature: warning threshold", temp_alert: "Temperature: critical threshold",
     show_power: "Power supply section", show_backup: "Backups section",
+    show_restarts: "Home Assistant restart count (24 h and 7 days)", show_repairs: "Repairs section",
   },
   MAJ: {
     database: "Database size (optional; otherwise detected automatically)",
@@ -7294,6 +7364,8 @@ const SRV_SCHEMA = [
   { name: "show_power", selector: { boolean: {} } },
   { name: "show_backup", selector: { boolean: {} } },
   { name: "show_fan", selector: { boolean: {} } },
+  { name: "show_restarts", selector: { boolean: {} } },
+  { name: "show_repairs", selector: { boolean: {} } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -7315,6 +7387,8 @@ const SRV_LABELS = {
   show_power: "Section Alimentation",
   show_backup: "Section Sauvegardes",
   show_fan: "Afficher le ventilateur",
+  show_restarts: "Nombre de redémarrages de HA (24 h et 7 jours)",
+  show_repairs: "Section Réparations",
   theme: "Couleurs de la carte",
 };
 const ServeurHaCardEditor = makeEditor(SRV_SCHEMA, SRV_LABELS, SRV_DEFAULTS, EN_EDITOR_LABELS.SRV, PL_EDITOR_LABELS.SRV);
