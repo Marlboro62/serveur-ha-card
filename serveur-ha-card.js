@@ -22,7 +22,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.23.0-beta.1";
+const CARD_VERSION = "0.23.0-beta.2";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -85,7 +85,7 @@ const EN_TEXT = {
   "Redémarrages": "Restarts", "Réparations": "Repairs", "Voir toutes les réparations": "See all repairs",
   "Sauvegardes HA": "HA backups", "Sur le NAS": "On the NAS", "Espace": "Space", "Partage": "Share", "Monté": "Mounted",
   "Non monté": "Not mounted", "Manuelle": "Manual", "Automatique": "Automatic", "Il y a": "Age", "Taille": "Size",
-  "Aucune sauvegarde": "No backup",
+  "Aucune sauvegarde": "No backup", "NAS injoignable": "NAS unreachable", "Illisibles": "Unreadable", "Échouera": "Will fail",
   "en 24 h": "in 24 h", "en 7 jours": "in 7 days", "7 jours": "7 days", "Redémarrages de Home Assistant": "Home Assistant restarts",
   "À jour": "Up to date", "à jour": "up to date", "À installer": "Pending installation",
   "Applications": "Applications", "Application": "Application", "Détails": "Details",
@@ -423,6 +423,9 @@ const PL_TEXT = {
   "Il y a": "Wiek",
   "Taille": "Rozmiar",
   "Aucune sauvegarde": "Brak kopii zapasowej",
+  "NAS injoignable": "NAS niedostępny",
+  "Illisibles": "Nieczytelne",
+  "Échouera": "Nie powiedzie się",
   "en 24 h": "w 24 h",
   "en 7 jours": "w 7 dni",
   "7 jours": "7 dni",
@@ -3256,9 +3259,15 @@ const loadNasBackups = async (hass, c, { hosts = [], agents = [], pathRe = null 
     if (!mine.length && pathRe) { const byPath = mounts.filter((x) => pathRe.test(String(x.path || x.share || ""))); if (byPath.length === 1) mine = byPath; }
     list = [...mine.map((x) => `hassio.${x.name}`), ...agents];
   }
-  const known = new Set([...(info?.backups || []).flatMap((b) => Object.keys(b.agents || {})), ...list.filter((a) => a.startsWith("synology_dsm."))]);
-  list = [...new Set(list)].filter((a) => known.has(a) || a.startsWith("hassio."));
+  // agents joignables, et ceux de la sauvegarde automatique (seule la liste des agents est lue dans la configuration)
+  let avail = null, auto_ids = [];
+  try { avail = new Set(((await hass.callWS({ type: "backup/agents/info" }))?.agents || []).map((a) => a.agent_id)); } catch (e) { /* inconnu */ }
+  try { auto_ids = (await hass.callWS({ type: "backup/config/info" }))?.config?.create_backup?.agent_ids || []; } catch (e) { /* inconnu */ }
+  const stored = new Set((info?.backups || []).flatMap((b) => Object.keys(b.agents || {})));
+  list = [...new Set(list)].filter((a) => stored.has(a) || auto_ids.includes(a) || avail?.has(a) || (a.startsWith("hassio.") && !avail));
   if (!list.length) return null;
+  // NAS éteint ou injoignable : son agent disparaît, et ses sauvegardes ne sont plus listées
+  const offline = !!avail && list.every((a) => !avail.has(a));
   const mount = mounts.find((x) => list.includes(`hassio.${x.name}`)) || null;
   const here = (info?.backups || []).filter((b) => list.some((a) => b.agents?.[a]))
     .sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -3275,12 +3284,24 @@ const loadNasBackups = async (hass, c, { hosts = [], agents = [], pathRe = null 
     last: ((b) => (b ? { date: b.date, name: b.name, size: sizeOf(b), full: !!b.homeassistant_included } : null))(here.find((b) => b.homeassistant_included) || here[0]),
     lastFull: here.find((b) => b.homeassistant_included)?.date || null,
     fail: sendFail || tryFail, next: info?.next_automatic_backup || null,
+    offline, inAuto: list.some((a) => auto_ids.includes(a)),
   };
 };
 
 /** Section « Sauvegardes HA » et voyant Backup des cartes NAS. `ok` : null sans données, sinon vrai ou faux. */
 const nasBackupBlock = (card, data, c) => {
   if (!data || c.show_backups === false) return { html: "", ok: null };
+  if (data.offline) {
+    // sauvegardes illisibles ; encore dans la sauvegarde automatique : chaque envoi vers ce NAS échouera
+    const whenO = (iso) => new Date(iso).toLocaleString(cardLocale(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const tiles = [
+      localizeTemplate`<div class="tile srv-t nas-bk warn" data-nav="/config/backup/backups"><div class="tile-l"><ha-icon icon="mdi:lan-disconnect"></ha-icon>NAS injoignable</div>
+        ${kvRows([[trLabel("Sauvegardes"), trLabel("Illisibles")]])}</div>`,
+      data.inAuto ? localizeTemplate`<div class="tile srv-t nas-bk bad" data-nav="/config/backup/settings"><div class="tile-l"><ha-icon icon="mdi:alert-circle-outline"></ha-icon>Automatique</div>
+        ${kvRows([[trLabel("Envoi"), trLabel("Échouera"), "bad"], data.fail ? [trLabel("Échec"), whenO(data.fail), "bad"] : null].filter(Boolean))}</div>` : "",
+    ].filter(Boolean);
+    return { ok: data.inAuto ? false : null, html: localizeTemplate`<div class="tiles srv-tiles nas-bks">${tiles.join("")}</div>` };
+  }
   const fmtSize = (b) => (b >= 1e12 ? `${fmt(b / 1e12, 2)} ${byteUnit("To")}` : b >= 1e9 ? `${fmt(b / 1e9, 1)} ${byteUnit("Go")}` : b >= 1e6 ? `${fmt(b / 1e6, 0)} ${byteUnit("Mo")}` : `${fmt(Math.max(1, b / 1e3), 0)} ${byteUnit("Ko")}`);
   const warnDays = Number(c.backup_warn_days) > 0 ? Number(c.backup_warn_days) : 8;
   const ref = data.lastFull || data.last?.date;
