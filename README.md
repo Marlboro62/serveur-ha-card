@@ -163,7 +163,8 @@ ram_total: 3800
 ### Ce qu'elle affiche
 
 - **En-tête** : nom, IP et température CPU, avec les voyants **Alimentation**, **Ventilateur** et **Backup**.
-- **Informations** : adresses IP interne et externe, uptime (dernier reboot et dernier redémarrage de HA), ventilateur.
+- **Informations** : adresses IP interne et externe, uptime (dernier reboot et dernier redémarrage de HA), ventilateur. Sous l'uptime, le **nombre de redémarrages de HA** sur 24 h et sur 7 jours (heures au survol), en orange à partir de `restart_warn` redémarrages en 24 h.
+- **Réparations** : les réparations en cours de **Paramètres › Système › Réparations** (6 au plus, les ignorées en moins), avec leur gravité et l'intégration concernée. Un clic ouvre la page des réparations. La section n'apparaît que s'il y en a.
 - **Ressources** : CPU, température, RAM, RAM libre et disque, avec des jauges colorées selon des seuils.
 - **Débits réseau** : download et upload.
 - **Alimentation** : historique des **24 dernières heures** en 24 segments d'une heure (vert = OK, rouge = sous-tension, gris = inconnu), avec la durée de chaque état au survol.
@@ -201,6 +202,9 @@ Les capteurs de System Monitor sont souvent **désactivés par défaut** : activ
 | `ip_ext_attribute` | Attribut portant l'IP externe | détecté |
 | `show_info`, `show_resources`, `show_network`, `show_power`, `show_backup` | Afficher chaque section | `true` |
 | `show_fan` | Afficher le ventilateur (voyant, tuile et mode). `false` le masque même s'il est détecté | `true` |
+| `show_restarts` | Nombre de redémarrages de HA sous l'uptime (capteur **Uptime** requis) | `true` |
+| `restart_warn` | Redémarrages en 24 h à partir desquels la ligne passe en orange | `3` |
+| `show_repairs` | Section des réparations en cours | `true` |
 | `entities` | Capteurs choisis à la main (voir ci-dessous) | — |
 
 Clés de `entities:` : `cpu`, `temperature`, `ram`, `ram_free`, `disk`, `disk_used`, `disk_total`, `net_in`, `net_out`, `ip`, `ip_ext`, `last_boot`, `ha_start`, `power`, `fan`, `backup_state`, `backup_event`, `backup_last`, `backup_next`, `drive_size`, `drive_used`, `drive_total`, `drive_count`.
