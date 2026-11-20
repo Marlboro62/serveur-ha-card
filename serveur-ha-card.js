@@ -22,7 +22,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.22.0-beta.1";
+const CARD_VERSION = "0.22.0-beta.2";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -83,7 +83,7 @@ const EN_TEXT = {
   "Mise à jour": "Update", "Mises à jour": "Updates", "Mises à jour système": "System updates",
   "Redémarrage requis": "Restart required", "redémarrage requis": "restart required",
   "Redémarrages": "Restarts", "Réparations": "Repairs", "Voir toutes les réparations": "See all repairs",
-  "en 24 h": "in 24 h", "en 7 jours": "in 7 days", "Redémarrages de Home Assistant": "Home Assistant restarts",
+  "en 24 h": "in 24 h", "en 7 jours": "in 7 days", "7 jours": "7 days", "Redémarrages de Home Assistant": "Home Assistant restarts",
   "À jour": "Up to date", "à jour": "up to date", "À installer": "Pending installation",
   "Applications": "Applications", "Application": "Application", "Détails": "Details",
   "Services": "Services", "Actions": "Actions", "Réglages": "Settings", "Paramètres": "Settings",
@@ -411,6 +411,7 @@ const PL_TEXT = {
   "Voir toutes les réparations": "Zobacz wszystkie naprawy",
   "en 24 h": "w 24 h",
   "en 7 jours": "w 7 dni",
+  "7 jours": "7 dni",
   "Redémarrages de Home Assistant": "Ponowne uruchomienia Home Assistant",
   "À jour": "Aktualny",
   "à jour": "aktualny",
@@ -1788,7 +1789,7 @@ class ServeurHaCard extends HTMLElement {
       <div class="srv-rpi more" data-nav="/config/repairs"><ha-icon icon="mdi:open-in-new"></ha-icon><span>${trLabel("Voir toutes les réparations")}${reps.length > 6 ? ` (${reps.length})` : ""}</span></div></div>` : "";
     const infoTiles = [
       ip || ipExt ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(m.ip || m.ip_ext)}"><div class="tile-l"><ha-icon icon="mdi:ip-network-outline"></ha-icon>Adresses IP</div>${kv([[trLabel("Interne"), ip ?? "—"], [trLabel("Externe"), ipExt ?? (m.ip_ext ? trLabel("indisponible") : null)]])}</div>` : "",
-      boot || haStart ? localizeTemplate`<div class="tile srv-t${rsWarn ? " srv-rs-warn" : ""}" data-entity="${esc(m.ha_start || m.last_boot)}"${rsTip ? ` title="${esc(rsTip)}"` : ""}><div class="tile-l"><ha-icon icon="mdi:timer-outline"></ha-icon>Uptime</div>${kv([["Reboot", boot ? since(boot) : null], ["Restart", haStart ? since(haStart) : null]])}${rs ? localizeTemplate`<div class="srv-kv srv-rs"><span>${trLabel("Redémarrages")}</span><b>${esc(String(rs24))} ${trLabel("en 24 h")} · ${esc(String(rs.length))} ${trLabel("en 7 jours")}</b></div>` : ""}</div>` : "",
+      boot || haStart ? localizeTemplate`<div class="tile srv-t${rsWarn ? " srv-rs-warn" : ""}" data-entity="${esc(m.ha_start || m.last_boot)}"${rsTip ? ` title="${esc(rsTip)}"` : ""}><div class="tile-l"><ha-icon icon="mdi:timer-outline"></ha-icon>Uptime</div>${kv([["Reboot", boot ? since(boot) : null], ["Restart", haStart ? since(haStart) : null]])}${rs ? localizeTemplate`<div class="srv-rs-h">${trLabel("Redémarrages")}</div><div class="srv-kv srv-rs"><span>24 h</span><b>${esc(String(rs24))}</b></div><div class="srv-kv"><span>${trLabel("7 jours")}</span><b>${esc(String(rs.length))}</b></div>` : ""}</div>` : "",
       m.fan ? localizeTemplate`<div class="tile srv-t srv-fan ${fanOn === true ? "on" : fanOn === false ? "off" : ""}" data-entity="${esc(m.fan)}"${fanIsEntity ? ` data-hold="${esc(m.fan)}" title="Appui long : marche / arrêt"` : ""}>
         <div class="tile-l"><ha-icon icon="mdi:fan"></ha-icon>Ventilateur</div>
         <div class="tile-v">${fanOn === null && fan === null ? "—" : fanOn === false ? trLabel("Éteint") : fan !== null ? localizeTemplate`${fmt(fan, 0)}<span>${esc(fanUnit)}</span>` : trLabel("Allumé")}</div>
@@ -1874,12 +1875,13 @@ const SRV_STYLE = `<style>
 .srv-fold:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
 ha-card { display: block; padding-bottom: 12px; }
 ha-card.srv-alert { border-color: var(--t-red); }
+.srv-rs-h { margin-top: 6px; font-size: .72rem; font-weight: 600; color: var(--med-muted); }
 .srv-rs-warn { border-color: var(--pc-warn, #f0a33a) !important; } .srv-rs-warn .srv-rs b { color: var(--pc-warn, #f0a33a); }
-.srv-rp { display: grid; gap: 6px; }
+.srv-rp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .srv-rpi { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--med-line); background: var(--med-surface); cursor: pointer; font-size: .82rem; }
 .srv-rpi ha-icon { --mdc-icon-size: 18px; flex: none; }
-.srv-rpi span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.srv-rpi small { color: var(--med-muted); font-size: .72rem; }
+.srv-rpi span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.srv-rpi small { flex: none; color: var(--med-muted); font-size: .72rem; }
 .srv-rpi.warn ha-icon { color: var(--pc-warn, #f0a33a); } .srv-rpi.bad { border-color: color-mix(in srgb, var(--t-red) 50%, transparent); } .srv-rpi.bad ha-icon { color: var(--t-red); }
 .srv-rpi.more { justify-content: center; color: var(--med-muted); } .srv-rpi.more span { flex: none; }
 .brand .srv-box { fill: none; stroke: var(--med-green); stroke-width: 2.4; }
