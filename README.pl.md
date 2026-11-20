@@ -12,7 +12,7 @@ Wersja projektu obejmuje **trzy języki interfejsu: francuski (`fr`), angielski 
 | --- | --- |
 | `custom:serveur-ha-card` | Host Home Assistant / Raspberry Pi / mini-PC: CPU, temperatura, RAM, dyski, ruch sieciowy, czas pracy, wentylator, zasilanie i kopie zapasowe |
 | `custom:serveur-ha-maj-card` | Home Assistant: aktualizacje Core, Supervisor, OS i dodatków, rozmiar bazy danych, ważność SSL |
-| `custom:serveur-ha-nas-card` | NAS Synology: woluminy, dyski/SMART, CPU, RAM, temperatury, wentylator, sieć, UPS i sterowanie zasilaniem |
+| `custom:serveur-ha-nas-card` | NAS Synology: woluminy, dyski/SMART, CPU, RAM, temperatury, wentylator, sieć, UPS, sterowanie zasilaniem i kopie zapasowe Home Assistant na NAS |
 | `custom:serveur-ha-dns-card` | AdGuard Home i Pi-hole: zapytania DNS, odsetek zablokowanych, czasy odpowiedzi, ochrona, ustawienia i aktualizacje |
 | `custom:serveur-ha-linux-card` | Linux Update Dashboard: oczekujące aktualizacje systemu i bezpieczeństwa, pakiety, wymagany restart |
 | `custom:serveur-ha-proxmox-card` | Proxmox VE: węzły, magazyny danych, VM i kontenery LXC, aktualizacje i sterowanie maszynami |
@@ -22,7 +22,7 @@ Wersja projektu obejmuje **trzy języki interfejsu: francuski (`fr`), angielski 
 | `custom:serveur-ha-wireguard-card` | WireGuard / WGDashboard: serwery, połączone peery, handshake, transfer danych |
 | `custom:serveur-ha-glances-card` | Glances: CPU, RAM, dyski, temperatury, wentylatory, sieć i procesy |
 | `custom:serveur-ha-media-card` | Plex, Jellyfin i Emby: odtwarzanie, odtwarzacze, sterowanie i biblioteki |
-| `custom:serveur-ha-omv-card` | OpenMediaVault: czas pracy, CPU, RAM, dyski SMART, systemy plików, usługi i sterowanie zasilaniem |
+| `custom:serveur-ha-omv-card` | OpenMediaVault: czas pracy, CPU, RAM, dyski SMART, systemy plików, usługi, sterowanie zasilaniem i kopie zapasowe Home Assistant na NAS |
 | `custom:serveur-ha-github-card` | GitHub (beta): otwarte issues i pull requesty, nowe wpisy i aktywność według repozytoriów |
 
 Dawna karta OPNsense ma odrębne repozytorium: [opnsense-card](https://github.com/Marlboro62/opnsense-card). Stara nazwa wyświetla informację o migracji.
