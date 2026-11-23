@@ -295,7 +295,7 @@ D'autres exemples sont dans [`exemples/`](https://github.com/Marlboro62/serveur-
 type: custom:serveur-ha-proxmox-card
 ```
 
-Tout est détecté à partir de l'intégration **Proxmox VE** de Home Assistant (**Paramètres › Appareils et services › Ajouter une intégration**), en français comme en anglais.
+Tout est détecté à partir de l'intégration **Proxmox VE** ([dougiteixeira/proxmoxve](https://github.com/dougiteixeira/proxmoxve), version 5 ou 6 et plus), en français comme en anglais.
 
 - **En-tête** : nombre de nœuds et d'invités en marche, voyants **Nœuds** (rouge si un nœud est hors ligne) et **Mise à jour**.
 - **Un onglet par nœud**, avec le nombre d'invités en marche et une flèche orange quand une mise à jour Proxmox est disponible.

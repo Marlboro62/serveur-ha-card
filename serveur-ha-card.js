@@ -22,7 +22,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.23.0";
+const CARD_VERSION = "0.23.1-beta.1";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -2846,6 +2846,9 @@ const PVE_ROLES = [
   ["vm", "button", /^(pause|suspend|resume|reset)$/, /_(pause|suspend|suspendre|reinitialiser|reset)(?:_\d+)?$/],
   ["update", "update", /./, /./],
 ];
+// Intégration Proxmox VE (dougiteixeira/proxmoxve) : domaine « proxmoxve » jusqu'à la 5.x,
+// « proxmoxve_custom » depuis la 6.0 (pour ne plus entrer en conflit avec l'intégration native)
+const PVE_PLATFORMS = new Set(["proxmoxve", "proxmoxve_custom"]);
 const pveRole = (id, ent) => {
   const domain = id.split(".")[0];
   const tk = ent?.translation_key || "";
@@ -2972,7 +2975,7 @@ class ServeurHaProxmoxCard extends HTMLElement {
     const devs = hass.devices || {};
     const byDev = {};
     for (const [id, e] of Object.entries(hass.entities || {})) {
-      if (e.platform !== "proxmoxve" || !hass.states[id] || !e.device_id || e.hidden) continue;
+      if (!PVE_PLATFORMS.has(e.platform) || !hass.states[id] || !e.device_id || e.hidden) continue;
       const role = pveRole(id, e);
       if (!role) continue;
       const d = (byDev[e.device_id] ||= { id: e.device_id, roles: {}, series: {} });
