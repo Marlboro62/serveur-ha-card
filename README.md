@@ -28,7 +28,7 @@
 
 # Cartes Serveur HA
 
-> **🌍 Traductions :** [Documentation anglaise](README.en.md) · [Dokumentacja polska](README.pl.md). Les 14 cartes prennent en charge `language: auto` (langue de Home Assistant), `language: fr` (français), `language: en` (anglais) et `language: pl` (polonais). Le choix de la langue est également disponible dans chaque éditeur visuel.
+> **🌍 Traductions :** [Documentation anglaise](README.en.md) · [Dokumentacja polska](README.pl.md). Les 14 cartes prennent en charge `language: auto` (langue de Home Assistant), `language: fr` (français), `language: en` (anglais), `language: pl` (polonais), `language: de` (allemand), `language: es` (espagnol), `language: it` (italien) et `language: nl` (néerlandais). Toute autre langue de Home Assistant affiche l'anglais. Le choix de la langue est également disponible dans chaque éditeur visuel.
 
 
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz/)
@@ -115,7 +115,7 @@
 
 ### Sécurité des traductions et performances
 
-Seuls les **libellés fournis par les cartes** sont traduits. Les noms d'appareils et d'entités Home Assistant, les titres YAML personnalisés, les contenus Plex et les données GitHub restent inchangés. Les fragments statiques des modèles HTML sont mis en cache par langue et par carte, sans parcourir le Shadow DOM à chaque rendu. Un catalogue commun de messages assure une traduction cohérente des états et alertes entre toutes les cartes, avec des clés distinctes lorsque le sens diffère (volume de stockage et volume audio, par exemple). Les erreurs asynchrones de GitHub et du lecteur multimédia sont localisées lors de l'affichage, sans toucher aux données des utilisateurs. `Intl.RelativeTimeFormat` est utilisé pour les dates relatives en anglais et en polonais, tandis que le format français d'origine reste inchangé. `CARD_VERSION` reste `0.17.0` ; la version de publication est définie par le mainteneur.
+Seuls les **libellés fournis par les cartes** sont traduits. Les noms d'appareils et d'entités Home Assistant, les titres YAML personnalisés, les contenus Plex et les données GitHub restent inchangés. Les fragments statiques des modèles HTML sont mis en cache par langue et par carte, sans parcourir le Shadow DOM à chaque rendu. Un catalogue commun de messages assure une traduction cohérente des états et alertes entre toutes les cartes, avec des clés distinctes lorsque le sens diffère (volume de stockage et volume audio, par exemple). Les erreurs asynchrones de GitHub et du lecteur multimédia sont localisées lors de l'affichage, sans toucher aux données des utilisateurs. `Intl.RelativeTimeFormat` est utilisé pour les dates relatives dans les autres langues, tandis que le format français d'origine reste inchangé. `CARD_VERSION` reste `0.17.0` ; la version de publication est définie par le mainteneur.
 
 Tests de régression : `node tests/i18n-smoke.test.cjs` et `node tests/i18n-review-regression.test.cjs` (tests simulés ; une validation sous Home Assistant reste recommandée).
 

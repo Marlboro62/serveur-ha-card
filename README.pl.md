@@ -77,10 +77,11 @@ language: fr
 
 | `language` | Zachowanie |
 | --- | --- |
-| `auto` | `pl` / `pl-PL` → polski; `fr` / `fr-*` → francuski; `en` i pozostałe języki → angielski |
+| `auto` | `pl` → polski; `fr` → francuski; `de` → niemiecki; `es` → hiszpański; `it` → włoski; `nl` → niderlandzki; `en` i pozostałe języki → angielski |
 | `pl` | Polski interfejs, edytor i formatowanie liczb/daty (`pl-PL`) |
 | `en` | Angielski interfejs i formatowanie (`en-GB`) |
 | `fr` | Oryginalny francuski interfejs i formatowanie (`fr-FR`) |
+| `de`, `es`, `it`, `nl` | Interfejs i edytor po niemiecku, hiszpańsku, włosku lub niderlandzku, z formatowaniem liczb i dat danego języka |
 
 Każda karta może mieć inną wersję językową. Język wyświetlania nie zmienia identyfikatorów encji, kluczy YAML, żądań API ani nazw usług Home Assistant.
 
@@ -88,7 +89,7 @@ Każda karta może mieć inną wersję językową. Język wyświetlania nie zmie
 
 | Opcja | Opis | Domyślnie |
 | --- | --- | --- |
-| `language` | `auto`, `pl`, `en` lub `fr` | `auto` |
+| `language` | `auto`, `pl`, `en`, `fr`, `de`, `es`, `it` lub `nl` | `auto` |
 | `theme` | `v2` (granatowy), `auto` (jasny/ciemny zgodnie z HA), `ha` (motyw HA) | `v2` |
 | `text_size` | Skala całej karty w zakresie 70–200% | `100` |
 | `title` | Własny tytuł karty (jeśli obsługiwany) | Zależnie od karty |
