@@ -17,6 +17,7 @@ A collection of **14 independent Home Assistant Lovelace cards in one JavaScript
 | `custom:serveur-ha-linux-card` | Linux Update Dashboard: outstanding system/security updates, pending packages, reboot status and confirmed updates |
 | `custom:serveur-ha-proxmox-card` | Proxmox VE: nodes, storage, VMs, LXC containers, updates and confirmed power actions |
 | `custom:serveur-ha-asus-card` | AsusRouter: Internet and public IP, Wi-Fi, Ethernet ports, clients, VPN, firmware, temperatures and restart |
+| `custom:serveur-ha-livebox-card` | Livebox (beta, [Livebox integration](https://github.com/cyr-ius/hass-livebox-component)): Internet and public IP, rates, speed test, fiber or xDSL line, Wi-Fi and guest Wi-Fi, missed calls, connected devices and confirmed restart |
 | `custom:serveur-ha-ping-card` | Ping/ICMP monitoring: online/offline devices, latency, jitter and packet loss, grouped by type or area |
 | `custom:serveur-ha-zigbee-card` | Zigbee/ZHA/Zigbee2MQTT: low and critical batteries, offline devices, link quality and bridge status |
 | `custom:serveur-ha-wireguard-card` | WireGuard WGDashboard: servers, connected peers, handshakes, traffic received and sent |

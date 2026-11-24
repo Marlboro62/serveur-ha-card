@@ -46,6 +46,7 @@
 | `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
 | `custom:serveur-ha-asus-card` | **Routeur ASUS** ([AsusRouter](https://github.com/Vaskivskyi/ha-asusrouter)) : Internet et IP publique, débits, Wi-Fi et réseaux invités, ports Ethernet, appareils connectés, VPN, firmware, températures, redémarrage confirmé en deux clics |
 | `custom:serveur-ha-freebox-card` | **Freebox** (intégration Freebox) : Internet et IP publique, débits, test de débit (Speedtest), températures, disques et RAID, Wi-Fi, appels manqués, appareils connectés, redémarrage confirmé |
+| `custom:serveur-ha-livebox-card` | **Livebox** *(bêta)* ([intégration Livebox](https://github.com/cyr-ius/hass-livebox-component)) : Internet et IP publique, débits, test de débit (Speedtest), ligne fibre ou xDSL, Wi-Fi et Wi-Fi invité, appels manqués, appareils connectés, redémarrage confirmé |
 | `custom:serveur-ha-ping-card` | **Réseau** (intégration Ping) : appareils en ligne ou hors ligne, latence, gigue et perte de paquets, groupés par type ou par pièce, groupes dépliables |
 | `custom:serveur-ha-zigbee-card` | **Zigbee et piles** : piles à changer et piles faibles, appareils Zigbee hors ligne, signal faible ou silencieux, état du pont Zigbee2MQTT |
 | `custom:serveur-ha-wireguard-card` | **VPN WireGuard** ([WGDashboard](https://github.com/donaldzou/WGDashboard)) : serveurs, pairs connectés, dernier handshake, données reçues et envoyées |
@@ -444,6 +445,36 @@ type: custom:serveur-ha-freebox-card
 | `tracker` | Suivi de la Freebox (IP publique, uptime, type de connexion) | trouvé seul |
 | `temp_warn`, `temp_alert` | Seuils orange et rouge des températures, en °C | `70`, `85` |
 | `show_connection`, `show_rates`, `show_speedtest`, `show_system`, `show_wifi`, `show_phone`, `show_clients`, `show_actions` | Afficher chaque section | `true` |
+| `theme` | Couleurs de la carte | `v2` |
+
+## Carte Livebox — `custom:serveur-ha-livebox-card` *(bêta)*
+
+Pour la Livebox d'Orange, avec l'intégration **Livebox** de cyr-ius ([hass-livebox-component](https://github.com/cyr-ius/hass-livebox-component), par le Marketplace ou HACS), ajoutée dans **Paramètres › Appareils et services** avec le mot de passe admin de la Livebox. Les capteurs sont trouvés tout seuls.
+
+```yaml
+type: custom:serveur-ha-livebox-card
+```
+
+- **Voyants** : Internet, Wi-Fi, appels manqués, DNS dynamique en erreur.
+- **Internet** : connexion, IP publique, type de lien (GPON, VDSL…), uptime, accès à distance s'il est activé.
+- **Débits** en temps réel (download et upload), en Mbit/s. Sur une Livebox fibre, ils sont calculés à partir des compteurs « Fibre reçu » et « Fibre émis » : il faut deux relevés de l'intégration avant le premier affichage.
+- **Test de débit** : si l'intégration **Speedtest.net** ou **Speedtest CLI** est installée, débits mesurés, ping, opérateur et heure de la mesure.
+- **Ligne** : en fibre, puissance optique reçue (verte de −8 à −27 dBm) et émise, état ONU, température ; en xDSL, débits de synchronisation.
+- **Wi-Fi** et **Wi-Fi invité** : état, avec un bouton pour activer ou couper chacun (deux clics).
+- **Téléphone** : appels manqués, avec un bouton « Effacer les appels ».
+- **Appareils connectés** : nombre d'appareils présents, liste dépliable (Wi-Fi, Wi-Fi invité ou Ethernet).
+- **Actions** : faire sonner le téléphone, redémarrer la Livebox (deux clics).
+
+L'uptime vient du capteur « Durée de fonctionnement » de l'intégration (désactivé par défaut) ou, à défaut, de la date du dernier démarrage.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `device` | Livebox (appareil de l'intégration Livebox), si vous en avez plusieurs | la première |
+| `title`, `icon`, `icon_color` | Titre, icône et sa couleur | modèle de la Livebox |
+| `wan_max` | Pleine échelle des barres de débit, en Mbit/s (débit de l'abonnement) | `1000` |
+| `download`, `upload` | Capteurs de débit descendant et montant à afficher à la place des compteurs de la fibre | compteurs de la fibre |
+| `speedtest_download`, `speedtest_upload`, `speedtest_ping` | Capteurs du test de débit | ceux de Speedtest trouvés seuls |
+| `show_connection`, `show_rates`, `show_speedtest`, `show_line`, `show_wifi`, `show_phone`, `show_clients`, `show_actions` | Afficher chaque section | `true` |
 | `theme` | Couleurs de la carte | `v2` |
 
 ## Carte Réseau — `custom:serveur-ha-ping-card`

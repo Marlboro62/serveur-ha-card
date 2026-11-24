@@ -22,7 +22,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.24.1";
+const CARD_VERSION = "0.25.0-beta.1";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -1078,6 +1078,45 @@ Object.assign(PL_TEXT, {
   "Marquer comme lus": "Oznacz jako przeczytane", "Aucune Freebox trouvée": "Nie znaleziono Freebox",
   "Ajoutez l'intégration Freebox dans Paramètres › Appareils et services, acceptez l'accès sur l'écran de la Freebox, puis rechargez la page.": "Dodaj integrację Freebox w Ustawienia › Urządzenia i usługi, zaakceptuj dostęp na ekranie Freebox i odśwież stronę.",
 });
+/* Carte Livebox : textes anglais et polonais. */
+Object.assign(EN_TEXT, {
+  "Wi-Fi invité": "Guest Wi-Fi",
+  "Couper le Wi-Fi invité": "Turn guest Wi-Fi off",
+  "Activer le Wi-Fi invité": "Turn guest Wi-Fi on",
+  "Effacer les appels": "Clear calls",
+  "Redémarrer la Livebox": "Restart the Livebox",
+  "Faire sonner le téléphone": "Ring the phone",
+  "Aucune Livebox trouvée": "No Livebox found",
+  "Installez l'intégration Livebox (hass-livebox-component, par le Marketplace ou HACS), ajoutez-la dans Paramètres › Appareils et services avec le mot de passe admin de la Livebox, puis rechargez la page.": "Install the Livebox integration (hass-livebox-component, from the Marketplace or HACS), add it in Settings › Devices & services with the Livebox admin password, then reload the page.",
+  "Ligne fibre": "Fiber line",
+  "Ligne xDSL": "xDSL line",
+  "Puissance reçue": "Received power",
+  "Puissance émise": "Transmitted power",
+  "État ONU": "ONU state",
+  "Synchro descendante": "Downstream sync",
+  "Synchro montante": "Upstream sync",
+  "Accès à distance": "Remote access",
+  "DNS dynamique": "Dynamic DNS",
+});
+Object.assign(PL_TEXT, {
+  "Wi-Fi invité": "Wi-Fi dla gości",
+  "Couper le Wi-Fi invité": "Wyłącz Wi-Fi dla gości",
+  "Activer le Wi-Fi invité": "Włącz Wi-Fi dla gości",
+  "Effacer les appels": "Wyczyść połączenia",
+  "Redémarrer la Livebox": "Uruchom ponownie Livebox",
+  "Faire sonner le téléphone": "Zadzwoń na telefon",
+  "Aucune Livebox trouvée": "Nie znaleziono Livebox",
+  "Installez l'intégration Livebox (hass-livebox-component, par le Marketplace ou HACS), ajoutez-la dans Paramètres › Appareils et services avec le mot de passe admin de la Livebox, puis rechargez la page.": "Zainstaluj integrację Livebox (hass-livebox-component, z Marketplace lub HACS), dodaj ją w Ustawienia › Urządzenia i usługi z hasłem administratora Livebox i odśwież stronę.",
+  "Ligne fibre": "Linia światłowodowa",
+  "Ligne xDSL": "Linia xDSL",
+  "Puissance reçue": "Moc odbierana",
+  "Puissance émise": "Moc nadawana",
+  "État ONU": "Stan ONU",
+  "Synchro descendante": "Synchronizacja pobierania",
+  "Synchro montante": "Synchronizacja wysyłania",
+  "Accès à distance": "Dostęp zdalny",
+  "DNS dynamique": "Dynamiczny DNS",
+});
 const EN_KEYS = Object.keys(EN_TEXT).sort((a, b) => b.length - a.length);
 const safeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const EN_FRAGMENT_RULE = new RegExp(
@@ -1160,6 +1199,87 @@ const EXTRA_I18N = {
     context: {"ServeurHaMediaCard": {"Invité": "Gastgebruiker", "Invités": "Gastgebruikers"}, "ServeurHaProxmoxCard": {"Invité": "Gast (VM/LXC)", "Invités": "VM's en containers"}},
   },
 };
+/* Carte Livebox : textes et libellés de l'éditeur en allemand, espagnol, italien et néerlandais. */
+Object.assign(EXTRA_I18N.de.text, {
+  "Wi-Fi invité": "Gast-WLAN",
+  "Couper le Wi-Fi invité": "Gast-WLAN ausschalten",
+  "Activer le Wi-Fi invité": "Gast-WLAN einschalten",
+  "Effacer les appels": "Anrufe löschen",
+  "Redémarrer la Livebox": "Livebox neu starten",
+  "Faire sonner le téléphone": "Telefon klingeln lassen",
+  "Aucune Livebox trouvée": "Keine Livebox gefunden",
+  "Installez l'intégration Livebox (hass-livebox-component, par le Marketplace ou HACS), ajoutez-la dans Paramètres › Appareils et services avec le mot de passe admin de la Livebox, puis rechargez la page.": "Installiere die Livebox-Integration (hass-livebox-component, über den Marketplace oder HACS), füge sie unter Einstellungen › Geräte & Dienste mit dem Admin-Passwort der Livebox hinzu und lade die Seite neu.",
+  "Ligne fibre": "Glasfaserleitung",
+  "Ligne xDSL": "xDSL-Leitung",
+  "Puissance reçue": "Empfangsleistung",
+  "Puissance émise": "Sendeleistung",
+  "État ONU": "ONU-Status",
+  "Synchro descendante": "Synchronisation Download",
+  "Synchro montante": "Synchronisation Upload",
+  "Accès à distance": "Fernzugriff",
+  "DNS dynamique": "Dynamisches DNS",
+});
+EXTRA_I18N.de.labels.LBX = {"device": "Livebox (Gerät der Integration Livebox, optional)", "title": "Titel (Standard: Livebox-Modell)", "wan_max": "Maximum der Datenraten-Balken (Geschwindigkeit des Anschlusses)", "download": "Download-Rate (leer = Glasfaser-Zähler)", "upload": "Upload-Rate (leer = Glasfaser-Zähler)", "speedtest_download": "Geschwindigkeitstest: Download (leer = Speedtest automatisch gefunden)", "speedtest_upload": "Geschwindigkeitstest: Upload", "speedtest_ping": "Geschwindigkeitstest: Ping", "show_connection": "Abschnitt Internet (Verbindung, öffentliche IP, Typ, Laufzeit)", "show_rates": "Abschnitt Datenraten in Echtzeit", "show_speedtest": "Abschnitt Geschwindigkeitstest (Speedtest)", "show_line": "Abschnitt Leitung (Glasfaserleistung oder xDSL-Synchronisation)", "show_wifi": "Abschnitt WLAN und Gast-WLAN (ein- oder ausschalten, zwei Klicks)", "show_phone": "Abschnitt Telefon (verpasste Anrufe)", "show_clients": "Abschnitt verbundene Geräte", "show_actions": "Schaltflächen Klingeln und Neustart (zwei Klicks)"};
+Object.assign(EXTRA_I18N.es.text, {
+  "Wi-Fi invité": "Wi-Fi de invitados",
+  "Couper le Wi-Fi invité": "Desactivar el Wi-Fi de invitados",
+  "Activer le Wi-Fi invité": "Activar el Wi-Fi de invitados",
+  "Effacer les appels": "Borrar las llamadas",
+  "Redémarrer la Livebox": "Reiniciar la Livebox",
+  "Faire sonner le téléphone": "Hacer sonar el teléfono",
+  "Aucune Livebox trouvée": "No se ha encontrado ninguna Livebox",
+  "Installez l'intégration Livebox (hass-livebox-component, par le Marketplace ou HACS), ajoutez-la dans Paramètres › Appareils et services avec le mot de passe admin de la Livebox, puis rechargez la page.": "Instala la integración Livebox (hass-livebox-component, desde el Marketplace o HACS), añádela en Ajustes › Dispositivos y servicios con la contraseña de administrador de la Livebox y recarga la página.",
+  "Ligne fibre": "Línea de fibra",
+  "Ligne xDSL": "Línea xDSL",
+  "Puissance reçue": "Potencia recibida",
+  "Puissance émise": "Potencia emitida",
+  "État ONU": "Estado ONU",
+  "Synchro descendante": "Sincronización de bajada",
+  "Synchro montante": "Sincronización de subida",
+  "Accès à distance": "Acceso remoto",
+  "DNS dynamique": "DNS dinámico",
+});
+EXTRA_I18N.es.labels.LBX = {"device": "Livebox (dispositivo de la integración Livebox, opcional)", "title": "Título (por defecto, modelo de la Livebox)", "wan_max": "Máximo de las barras de velocidad (velocidad contratada)", "download": "Velocidad de bajada (vacío = contadores de la fibra)", "upload": "Velocidad de subida (vacío = contadores de la fibra)", "speedtest_download": "Test de velocidad: bajada (vacío = Speedtest detectado automáticamente)", "speedtest_upload": "Test de velocidad: subida", "speedtest_ping": "Test de velocidad: ping", "show_connection": "Sección Internet (conexión, IP pública, tipo, tiempo activo)", "show_rates": "Sección velocidades en tiempo real", "show_speedtest": "Sección test de velocidad (Speedtest)", "show_line": "Sección línea (potencia de la fibra o sincronización xDSL)", "show_wifi": "Sección Wi-Fi y Wi-Fi de invitados (activar o desactivar, dos clics)", "show_phone": "Sección teléfono (llamadas perdidas)", "show_clients": "Sección dispositivos conectados", "show_actions": "Botones Hacer sonar y Reiniciar (dos clics)"};
+Object.assign(EXTRA_I18N.it.text, {
+  "Wi-Fi invité": "Wi-Fi ospiti",
+  "Couper le Wi-Fi invité": "Disattiva il Wi-Fi ospiti",
+  "Activer le Wi-Fi invité": "Attiva il Wi-Fi ospiti",
+  "Effacer les appels": "Cancella le chiamate",
+  "Redémarrer la Livebox": "Riavvia la Livebox",
+  "Faire sonner le téléphone": "Fai squillare il telefono",
+  "Aucune Livebox trouvée": "Nessuna Livebox trovata",
+  "Installez l'intégration Livebox (hass-livebox-component, par le Marketplace ou HACS), ajoutez-la dans Paramètres › Appareils et services avec le mot de passe admin de la Livebox, puis rechargez la page.": "Installa l'integrazione Livebox (hass-livebox-component, dal Marketplace o da HACS), aggiungila in Impostazioni › Dispositivi e servizi con la password admin della Livebox, poi ricarica la pagina.",
+  "Ligne fibre": "Linea in fibra",
+  "Ligne xDSL": "Linea xDSL",
+  "Puissance reçue": "Potenza ricevuta",
+  "Puissance émise": "Potenza trasmessa",
+  "État ONU": "Stato ONU",
+  "Synchro descendante": "Sincronizzazione download",
+  "Synchro montante": "Sincronizzazione upload",
+  "Accès à distance": "Accesso remoto",
+  "DNS dynamique": "DNS dinamico",
+});
+EXTRA_I18N.it.labels.LBX = {"device": "Livebox (dispositivo dell'integrazione Livebox, facoltativo)", "title": "Titolo (predefinito: modello della Livebox)", "wan_max": "Massimo delle barre di velocità (velocità dell'abbonamento)", "download": "Velocità di download (vuoto = contatori della fibra)", "upload": "Velocità di upload (vuoto = contatori della fibra)", "speedtest_download": "Test di velocità: download (vuoto = Speedtest trovato automaticamente)", "speedtest_upload": "Test di velocità: upload", "speedtest_ping": "Test di velocità: ping", "show_connection": "Sezione Internet (connessione, IP pubblico, tipo, uptime)", "show_rates": "Sezione velocità in tempo reale", "show_speedtest": "Sezione test di velocità (Speedtest)", "show_line": "Sezione linea (potenza della fibra o sincronizzazione xDSL)", "show_wifi": "Sezione Wi-Fi e Wi-Fi ospiti (attiva o disattiva, due clic)", "show_phone": "Sezione telefono (chiamate perse)", "show_clients": "Sezione dispositivi connessi", "show_actions": "Pulsanti Fai squillare e Riavvia (due clic)"};
+Object.assign(EXTRA_I18N.nl.text, {
+  "Wi-Fi invité": "Gast-wifi",
+  "Couper le Wi-Fi invité": "Gast-wifi uitschakelen",
+  "Activer le Wi-Fi invité": "Gast-wifi inschakelen",
+  "Effacer les appels": "Oproepen wissen",
+  "Redémarrer la Livebox": "Livebox herstarten",
+  "Faire sonner le téléphone": "Telefoon laten rinkelen",
+  "Aucune Livebox trouvée": "Geen Livebox gevonden",
+  "Installez l'intégration Livebox (hass-livebox-component, par le Marketplace ou HACS), ajoutez-la dans Paramètres › Appareils et services avec le mot de passe admin de la Livebox, puis rechargez la page.": "Installeer de Livebox-integratie (hass-livebox-component, via de Marketplace of HACS), voeg ze toe in Instellingen › Apparaten en diensten met het beheerderswachtwoord van de Livebox en herlaad de pagina.",
+  "Ligne fibre": "Glasvezellijn",
+  "Ligne xDSL": "xDSL-lijn",
+  "Puissance reçue": "Ontvangen vermogen",
+  "Puissance émise": "Verzonden vermogen",
+  "État ONU": "ONU-status",
+  "Synchro descendante": "Synchronisatie download",
+  "Synchro montante": "Synchronisatie upload",
+  "Accès à distance": "Externe toegang",
+  "DNS dynamique": "Dynamische DNS",
+});
+EXTRA_I18N.nl.labels.LBX = {"device": "Livebox (apparaat van de integratie Livebox, optioneel)", "title": "Titel (standaard het Livebox-model)", "wan_max": "Maximum van de snelheidsbalken (snelheid van het abonnement)", "download": "Downloadsnelheid (leeg = glasvezeltellers)", "upload": "Uploadsnelheid (leeg = glasvezeltellers)", "speedtest_download": "Snelheidstest: download (leeg = Speedtest automatisch gevonden)", "speedtest_upload": "Snelheidstest: upload", "speedtest_ping": "Snelheidstest: ping", "show_connection": "Sectie Internet (verbinding, publiek IP, type, uptime)", "show_rates": "Sectie snelheden in realtime", "show_speedtest": "Sectie snelheidstest (Speedtest)", "show_line": "Sectie lijn (glasvezelvermogen of xDSL-synchronisatie)", "show_wifi": "Sectie wifi en gast-wifi (in- of uitschakelen, twee klikken)", "show_phone": "Sectie telefoon (gemiste oproepen)", "show_clients": "Sectie verbonden apparaten", "show_actions": "Knoppen Laten rinkelen en Herstarten (twee klikken)"};
 const EXTRA_PHRASES = {"lessMin": {"de": ["in weniger als einer Minute", "vor weniger als einer Minute"], "es": ["en menos de un minuto", "hace menos de un minuto"], "it": ["tra meno di un minuto", "meno di un minuto fa"], "nl": ["over minder dan een minuut", "minder dan een minuut geleden"]}, "left": {"de": "noch {x}", "es": "quedan {x}", "it": "ancora {x}", "nl": "nog {x}"}, "seeAll": {"de": "Alle {x} anzeigen", "es": "Ver los {x}", "it": "Vedi tutti i {x}", "nl": "Alle {x} bekijken"}, "see": {"de": "{x} anzeigen", "es": "Ver {x}", "it": "Vedi {x}", "nl": "{x} bekijken"}, "battery": {"de": ", {n} batteriebetrieben", "es": ", {n} con pila", "it": ", {n} a batteria", "nl": ", {n} op batterij"}, "lastSeen": {"de": " · zuletzt gesehen ", "es": " · visto ", "it": " · visto ", "nl": " · laatst gezien "}, "file": {"de": ["Datei", "Dateien"], "es": ["archivo", "archivos"], "it": ["file", "file"], "nl": ["bestand", "bestanden"]}, "ping": {"de": ["per Ping überwachtes Gerät", "per Ping überwachte Geräte"], "es": ["dispositivo vigilado por Ping", "dispositivos vigilados por Ping"], "it": ["dispositivo monitorato da Ping", "dispositivi monitorati da Ping"], "nl": ["apparaat bewaakt door Ping", "apparaten bewaakt door Ping"]}, "gh": {"de": {"issue": ["offenes Issue", "offene Issues"], "pr": ["offener PR", "offene PRs"], "new": ["neu", "neu"], "repo": ["Repository", "Repositorys"], "other": ["offenes Element", "offene Elemente"]}, "es": {"issue": ["issue abierta", "issues abiertas"], "pr": ["PR abierta", "PR abiertas"], "new": ["nueva", "nuevas"], "repo": ["repositorio", "repositorios"], "other": ["elemento abierto", "elementos abiertos"]}, "it": {"issue": ["issue aperta", "issue aperte"], "pr": ["PR aperta", "PR aperte"], "new": ["nuova", "nuove"], "repo": ["repository", "repository"], "other": ["elemento aperto", "elementi aperti"]}, "nl": {"issue": ["open issue", "open issues"], "pr": ["open PR", "open PR's"], "new": ["nieuw", "nieuw"], "repo": ["repository", "repository's"], "other": ["open item", "open items"]}}};
 const EXTRA_RULES = {};
 const extraRules = (lang) => {
@@ -4566,6 +4686,373 @@ const FBX_STYLE = `<style>
 .srv-grid + .fbx-raid { margin-top: 10px; }
 </style>`;
 
+/* ------------------------------------------------------------ carte Livebox */
+
+const LBX_DEFAULTS = {
+  title: "",
+  icon: "mdi:router-wireless",
+  icon_color: "",
+  wan_max: 1000, // Mbit/s, pleine échelle des barres de débit (abonnement)
+  show_connection: true, show_rates: true, show_speedtest: true, show_line: true, show_wifi: true, show_phone: true, show_clients: true, show_actions: true,
+  theme: "v2",
+};
+
+/** Rôles des entités de l'intégration Livebox (hass-livebox-component, plateforme « livebox ») : domaine, clé de
+ *  traduction de l'intégration, puis fin de l'identifiant en anglais ou en français si la clé manque. */
+const LBX_ROLES = [
+  ["wan", "binary_sensor", "connectivity", /_wan_status$|_etat_wan$/],
+  ["missed", "binary_sensor", "callmissed", /_call_missed$|_appel_manque$/],
+  ["remote", "binary_sensor", "remote_access", /_remote_access$|_acces_a_distance$/],
+  ["dsl_down", "sensor", "down_rate", /_xdsl_download$|_debit_descendant_xdsl$/],
+  ["dsl_up", "sensor", "up_rate", /_xdsl_upload$|_debit_montant_xdsl$/],
+  ["fib_prx", "sensor", "fiber_power_rx", /_fiber_power_rx$|_puissance_fibre_recue$/],
+  ["fib_ptx", "sensor", "fiber_power_tx", /_fiber_power_tx$|_puissance_fibre_emise$/],
+  ["fib_rx", "sensor", "fiber_rx", /_fiber_rx$|_fibre_recu$/],
+  ["fib_tx", "sensor", "fiber_tx", /_fiber_tx$|_fibre_emis$/],
+  ["uptime", "sensor", "uptime", /_uptime$|_duree_de_fonctionnement$/],
+  ["reboot_reason", "sensor", "last_reboot_reason", /_last_reboot_reason$|_raison_du_dernier_redemarrage$/],
+  ["guest", "switch", "guest_wifi", /_guest_wifi$|_wi_fi_invite$/],
+  ["wifi", "switch", "wifi_switch", /_wifi$|_wi_fi$/],
+  ["restart", "button", "restart_btn", /_livebox_restart$|_redemarrer_la_livebox$/],
+  ["ring", "button", "ring_btn", /_ring_your_phone$|_faire_sonner_le_telephone$/],
+  ["clear", "button", "cmissed_clear_btn", /_clear_calls$|_effacer_les_appels$/],
+];
+/** Interface qui porte Internet, parmi les débits par interface de l'intégration. */
+const LBX_WAN_IFACE = /wan|veip|gpon|fib(re|er)|ppp|sfp|dsl|internet|\bont\b/i;
+/** Octets par unité de taille (compteurs de la fibre). */
+const LBX_BYTES = { B: 1, kB: 1e3, KB: 1e3, MB: 1e6, GB: 1e9, TB: 1e12, KiB: 1024, MiB: 1048576, GiB: 1073741824, TiB: 1099511627776 };
+
+class ServeurHaLiveboxCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("serveur-ha-livebox-card-editor");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._originalConfigFields = new Set(Object.keys(config || {}));
+    this._config = { ...LBX_DEFAULTS, ...(config || {}) };
+    this._map = null;
+    this._sig = null;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    if (!this._clicks) {
+      this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
+        const fold = ev.target.closest?.("[data-fold]");
+        if (fold) {
+          ev.stopPropagation();
+          this._fold = this._fold === fold.dataset.fold ? null : fold.dataset.fold;
+          this._sig = null; this._render(); return;
+        }
+        const press = ev.target.closest?.("[data-press]");
+        if (press) {
+          // redémarrer, Wi-Fi, appels, sonnerie : premier clic arme, second clic dans les 5 s confirme
+          ev.stopPropagation();
+          const id = press.dataset.press;
+          if (this._armed === id) {
+            this._armed = null;
+            if (id.startsWith("button.")) this._hass?.callService("button", "press", { entity_id: id });
+            else this._hass?.callService("homeassistant", "toggle", { entity_id: id });
+          } else {
+            this._armed = id;
+            clearTimeout(this._armTimer);
+            this._armTimer = setTimeout(() => { this._armed = null; this._sig = null; this._render(); }, 5000);
+          }
+          this._sig = null; this._render(); return;
+        }
+        const el = ev.target.closest?.("[data-entity]");
+        if (el?.dataset.entity) {
+          const e = new Event("hass-more-info", { bubbles: true, composed: true });
+          e.detail = { entityId: el.dataset.entity };
+          this.dispatchEvent(e);
+        }
+      }));
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    if (this._hass?.entities !== hass.entities || this._hass?.devices !== hass.devices) this._map = null;
+    this._hass = hass;
+    this._render();
+  }
+
+  connectedCallback() {
+    clearInterval(this._tick);
+    this._tick = setInterval(() => { this._sig = null; this._render(); }, 60000);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._tick);
+  }
+
+  getCardSize() {
+    return 9;
+  }
+
+  _st(id) {
+    return id ? this._hass?.states?.[id] : undefined;
+  }
+
+  _num(id) {
+    const s = this._st(id);
+    if (!s || s.state === "unavailable" || s.state === "unknown") return null;
+    const v = Number(s.state);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  _txt(id) {
+    const s = this._st(id)?.state;
+    return s === undefined || s === "unavailable" || s === "unknown" || s === "" ? null : s;
+  }
+
+  _unit(id, d = "") {
+    return cleanUnit(this._st(id)?.attributes?.unit_of_measurement ?? d);
+  }
+
+  /** Débit en Mbit/s tiré d'un compteur d'octets (fibre reçu ou émis) : écart entre deux relevés. */
+  _counterRate(id) {
+    const s = this._st(id);
+    const v = this._num(id);
+    if (v === null) return null;
+    const bytes = v * (LBX_BYTES[String(s.attributes?.unit_of_measurement || "B")] ?? 1);
+    const t = Date.parse(s.last_updated || s.last_changed || "");
+    if (!Number.isFinite(t)) return null;
+    this._ctr ||= {};
+    const p = this._ctr[id];
+    if (!p || p.t !== t) {
+      const r = p && t > p.t && bytes >= p.b ? ((bytes - p.b) * 8) / ((t - p.t) / 1000) / 1e6 : null;
+      this._ctr[id] = { b: bytes, t, r };
+    }
+    // compteur immobile depuis plus de 3 min : la ligne n'a rien fait passer
+    if (Date.now() - t > 180000) return 0;
+    return this._ctr[id].r;
+  }
+
+  /** Livebox (choisie ou la première) : rôles, débits par interface, DNS dynamique, appareils suivis, Speedtest. */
+  _resolve() {
+    if (this._map) return this._map;
+    const hass = this._hass, c = this._config;
+    const reg = hass.entities || {}, devs = hass.devices || {}, st = hass.states || {};
+    const all = Object.entries(reg).filter(([id, e]) => e.platform === "livebox" && st[id] && !e.hidden);
+    const roleOf = (id, e) => {
+      const domain = id.split(".")[0];
+      return LBX_ROLES.find(([, d, tk, re]) => d === domain && (e.translation_key ? e.translation_key === tk : re.test(id)))?.[0];
+    };
+    // Livebox : celle choisie, sinon celle qui porte l'état WAN, sinon la première qui n'est pas un appareil suivi
+    const devId = c.device || all.find(([id, e]) => roleOf(id, e) === "wan")?.[1].device_id
+      || all.find(([id]) => !id.startsWith("device_tracker."))?.[1].device_id;
+    const roles = {}, ddns = [], ifRx = [], ifTx = [];
+    for (const [id, e] of all) {
+      if (!devId || e.device_id !== devId) continue;
+      const role = roleOf(id, e);
+      if (role && !roles[role]) { roles[role] = id; continue; }
+      if (e.translation_key === "ddns" || /^binary_sensor\..*_(dynamic_dns|dns_dynamique)/.test(id)) ddns.push(id);
+      else if (e.translation_key === "interface_rate_rx" || /_rate_rx$|_debit_recu_/.test(id)) ifRx.push(id);
+      else if (e.translation_key === "interface_rate_tx" || /_rate_tx$|_debit_emis_/.test(id)) ifTx.push(id);
+    }
+    // débits de la ligne : capteurs donnés, sinon interface Internet, sinon compteurs de la fibre
+    const text = (id) => `${id} ${st[id]?.attributes?.friendly_name || ""}`;
+    const pick = (list) => list.find((id) => LBX_WAN_IFACE.test(text(id))) || null;
+    const ok = (id) => (typeof id === "string" && st[id] ? id : null);
+    const rates = {
+      rx: ok(c.download) || pick(ifRx), tx: ok(c.upload) || pick(ifTx),
+    };
+    rates.rxCounter = !rates.rx && roles.fib_rx ? roles.fib_rx : null;
+    rates.txCounter = !rates.tx && roles.fib_tx ? roles.fib_tx : null;
+    // appareils du réseau : un appareil Home Assistant chacun, rattaché à la même entrée que la Livebox
+    const boxEntries = devs[devId]?.config_entries || [];
+    const sameBox = (e) => !boxEntries.length || (devs[e.device_id]?.config_entries || []).some((x) => boxEntries.includes(x));
+    const trackers = all.filter(([id, e]) => id.startsWith("device_tracker.") && sameBox(e)).map(([id]) => id);
+    // Speedtest : capteurs donnés, sinon intégration Speedtest.net ou Speedtest CLI
+    const sp = (k, re) => c[`speedtest_${k}`] || Object.keys(st).find((id) => id.startsWith("sensor.") && (reg[id]?.platform === "speedtestdotnet" || /speedtest/.test(id)) && re.test(id)) || null;
+    const speed = { down: sp("download", /_download$/), up: sp("upload", /_upload$/), ping: sp("ping", /_ping$/), isp: c.speedtest_isp || Object.keys(st).find((id) => /^sensor\.speedtest.*_isp$/.test(id)) || null };
+    this._map = { devId, dev: devs[devId], roles, ddns, rates, trackers, speed };
+    return this._map;
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const m = this._resolve();
+    const r = m.roles;
+    const ids = [...Object.values(r), ...m.ddns, ...Object.values(m.rates), ...m.trackers, ...Object.values(m.speed)].filter(Boolean);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._armed}|${this._fold}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => { const s = this._st(id); return s ? `${s.state}|${s.last_updated}` : "-"; }).join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const st = (id) => this._st(id);
+    const sec = (icon, t, body) => (body ? localizeTemplate`<div class="srv-sec"><div class="srv-h"><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(t)}</div>${body}</div>` : "");
+    const kv = (rows) => rows.filter(([, v]) => v !== null && v !== undefined && v !== "").map(([k, v, cls]) => localizeTemplate`<div class="srv-kv"><span>${exactLabel(k)}</span><b class="${cls || ""}">${esc(exactLabel(v))}</b></div>`).join("");
+    const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0, cls = "") => (v === null ? "" : localizeTemplate`<div class="srv-g ${cls}" data-entity="${esc(id)}">
+        <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(label)}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
+        <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
+    // débit en Mbit/s, quelle que soit l'unité du capteur (l'intégration donne des Mbit/s ou des kbit/s)
+    const mbit = (id) => {
+      const v = this._num(id);
+      if (v === null) return null;
+      const u = String(this._unit(id, "Mbit/s"));
+      if (/^Gbit|^Gbps/i.test(u)) return v * 1000;
+      if (/^Mbit|^Mbps/i.test(u)) return v;
+      if (/^kbit|^kbps/i.test(u)) return v / 1000;
+      if (/^MB\/s|^Mo\/s|^MiB\/s/i.test(u)) return v * 8;
+      if (/^GB\/s|^Go\/s/i.test(u)) return v * 8000;
+      if (/^kB\/s|^ko\/s|^KiB\/s/i.test(u)) return (v * 8) / 1000;
+      return v;
+    };
+    const rateGauge = (id, v, icon, label, max, cls) => (v === null ? "" : gauge(id, icon, label, v, "", 101, 101, " Mbit/s", max, v < 10 ? 2 : v < 100 ? 1 : 0, cls));
+    const btn = (id, icon, label, cls = "") => {
+      if (!id || !st(id)) return "";
+      const armed = this._armed === id;
+      const name = exactLabel(label);
+      const tip = armed ? `${exactLabel("Confirmer")} : ${name}` : name;
+      return localizeTemplate`<button class="pve-btn wide ${cls} ${armed ? "armed" : ""}" data-press="${esc(id)}" title="${esc(tip)}" aria-label="${esc(tip)}"><ha-icon icon="${esc(armed ? "mdi:check-bold" : icon)}"></ha-icon>${armed ? localizeStaticHTML("<span>Confirmer</span>") : ""}</button>`;
+    };
+
+    const dev = m.dev || {};
+    const wanA = st(r.wan)?.attributes || {};
+    const online = st(r.wan) ? st(r.wan).state === "on" : null;
+    const ip = c.ip_ext || wanA.wan_ipaddress || null;
+    const link = wanA.link_type ? String(wanA.link_type).toUpperCase() : null;
+    // démarrage : capteur « Durée de fonctionnement » (désactivé par défaut), sinon date du dernier démarrage
+    const upSec = this._num(r.uptime);
+    const bootDate = Date.parse(st(r.reboot_reason)?.attributes?.["Boot date"] || "");
+    const boot = upSec > 0 ? new Date(Date.now() - upSec * 1000).toISOString()
+      : Number.isFinite(bootDate) && bootDate < Date.now() ? new Date(bootDate).toISOString() : null;
+    const missedA = st(r.missed)?.attributes?.missed_calls;
+    const missed = !st(r.missed) ? null : Array.isArray(missedA) ? missedA.length : st(r.missed).state === "on" ? 1 : 0;
+    const wifiOn = st(r.wifi) ? st(r.wifi).state === "on" : null;
+    const ddnsBad = m.ddns.filter((id) => st(id)?.state === "on");
+
+    const led = (ok, label, id, cls) => (ok === null ? "" : localizeTemplate`<span class="srv-led ${cls || (ok ? "ok" : "bad")}" data-entity="${esc(id || "")}"><i></i>${exactLabel(label)}</span>`);
+    const leds = m.devId ? [
+      led(online, "Internet", r.wan),
+      led(wifiOn, "Wi-Fi", r.wifi, wifiOn ? "ok" : "na"),
+      missed ? localizeTemplate`<span class="srv-led bad" data-entity="${esc(r.missed)}"><i></i>${countText(missed, "appel")}</span>` : "",
+      ddnsBad.length ? led(false, "DNS dynamique", ddnsBad[0]) : "",
+    ].join("") : "";
+
+    let body = "";
+    if (!m.devId) {
+      body = localizeTemplate`<div class="empty">Aucune Livebox trouvée<span>Installez l'intégration Livebox (hass-livebox-component, par le Marketplace ou HACS), ajoutez-la dans Paramètres › Appareils et services avec le mot de passe admin de la Livebox, puis rechargez la page.</span></div>`;
+    } else {
+      // --- connexion
+      let conn = "";
+      if (c.show_connection !== false) {
+        const remote = st(r.remote)?.state === "on";
+        const info = kv([
+          ["Connexion", online === null ? null : online ? "En ligne" : trLabel("Coupée"), online ? "ok" : "bad"],
+          ["IP publique", ip],
+          ["Type", link],
+          ["Uptime", boot ? since(boot) : null],
+          ["Accès à distance", remote ? trLabel("Activé") : null, "warn"],
+        ]);
+        conn = sec("mdi:web", "Internet", info ? localizeTemplate`<div class="asus-kv" data-entity="${esc(r.wan || "")}">${info}</div>` : "");
+      }
+      // --- débits de la ligne en temps réel
+      let rates = "";
+      if (c.show_rates !== false) {
+        const max = Number(c.wan_max) || 1000;
+        const rx = m.rates.rx ? mbit(m.rates.rx) : m.rates.rxCounter ? this._counterRate(m.rates.rxCounter) : null;
+        const tx = m.rates.tx ? mbit(m.rates.tx) : m.rates.txCounter ? this._counterRate(m.rates.txCounter) : null;
+        const g = [
+          rateGauge(m.rates.rx || m.rates.rxCounter, rx, "mdi:download", "Download", max, "srv-in"),
+          rateGauge(m.rates.tx || m.rates.txCounter, tx, "mdi:upload", "Upload", max, "srv-out"),
+        ].filter(Boolean);
+        rates = sec("mdi:swap-vertical", "Débits", g.length ? localizeTemplate`<div class="srv-grid">${g.join("")}</div>` : "");
+      }
+      // --- test de débit (Speedtest)
+      let speed = "";
+      if (c.show_speedtest !== false && (m.speed.down || m.speed.up || m.speed.ping)) {
+        const max = Number(c.wan_max) || 1000;
+        const sv = (id) => { const v = this._num(id); if (v === null) return null; return /^Gbit|^Gbps/i.test(this._unit(id, "Mbit/s")) ? v * 1000 : v; };
+        const g = [
+          sv(m.speed.down) === null ? "" : gauge(m.speed.down, "mdi:download", "Download", sv(m.speed.down), "", 101, 101, " Mbit/s", max, 0, "srv-in"),
+          sv(m.speed.up) === null ? "" : gauge(m.speed.up, "mdi:upload", "Upload", sv(m.speed.up), "", 101, 101, " Mbit/s", max, 0, "srv-out"),
+        ].filter(Boolean);
+        const ping = this._num(m.speed.ping);
+        const isp = this._txt(m.speed.isp) || st(m.speed.down)?.attributes?.isp || st(m.speed.down)?.attributes?.server_name || null;
+        const when = st(m.speed.down)?.last_changed;
+        const info = kv([["Ping", ping === null ? null : `${fmt(ping, ping < 10 ? 1 : 0)} ms`, ping === null ? "" : ping < 30 ? "ok" : ping < 80 ? "" : "bad"], ["Opérateur", isp], ["Mesuré", when ? relativeAgo(when) : null]]);
+        speed = sec("mdi:speedometer", "Test de débit", `${g.length ? localizeTemplate`<div class="srv-grid">${g.join("")}</div>` : ""}${info ? localizeTemplate`<div class="asus-kv fbx-kv" data-entity="${esc(m.speed.ping || m.speed.down)}">${info}</div>` : ""}`);
+      }
+      // --- ligne : fibre (puissance optique, état ONU) ou xDSL (synchronisation)
+      let line = "";
+      if (c.show_line !== false) {
+        const dbm = (v) => (v === null ? null : `${fmt(v, 1)} dBm`);
+        const prx = this._num(r.fib_prx), ptx = this._num(r.fib_ptx);
+        const fa = st(r.fib_prx)?.attributes || st(r.fib_ptx)?.attributes || {};
+        const temp = Number(fa["Temperature (°C)"]);
+        if (prx !== null || ptx !== null) {
+          // puissance reçue d'une ligne GPON : correcte de -8 à -27 dBm, limite jusqu'à -28 dBm
+          const rxCls = prx === null ? "" : prx <= -8 && prx >= -27 ? "ok" : prx > -7 || prx < -28 ? "bad" : "warn";
+          const info = kv([
+            ["Puissance reçue", dbm(prx), rxCls],
+            ["Puissance émise", dbm(ptx)],
+            ["État ONU", fa["ONU State"] || null],
+            ["Température", Number.isFinite(temp) && temp > 0 ? `${fmt(temp, 0)} °C` : null],
+          ]);
+          line = sec("mdi:transit-connection-variant", "Ligne fibre", info ? localizeTemplate`<div class="asus-kv" data-entity="${esc(r.fib_prx || r.fib_ptx)}">${info}</div>` : "");
+        } else if (st(r.dsl_down) || st(r.dsl_up)) {
+          const sync = (id) => { const v = mbit(id); return v === null || v <= 0 ? null : `${fmt(v, v < 10 ? 2 : v < 100 ? 1 : 0)} Mbit/s`; };
+          const info = kv([["Synchro descendante", sync(r.dsl_down)], ["Synchro montante", sync(r.dsl_up)]]);
+          line = sec("mdi:phone-classic", "Ligne xDSL", info ? localizeTemplate`<div class="asus-kv" data-entity="${esc(r.dsl_down || r.dsl_up)}">${info}</div>` : "");
+        }
+      }
+      // --- Wi-Fi et Wi-Fi invité
+      let wifi = "";
+      if (c.show_wifi !== false && (st(r.wifi) || st(r.guest))) {
+        const row = (id, name, offLabel, onLabel) => {
+          if (!st(id)) return "";
+          const on = st(id).state === "on";
+          return localizeTemplate`<div class="fbx-row"><span class="omv-svc ${on ? "on" : ""}" data-entity="${esc(id)}"><i></i>${exactLabel(name)} · ${on ? trLabel("Activé") : trLabel("Désactivé")}</span>${btn(id, on ? "mdi:wifi-off" : "mdi:wifi", on ? offLabel : onLabel)}</div>`;
+        };
+        wifi = sec("mdi:wifi", "Wi-Fi", `<div class="lbx-rows">${row(r.wifi, "Wi-Fi", "Couper le Wi-Fi", "Activer le Wi-Fi")}${row(r.guest, "Wi-Fi invité", "Couper le Wi-Fi invité", "Activer le Wi-Fi invité")}</div>`);
+      }
+      // --- téléphone
+      let phone = "";
+      if (c.show_phone !== false && st(r.missed)) {
+        phone = sec("mdi:phone", "Téléphone", localizeTemplate`<div class="fbx-row"><span class="omv-svc ${missed ? "" : "on"}" data-entity="${esc(r.missed)}"><i></i>${missed ? countText(missed, "appel") : exactLabel("Aucun appel manqué")}</span>${missed ? btn(r.clear, "mdi:phone-remove", "Effacer les appels") : ""}</div>`);
+      }
+      // --- appareils connectés
+      let clients = "";
+      if (c.show_clients !== false && m.trackers.length) {
+        const on = m.trackers.filter((id) => st(id)?.state === "home");
+        const open = this._fold === "devs";
+        const label = (id) => String(st(id)?.attributes?.friendly_name || id);
+        const icon = (id) => ({ wifi: "mdi:wifi", guestwifi: "mdi:wifi-star", ethernet: "mdi:ethernet" }[st(id)?.attributes?.connection] || "mdi:lan-connect");
+        const list = open ? on.slice().sort((a, b) => label(a).localeCompare(label(b), "fr", { numeric: true }))
+          .map((id) => localizeTemplate`<div class="asus-dev" data-entity="${esc(id)}"><ha-icon icon="${esc(icon(id))}"></ha-icon><span>${esc(label(id))}</span><small>${esc(st(id)?.attributes?.ip || "")}</small></div>`).join("") : "";
+        clients = sec("mdi:devices", localizeTemplate`Appareils connectés <small class="pve-n">${fmt(on.length, 0)} / ${fmt(m.trackers.length, 0)}</small>`,
+          `${open ? localizeTemplate`<div class="asus-devs asus-all">${list || localizeTemplate`<div class="asus-note">Aucun appareil</div>`}</div>` : ""}
+          <button class="asus-more ${open ? "on" : ""}" data-fold="devs"><ha-icon icon="${esc(open ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${open ? trLabel("Réduire") : CURRENT_CARD_LANGUAGE === "en" ? `See ${countText(on.length, "appareil")}` : CURRENT_CARD_LANGUAGE === "pl" ? `Pokaż ${countText(on.length, "appareil")}` : EXTRA_PHRASES.see[CURRENT_CARD_LANGUAGE] ? EXTRA_PHRASES.see[CURRENT_CARD_LANGUAGE].replace("{x}", countText(on.length, "appareil")) : `Voir les ${countText(on.length, "appareil")}`}</button>`);
+      }
+      // --- actions
+      const acts = c.show_actions !== false ? [btn(r.ring, "mdi:phone-ring", "Faire sonner le téléphone"), btn(r.restart, "mdi:restart", "Redémarrer la Livebox", "stop")].filter(Boolean) : [];
+      body = conn + rates + speed + line + wifi + phone + clients
+        + sec("mdi:gesture-tap-button", "Actions", acts.length ? localizeTemplate`<div class="pve-na asus-acts">${acts.join("")}</div>` : "");
+    }
+
+    const alertCls = m.devId && online === false ? "srv-alert" : "";
+    const model = dev.name || dev.model || "Livebox";
+    const sub = [dev.sw_version ? `Firmware ${dev.sw_version}` : null].filter(Boolean).join(" · ");
+    this.shadowRoot.innerHTML = localizeTemplate`${STYLE}${SRV_STYLE}${NAS_STYLE}${PVE_STYLE}${OMV_STYLE}${ASUS_STYLE}${FBX_STYLE}${LBX_STYLE}<ha-card style="${zoomOf(c)}" class="${themeClass(c.theme, this._hass)} ${alertCls}">
+      <header>
+        <div class="brand"><ha-icon class="srv-icon" icon="${esc(c.icon || "mdi:router-wireless")}" style="color:${esc(c.icon_color || "var(--med-accent, var(--med-blue))")}"></ha-icon>
+          <div><div class="title">${esc(c.title || dev.name_by_user || model)}</div>${sub ? localizeTemplate`<div class="sub">${esc(sub)}</div>` : ""}</div></div>
+        ${leds ? localizeTemplate`<div class="srv-leds">${leds}</div>` : ""}
+      </header>
+      ${body}
+    </ha-card>`;
+  }
+}
+
+const LBX_STYLE = `<style>
+.lbx-rows { display: grid; gap: 8px; }
+.srv-kv b.warn { color: #f0a33a; }
+</style>`;
+
 /* ------------------------------------------------------------ carte Réseau (Ping) */
 
 const PING_DEFAULTS = {
@@ -7952,6 +8439,68 @@ const ServeurHaFreeboxCardEditor = makeEditor(FBX_SCHEMA, FBX_LABELS, FBX_DEFAUL
   show_wifi: "Sekcja Wi-Fi", show_phone: "Sekcja telefonu (nieodebrane połączenia)", show_clients: "Sekcja podłączonych urządzeń",
   show_actions: "Przycisk restartu (dwa kliknięcia)", theme: "Kolory karty",
 }, "FBX");
+const LBX_SCHEMA = [
+  { name: "device", selector: { device: { integration: "livebox" } } },
+  { name: "title", selector: { text: {} } },
+  { name: "icon", selector: { icon: {} } },
+  { name: "icon_color", selector: { text: {} } },
+  { name: "wan_max", selector: { number: { min: 1, max: 100000, mode: "box", unit_of_measurement: "Mbit/s" } } },
+  { name: "download", selector: { entity: { domain: "sensor" } } },
+  { name: "upload", selector: { entity: { domain: "sensor" } } },
+  { name: "speedtest_download", selector: { entity: { domain: "sensor" } } },
+  { name: "speedtest_upload", selector: { entity: { domain: "sensor" } } },
+  { name: "speedtest_ping", selector: { entity: { domain: "sensor" } } },
+  { name: "show_connection", selector: { boolean: {} } },
+  { name: "show_rates", selector: { boolean: {} } },
+  { name: "show_speedtest", selector: { boolean: {} } },
+  { name: "show_line", selector: { boolean: {} } },
+  { name: "show_wifi", selector: { boolean: {} } },
+  { name: "show_phone", selector: { boolean: {} } },
+  { name: "show_clients", selector: { boolean: {} } },
+  { name: "show_actions", selector: { boolean: {} } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const LBX_LABELS = {
+  device: "Livebox (appareil de l'intégration Livebox, facultatif)",
+  title: "Titre (modèle de la Livebox par défaut)",
+  icon: "Icône",
+  icon_color: "Couleur de l'icône",
+  wan_max: "Pleine échelle des barres de débit (débit de l'abonnement)",
+  download: "Débit descendant (vide = compteurs de la fibre)",
+  upload: "Débit montant (vide = compteurs de la fibre)",
+  speedtest_download: "Test de débit : download (vide = Speedtest trouvé seul)",
+  speedtest_upload: "Test de débit : upload",
+  speedtest_ping: "Test de débit : ping",
+  show_connection: "Section Internet (connexion, IP publique, type, uptime)",
+  show_rates: "Section Débits en temps réel",
+  show_speedtest: "Section Test de débit (Speedtest)",
+  show_line: "Section Ligne (puissance de la fibre ou synchro xDSL)",
+  show_wifi: "Section Wi-Fi et Wi-Fi invité (activer ou couper, deux clics)",
+  show_phone: "Section Téléphone (appels manqués)",
+  show_clients: "Section Appareils connectés",
+  show_actions: "Boutons Faire sonner et Redémarrer (deux clics)",
+  theme: "Couleurs de la carte",
+};
+const ServeurHaLiveboxCardEditor = makeEditor(LBX_SCHEMA, LBX_LABELS, LBX_DEFAULTS, {
+  device: "Livebox (Livebox integration device, optional)", title: "Title (Livebox model by default)", icon: "Icon", icon_color: "Icon color",
+  wan_max: "Full scale of the rate bars (subscription speed)", download: "Download rate (empty = fiber counters)",
+  upload: "Upload rate (empty = fiber counters)",
+  speedtest_download: "Speed test: download (empty = Speedtest found automatically)",
+  speedtest_upload: "Speed test: upload", speedtest_ping: "Speed test: ping", show_connection: "Internet section (connection, public IP, type, uptime)",
+  show_rates: "Live rates section", show_speedtest: "Speed test section (Speedtest)", show_line: "Line section (fiber power or xDSL sync)",
+  show_wifi: "Wi-Fi and guest Wi-Fi section (turn on or off, two clicks)", show_phone: "Phone section (missed calls)", show_clients: "Connected devices section",
+  show_actions: "Ring and Restart buttons (two clicks)", theme: "Card colors",
+}, {
+  device: "Livebox (urządzenie integracji Livebox, opcjonalnie)", title: "Tytuł (domyślnie model Livebox)", icon: "Ikona", icon_color: "Kolor ikony",
+  wan_max: "Pełna skala pasków przepustowości", download: "Pobieranie (puste = liczniki światłowodu)",
+  upload: "Wysyłanie (puste = liczniki światłowodu)",
+  speedtest_download: "Test prędkości: pobieranie (puste = wykryty automatycznie)",
+  speedtest_upload: "Test prędkości: wysyłanie", speedtest_ping: "Test prędkości: ping", show_connection: "Sekcja Internet",
+  show_rates: "Sekcja przepustowości", show_speedtest: "Sekcja testu prędkości", show_line: "Sekcja linii (moc światłowodu lub synchronizacja xDSL)",
+  show_wifi: "Sekcja Wi-Fi i Wi-Fi dla gości", show_phone: "Sekcja telefonu (nieodebrane połączenia)", show_clients: "Sekcja podłączonych urządzeń",
+  show_actions: "Przyciski dzwonienia i restartu (dwa kliknięcia)", theme: "Kolory karty",
+}, "LBX");
 const PING_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "icon", selector: { icon: {} } },
@@ -8226,7 +8775,7 @@ class ServeurHaOpnsenseMoved extends HTMLElement {
 
 [
   ServeurHaCard, ServeurHaMajCard, ServeurHaNasCard, ServeurHaProxmoxCard,
-  ServeurHaOmvCard, ServeurHaAsusCard, ServeurHaFreeboxCard, ServeurHaPingCard, ServeurHaZigbeeCard,
+  ServeurHaOmvCard, ServeurHaAsusCard, ServeurHaFreeboxCard, ServeurHaLiveboxCard, ServeurHaPingCard, ServeurHaZigbeeCard,
   ServeurHaWireguardCard, ServeurHaGlancesCard, ServeurHaMediaCard,
   ServeurHaDnsCard, ServeurHaLinuxCard, ServeurHaGithubCard,
   ServeurHaOpnsenseMoved
@@ -8248,6 +8797,8 @@ if (typeof customElements !== "undefined") {
   define("serveur-ha-asus-card-editor", ServeurHaAsusCardEditor);
   define("serveur-ha-freebox-card", ServeurHaFreeboxCard);
   define("serveur-ha-freebox-card-editor", ServeurHaFreeboxCardEditor);
+  define("serveur-ha-livebox-card", ServeurHaLiveboxCard);
+  define("serveur-ha-livebox-card-editor", ServeurHaLiveboxCardEditor);
   define("serveur-ha-ping-card", ServeurHaPingCard);
   define("serveur-ha-ping-card-editor", ServeurHaPingCardEditor);
   define("serveur-ha-zigbee-card", ServeurHaZigbeeCard);
@@ -8319,6 +8870,14 @@ if (typeof customElements !== "undefined") {
       type: "serveur-ha-freebox-card",
       name: "Carte Freebox",
       description: "Freebox (intégration Freebox) : Internet, débits, test de débit, températures, disques, Wi-Fi, appels manqués, appareils connectés, redémarrage confirmé.",
+      preview: true,
+    });
+  }
+  if (!window.customCards.some((c) => c.type === "serveur-ha-livebox-card")) {
+    window.customCards.push({
+      type: "serveur-ha-livebox-card",
+      name: "Carte Livebox",
+      description: "Livebox (intégration Livebox) : Internet, débits, test de débit, ligne fibre ou xDSL, Wi-Fi et Wi-Fi invité, appels manqués, appareils connectés, redémarrage confirmé.",
       preview: true,
     });
   }
@@ -8398,6 +8957,7 @@ if (typeof customElements !== "undefined") {
       "serveur-ha-omv-card": ["OpenMediaVault", "System, file systems, SMART disk health, services, network, updates and power controls."],
       "serveur-ha-asus-card": ["ASUS Router", "Internet, Wi-Fi, wired ports, clients, VPN, firmware and restart via AsusRouter."],
       "serveur-ha-freebox-card": ["Freebox", "Freebox Internet, rates, speed test, temperatures, disks, Wi-Fi, missed calls, connected devices and confirmed restart."],
+      "serveur-ha-livebox-card": ["Livebox", "Livebox Internet, rates, speed test, fiber or xDSL line, Wi-Fi and guest Wi-Fi, missed calls, connected devices and confirmed restart."],
       "serveur-ha-ping-card": ["Network (Ping)", "Ping-monitored devices, online status, latency, jitter and packet loss grouped by room or type."],
       "serveur-ha-zigbee-card": ["Zigbee & Batteries", "Low and critical batteries, offline Zigbee devices, poor links and Zigbee2MQTT bridge status."],
       "serveur-ha-wireguard-card": ["WireGuard VPN", "WGDashboard servers, connected peers, handshakes and incoming/outgoing traffic."],
@@ -8415,6 +8975,7 @@ if (typeof customElements !== "undefined") {
       "serveur-ha-omv-card": ["OpenMediaVault", "System, systemy plików, SMART dysków, usługi, sieć, aktualizacje i zasilanie."],
       "serveur-ha-asus-card": ["Router ASUS", "Internet, Wi-Fi, porty LAN, klienci, VPN, firmware i ponowne uruchomienie przez AsusRouter."],
       "serveur-ha-freebox-card": ["Freebox", "Internet, przepustowość, test prędkości, temperatury, dyski, Wi-Fi, nieodebrane połączenia i urządzenia Freebox."],
+      "serveur-ha-livebox-card": ["Livebox", "Internet, przepustowość, test prędkości, linia światłowodowa lub xDSL, Wi-Fi, nieodebrane połączenia i urządzenia Livebox."],
       "serveur-ha-ping-card": ["Sieć (Ping)", "Monitorowanie dostępności urządzeń, opóźnień i utraty pakietów według typu lub pomieszczenia."],
       "serveur-ha-zigbee-card": ["Zigbee i baterie", "Niskie poziomy baterii, urządzenia Zigbee offline, jakość połączenia i stan bramki Zigbee2MQTT."],
       "serveur-ha-wireguard-card": ["VPN WireGuard", "Serwery WGDashboard, połączone peery, handshake oraz ruch przychodzący i wychodzący."],

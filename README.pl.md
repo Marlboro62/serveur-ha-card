@@ -17,6 +17,7 @@ Wersja projektu obejmuje **trzy języki interfejsu: francuski (`fr`), angielski 
 | `custom:serveur-ha-linux-card` | Linux Update Dashboard: oczekujące aktualizacje systemu i bezpieczeństwa, pakiety, wymagany restart |
 | `custom:serveur-ha-proxmox-card` | Proxmox VE: węzły, magazyny danych, VM i kontenery LXC, aktualizacje i sterowanie maszynami |
 | `custom:serveur-ha-asus-card` | Router ASUS (AsusRouter): Internet, IP publiczne, Wi-Fi, Ethernet, urządzenia, VPN i firmware |
+| `custom:serveur-ha-livebox-card` | Livebox (beta, [integracja Livebox](https://github.com/cyr-ius/hass-livebox-component)): Internet i publiczny IP, przepustowość, test prędkości, linia światłowodowa lub xDSL, Wi-Fi i Wi-Fi dla gości, nieodebrane połączenia, podłączone urządzenia i potwierdzony restart |
 | `custom:serveur-ha-ping-card` | Ping / ICMP: online/offline, opóźnienia, jitter, utrata pakietów, grupowanie według typu lub pomieszczenia |
 | `custom:serveur-ha-zigbee-card` | Zigbee, Zigbee2MQTT i ZHA: słabe baterie, urządzenia offline, jakość połączenia, stan bramki |
 | `custom:serveur-ha-wireguard-card` | WireGuard / WGDashboard: serwery, połączone peery, handshake, transfer danych |
