@@ -465,7 +465,7 @@ type: custom:serveur-ha-livebox-card
 - **Appareils connectés** : clients Wi-Fi et filaires, nombre d'appareils présents, liste dépliable (Wi-Fi, Wi-Fi invité ou Ethernet, signal Wi-Fi si les capteurs par client sont activés).
 - **Détails** (dépliable) : baux DHCP, redirections de ports, dernier redémarrage, état de chaque DNS dynamique, débits de chaque interface (LAN, Wi-Fi…).
 - **Autres capteurs** : ceux listés dans l'option `entities`.
-- **Actions** : faire sonner le téléphone (masquable avec `show_ring: false`, sans effet sans base DECT), redémarrer la Livebox (deux clics).
+- **Actions** : faire sonner le téléphone (masquable avec `show_ring: false`), redémarrer la Livebox (deux clics).
 
 L'uptime vient du capteur « Durée de fonctionnement » de l'intégration (désactivé par défaut) ou, à défaut, de la date du dernier démarrage.
 

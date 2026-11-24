@@ -22,7 +22,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.25.0-beta.2";
+const CARD_VERSION = "0.25.0-beta.3";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -1243,7 +1243,7 @@ Object.assign(EXTRA_I18N.de.text, {
   "Accès à distance": "Fernzugriff",
   "DNS dynamique": "Dynamisches DNS",
 });
-EXTRA_I18N.de.labels.LBX = {"show_details": "Aufklappbarer Abschnitt Details (DHCP, Portweiterleitungen, Neustart, dynamisches DNS, Datenraten je Schnittstelle)", "show_ring": "Schaltfläche Telefon klingeln lassen (ohne DECT-Basis wirkungslos)", "entities": "Weitere anzuzeigende Sensoren", "device": "Livebox (Gerät der Integration Livebox, optional)", "title": "Titel (Standard: Livebox-Modell)", "wan_max": "Maximum der Datenraten-Balken (Geschwindigkeit des Anschlusses)", "download": "Download-Rate (leer = Glasfaser-Zähler)", "upload": "Upload-Rate (leer = Glasfaser-Zähler)", "speedtest_download": "Geschwindigkeitstest: Download (leer = Speedtest automatisch gefunden)", "speedtest_upload": "Geschwindigkeitstest: Upload", "speedtest_ping": "Geschwindigkeitstest: Ping", "show_connection": "Abschnitt Internet (Verbindung, öffentliche IP, Typ, Laufzeit)", "show_rates": "Abschnitt Datenraten in Echtzeit", "show_speedtest": "Abschnitt Geschwindigkeitstest (Speedtest)", "show_line": "Abschnitt Leitung (Glasfaserleistung oder xDSL-Synchronisation)", "show_wifi": "Abschnitt WLAN und Gast-WLAN (ein- oder ausschalten, zwei Klicks)", "show_phone": "Abschnitt Telefon (verpasste Anrufe)", "show_clients": "Abschnitt verbundene Geräte", "show_actions": "Schaltflächen Klingeln und Neustart (zwei Klicks)"};
+EXTRA_I18N.de.labels.LBX = {"show_details": "Aufklappbarer Abschnitt Details (DHCP, Portweiterleitungen, Neustart, dynamisches DNS, Datenraten je Schnittstelle)", "show_ring": "Schaltfläche Telefon klingeln lassen", "entities": "Weitere anzuzeigende Sensoren", "device": "Livebox (Gerät der Integration Livebox, optional)", "title": "Titel (Standard: Livebox-Modell)", "wan_max": "Maximum der Datenraten-Balken (Geschwindigkeit des Anschlusses)", "download": "Download-Rate (leer = Glasfaser-Zähler)", "upload": "Upload-Rate (leer = Glasfaser-Zähler)", "speedtest_download": "Geschwindigkeitstest: Download (leer = Speedtest automatisch gefunden)", "speedtest_upload": "Geschwindigkeitstest: Upload", "speedtest_ping": "Geschwindigkeitstest: Ping", "show_connection": "Abschnitt Internet (Verbindung, öffentliche IP, Typ, Laufzeit)", "show_rates": "Abschnitt Datenraten in Echtzeit", "show_speedtest": "Abschnitt Geschwindigkeitstest (Speedtest)", "show_line": "Abschnitt Leitung (Glasfaserleistung oder xDSL-Synchronisation)", "show_wifi": "Abschnitt WLAN und Gast-WLAN (ein- oder ausschalten, zwei Klicks)", "show_phone": "Abschnitt Telefon (verpasste Anrufe)", "show_clients": "Abschnitt verbundene Geräte", "show_actions": "Schaltflächen Klingeln und Neustart (zwei Klicks)"};
 Object.assign(EXTRA_I18N.es.text, {
   "Baux DHCP": "Concesiones DHCP",
   "Baux DHCP invités": "Concesiones DHCP de invitados",
@@ -1271,7 +1271,7 @@ Object.assign(EXTRA_I18N.es.text, {
   "Accès à distance": "Acceso remoto",
   "DNS dynamique": "DNS dinámico",
 });
-EXTRA_I18N.es.labels.LBX = {"show_details": "Sección Detalles desplegable (DHCP, redirecciones, reinicio, DNS dinámico, velocidades por interfaz)", "show_ring": "Botón Hacer sonar el teléfono (sin efecto sin base DECT)", "entities": "Otros sensores que mostrar", "device": "Livebox (dispositivo de la integración Livebox, opcional)", "title": "Título (por defecto, modelo de la Livebox)", "wan_max": "Máximo de las barras de velocidad (velocidad contratada)", "download": "Velocidad de bajada (vacío = contadores de la fibra)", "upload": "Velocidad de subida (vacío = contadores de la fibra)", "speedtest_download": "Test de velocidad: bajada (vacío = Speedtest detectado automáticamente)", "speedtest_upload": "Test de velocidad: subida", "speedtest_ping": "Test de velocidad: ping", "show_connection": "Sección Internet (conexión, IP pública, tipo, tiempo activo)", "show_rates": "Sección velocidades en tiempo real", "show_speedtest": "Sección test de velocidad (Speedtest)", "show_line": "Sección línea (potencia de la fibra o sincronización xDSL)", "show_wifi": "Sección Wi-Fi y Wi-Fi de invitados (activar o desactivar, dos clics)", "show_phone": "Sección teléfono (llamadas perdidas)", "show_clients": "Sección dispositivos conectados", "show_actions": "Botones Hacer sonar y Reiniciar (dos clics)"};
+EXTRA_I18N.es.labels.LBX = {"show_details": "Sección Detalles desplegable (DHCP, redirecciones, reinicio, DNS dinámico, velocidades por interfaz)", "show_ring": "Botón Hacer sonar el teléfono", "entities": "Otros sensores que mostrar", "device": "Livebox (dispositivo de la integración Livebox, opcional)", "title": "Título (por defecto, modelo de la Livebox)", "wan_max": "Máximo de las barras de velocidad (velocidad contratada)", "download": "Velocidad de bajada (vacío = contadores de la fibra)", "upload": "Velocidad de subida (vacío = contadores de la fibra)", "speedtest_download": "Test de velocidad: bajada (vacío = Speedtest detectado automáticamente)", "speedtest_upload": "Test de velocidad: subida", "speedtest_ping": "Test de velocidad: ping", "show_connection": "Sección Internet (conexión, IP pública, tipo, tiempo activo)", "show_rates": "Sección velocidades en tiempo real", "show_speedtest": "Sección test de velocidad (Speedtest)", "show_line": "Sección línea (potencia de la fibra o sincronización xDSL)", "show_wifi": "Sección Wi-Fi y Wi-Fi de invitados (activar o desactivar, dos clics)", "show_phone": "Sección teléfono (llamadas perdidas)", "show_clients": "Sección dispositivos conectados", "show_actions": "Botones Hacer sonar y Reiniciar (dos clics)"};
 Object.assign(EXTRA_I18N.it.text, {
   "Baux DHCP": "Lease DHCP",
   "Baux DHCP invités": "Lease DHCP ospiti",
@@ -1299,7 +1299,7 @@ Object.assign(EXTRA_I18N.it.text, {
   "Accès à distance": "Accesso remoto",
   "DNS dynamique": "DNS dinamico",
 });
-EXTRA_I18N.it.labels.LBX = {"show_details": "Sezione Dettagli espandibile (DHCP, inoltro porte, riavvio, DNS dinamico, velocità per interfaccia)", "show_ring": "Pulsante Fai squillare il telefono (nessun effetto senza base DECT)", "entities": "Altri sensori da mostrare", "device": "Livebox (dispositivo dell'integrazione Livebox, facoltativo)", "title": "Titolo (predefinito: modello della Livebox)", "wan_max": "Massimo delle barre di velocità (velocità dell'abbonamento)", "download": "Velocità di download (vuoto = contatori della fibra)", "upload": "Velocità di upload (vuoto = contatori della fibra)", "speedtest_download": "Test di velocità: download (vuoto = Speedtest trovato automaticamente)", "speedtest_upload": "Test di velocità: upload", "speedtest_ping": "Test di velocità: ping", "show_connection": "Sezione Internet (connessione, IP pubblico, tipo, uptime)", "show_rates": "Sezione velocità in tempo reale", "show_speedtest": "Sezione test di velocità (Speedtest)", "show_line": "Sezione linea (potenza della fibra o sincronizzazione xDSL)", "show_wifi": "Sezione Wi-Fi e Wi-Fi ospiti (attiva o disattiva, due clic)", "show_phone": "Sezione telefono (chiamate perse)", "show_clients": "Sezione dispositivi connessi", "show_actions": "Pulsanti Fai squillare e Riavvia (due clic)"};
+EXTRA_I18N.it.labels.LBX = {"show_details": "Sezione Dettagli espandibile (DHCP, inoltro porte, riavvio, DNS dinamico, velocità per interfaccia)", "show_ring": "Pulsante Fai squillare il telefono", "entities": "Altri sensori da mostrare", "device": "Livebox (dispositivo dell'integrazione Livebox, facoltativo)", "title": "Titolo (predefinito: modello della Livebox)", "wan_max": "Massimo delle barre di velocità (velocità dell'abbonamento)", "download": "Velocità di download (vuoto = contatori della fibra)", "upload": "Velocità di upload (vuoto = contatori della fibra)", "speedtest_download": "Test di velocità: download (vuoto = Speedtest trovato automaticamente)", "speedtest_upload": "Test di velocità: upload", "speedtest_ping": "Test di velocità: ping", "show_connection": "Sezione Internet (connessione, IP pubblico, tipo, uptime)", "show_rates": "Sezione velocità in tempo reale", "show_speedtest": "Sezione test di velocità (Speedtest)", "show_line": "Sezione linea (potenza della fibra o sincronizzazione xDSL)", "show_wifi": "Sezione Wi-Fi e Wi-Fi ospiti (attiva o disattiva, due clic)", "show_phone": "Sezione telefono (chiamate perse)", "show_clients": "Sezione dispositivi connessi", "show_actions": "Pulsanti Fai squillare e Riavvia (due clic)"};
 Object.assign(EXTRA_I18N.nl.text, {
   "Baux DHCP": "DHCP-leases",
   "Baux DHCP invités": "DHCP-leases gasten",
@@ -1327,7 +1327,7 @@ Object.assign(EXTRA_I18N.nl.text, {
   "Accès à distance": "Externe toegang",
   "DNS dynamique": "Dynamische DNS",
 });
-EXTRA_I18N.nl.labels.LBX = {"show_details": "Uitklapbare sectie Details (DHCP, port forwarding, herstart, dynamische DNS, snelheden per interface)", "show_ring": "Knop Telefoon laten rinkelen (geen effect zonder DECT-basis)", "entities": "Andere sensoren om te tonen", "device": "Livebox (apparaat van de integratie Livebox, optioneel)", "title": "Titel (standaard het Livebox-model)", "wan_max": "Maximum van de snelheidsbalken (snelheid van het abonnement)", "download": "Downloadsnelheid (leeg = glasvezeltellers)", "upload": "Uploadsnelheid (leeg = glasvezeltellers)", "speedtest_download": "Snelheidstest: download (leeg = Speedtest automatisch gevonden)", "speedtest_upload": "Snelheidstest: upload", "speedtest_ping": "Snelheidstest: ping", "show_connection": "Sectie Internet (verbinding, publiek IP, type, uptime)", "show_rates": "Sectie snelheden in realtime", "show_speedtest": "Sectie snelheidstest (Speedtest)", "show_line": "Sectie lijn (glasvezelvermogen of xDSL-synchronisatie)", "show_wifi": "Sectie wifi en gast-wifi (in- of uitschakelen, twee klikken)", "show_phone": "Sectie telefoon (gemiste oproepen)", "show_clients": "Sectie verbonden apparaten", "show_actions": "Knoppen Laten rinkelen en Herstarten (twee klikken)"};
+EXTRA_I18N.nl.labels.LBX = {"show_details": "Uitklapbare sectie Details (DHCP, port forwarding, herstart, dynamische DNS, snelheden per interface)", "show_ring": "Knop Telefoon laten rinkelen", "entities": "Andere sensoren om te tonen", "device": "Livebox (apparaat van de integratie Livebox, optioneel)", "title": "Titel (standaard het Livebox-model)", "wan_max": "Maximum van de snelheidsbalken (snelheid van het abonnement)", "download": "Downloadsnelheid (leeg = glasvezeltellers)", "upload": "Uploadsnelheid (leeg = glasvezeltellers)", "speedtest_download": "Snelheidstest: download (leeg = Speedtest automatisch gevonden)", "speedtest_upload": "Snelheidstest: upload", "speedtest_ping": "Snelheidstest: ping", "show_connection": "Sectie Internet (verbinding, publiek IP, type, uptime)", "show_rates": "Sectie snelheden in realtime", "show_speedtest": "Sectie snelheidstest (Speedtest)", "show_line": "Sectie lijn (glasvezelvermogen of xDSL-synchronisatie)", "show_wifi": "Sectie wifi en gast-wifi (in- of uitschakelen, twee klikken)", "show_phone": "Sectie telefoon (gemiste oproepen)", "show_clients": "Sectie verbonden apparaten", "show_actions": "Knoppen Laten rinkelen en Herstarten (twee klikken)"};
 const EXTRA_PHRASES = {"lessMin": {"de": ["in weniger als einer Minute", "vor weniger als einer Minute"], "es": ["en menos de un minuto", "hace menos de un minuto"], "it": ["tra meno di un minuto", "meno di un minuto fa"], "nl": ["over minder dan een minuut", "minder dan een minuut geleden"]}, "left": {"de": "noch {x}", "es": "quedan {x}", "it": "ancora {x}", "nl": "nog {x}"}, "seeAll": {"de": "Alle {x} anzeigen", "es": "Ver los {x}", "it": "Vedi tutti i {x}", "nl": "Alle {x} bekijken"}, "see": {"de": "{x} anzeigen", "es": "Ver {x}", "it": "Vedi {x}", "nl": "{x} bekijken"}, "battery": {"de": ", {n} batteriebetrieben", "es": ", {n} con pila", "it": ", {n} a batteria", "nl": ", {n} op batterij"}, "lastSeen": {"de": " · zuletzt gesehen ", "es": " · visto ", "it": " · visto ", "nl": " · laatst gezien "}, "file": {"de": ["Datei", "Dateien"], "es": ["archivo", "archivos"], "it": ["file", "file"], "nl": ["bestand", "bestanden"]}, "ping": {"de": ["per Ping überwachtes Gerät", "per Ping überwachte Geräte"], "es": ["dispositivo vigilado por Ping", "dispositivos vigilados por Ping"], "it": ["dispositivo monitorato da Ping", "dispositivi monitorati da Ping"], "nl": ["apparaat bewaakt door Ping", "apparaten bewaakt door Ping"]}, "gh": {"de": {"issue": ["offenes Issue", "offene Issues"], "pr": ["offener PR", "offene PRs"], "new": ["neu", "neu"], "repo": ["Repository", "Repositorys"], "other": ["offenes Element", "offene Elemente"]}, "es": {"issue": ["issue abierta", "issues abiertas"], "pr": ["PR abierta", "PR abiertas"], "new": ["nueva", "nuevas"], "repo": ["repositorio", "repositorios"], "other": ["elemento abierto", "elementos abiertos"]}, "it": {"issue": ["issue aperta", "issue aperte"], "pr": ["PR aperta", "PR aperte"], "new": ["nuova", "nuove"], "repo": ["repository", "repository"], "other": ["elemento aperto", "elementi aperti"]}, "nl": {"issue": ["open issue", "open issues"], "pr": ["open PR", "open PR's"], "new": ["nieuw", "nieuw"], "repo": ["repository", "repository's"], "other": ["open item", "open items"]}}};
 const EXTRA_RULES = {};
 const extraRules = (lang) => {
@@ -4742,7 +4742,7 @@ const LBX_DEFAULTS = {
   icon_color: "",
   wan_max: 1000, // Mbit/s, pleine échelle des barres de débit (abonnement)
   show_connection: true, show_rates: true, show_speedtest: true, show_line: true, show_wifi: true, show_phone: true, show_clients: true, show_details: true, show_actions: true,
-  show_ring: true, // bouton « Faire sonner le téléphone » (sans effet sur les ports FXS, sans base DECT)
+  show_ring: true, // bouton « Faire sonner le téléphone »
   entities: [], // autres capteurs à afficher (identifiants, ou { entity, name })
   theme: "v2",
 };
@@ -5001,7 +5001,7 @@ class ServeurHaLiveboxCard extends HTMLElement {
     const ddnsBad = m.ddns.filter((x) => st(x.id)?.state === "on").map((x) => x.id);
     // bouton « Voir les … » des listes dépliables
     const seeText = (n, key) => (CURRENT_CARD_LANGUAGE === "en" ? `See ${countText(n, key)}` : CURRENT_CARD_LANGUAGE === "pl" ? `Pokaż ${countText(n, key)}`
-      : EXTRA_PHRASES.see[CURRENT_CARD_LANGUAGE] ? EXTRA_PHRASES.see[CURRENT_CARD_LANGUAGE].replace("{x}", countText(n, key)) : `Voir les ${countText(n, key)}`);
+      : EXTRA_PHRASES.see[CURRENT_CARD_LANGUAGE] ? EXTRA_PHRASES.see[CURRENT_CARD_LANGUAGE].replace("{x}", countText(n, key)) : Number(n) === 1 ? `Voir l'${countWord(n, key)}` : `Voir les ${countText(n, key)}`); // « Voir l'appel manqué » au singulier
     const foldBtn = (key, label) => { const open = this._fold === key; return localizeTemplate`<button class="asus-more ${open ? "on" : ""}" data-fold="${key}"><ha-icon icon="${esc(open ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${open ? trLabel("Réduire") : label}</button>`; };
 
     const led = (ok, label, id, cls) => (ok === null ? "" : localizeTemplate`<span class="srv-led ${cls || (ok ? "ok" : "bad")}" data-entity="${esc(id || "")}"><i></i>${exactLabel(label)}</span>`);
@@ -8607,7 +8607,7 @@ const LBX_LABELS = {
   show_clients: "Section Appareils connectés",
   show_details: "Section Détails dépliable (DHCP, redirections, redémarrage, DNS dynamique, débits par interface)",
   show_actions: "Boutons Faire sonner et Redémarrer (deux clics)",
-  show_ring: "Bouton Faire sonner le téléphone (sans effet sans base DECT)",
+  show_ring: "Bouton Faire sonner le téléphone",
   entities: "Autres capteurs à afficher",
   theme: "Couleurs de la carte",
 };
@@ -8621,7 +8621,7 @@ const ServeurHaLiveboxCardEditor = makeEditor(LBX_SCHEMA, LBX_LABELS, LBX_DEFAUL
   show_wifi: "Wi-Fi and guest Wi-Fi section (turn on or off, two clicks)", show_phone: "Phone section (missed calls)", show_clients: "Connected devices section",
   show_actions: "Ring and Restart buttons (two clicks)", theme: "Card colors",
   show_details: "Collapsible Details section (DHCP, port forwarding, restart, dynamic DNS, rates per interface)",
-  show_ring: "Ring the phone button (no effect without a DECT base)", entities: "Other sensors to show",
+  show_ring: "Ring the phone button", entities: "Other sensors to show",
 }, {
   device: "Livebox (urządzenie integracji Livebox, opcjonalnie)", title: "Tytuł (domyślnie model Livebox)", icon: "Ikona", icon_color: "Kolor ikony",
   wan_max: "Pełna skala pasków przepustowości", download: "Pobieranie (puste = liczniki światłowodu)",
@@ -8632,7 +8632,7 @@ const ServeurHaLiveboxCardEditor = makeEditor(LBX_SCHEMA, LBX_LABELS, LBX_DEFAUL
   show_wifi: "Sekcja Wi-Fi i Wi-Fi dla gości", show_phone: "Sekcja telefonu (nieodebrane połączenia)", show_clients: "Sekcja podłączonych urządzeń",
   show_actions: "Przyciski dzwonienia i restartu (dwa kliknięcia)", theme: "Kolory karty",
   show_details: "Zwijana sekcja szczegółów (DHCP, przekierowania portów, restart, dynamiczny DNS, przepustowość interfejsów)",
-  show_ring: "Przycisk dzwonienia na telefon (bez efektu bez bazy DECT)", entities: "Inne czujniki do wyświetlenia",
+  show_ring: "Przycisk dzwonienia na telefon", entities: "Inne czujniki do wyświetlenia",
 }, "LBX");
 const PING_SCHEMA = [
   { name: "title", selector: { text: {} } },
