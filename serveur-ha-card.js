@@ -22,7 +22,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.24.0";
+const CARD_VERSION = "0.24.1-beta.1";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -5475,7 +5475,10 @@ class ServeurHaGlancesCard extends HTMLElement {
     const gauge = (id, icon, label, v, sub, warn = 75, alert = 90, unit = " %", max = 100, digits = 0) => (v === null ? "" : localizeTemplate`<div class="srv-g" data-entity="${esc(id)}">
         <div class="srv-gt"><span><ha-icon icon="${esc(icon)}"></ha-icon>${exactLabel(label)}</span><b>${fmt(v, digits)}<small>${unit}</small></b></div>
         <div class="g-bar ${level((v / max) * 100, warn, alert)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></div>${sub ? localizeTemplate`<div class="srv-gs">${sub}</div>` : ""}</div>`);
-    const go = (id) => { const v = this._num(id); if (v === null) return null; const u = this._unit(id, "GiB"); const g = /^TiB|^TB/i.test(u) ? v * 1024 : /^MiB|^MB/i.test(u) ? v / 1024 : v; return g >= 1024 ? `${fmt(g / 1024, 2)} ${byteUnit("To")}` : `${fmt(g, g < 10 ? 1 : 0)} ${byteUnit("Go")}`; };
+    // valeur d'un capteur convertie en Gio selon son unité (Mio, Gio ou Tio)
+    const gib = (id) => { const v = this._num(id); if (v === null) return null; const u = this._unit(id, "GiB"); return /^TiB|^TB/i.test(u) ? v * 1024 : /^MiB|^MB/i.test(u) ? v / 1024 : v; };
+    const goFmt = (g) => (g >= 1024 ? `${fmt(g / 1024, 2)} ${byteUnit("To")}` : `${fmt(g, g < 10 ? 1 : 0)} ${byteUnit("Go")}`);
+    const go = (id) => { const g = gib(id); return g === null ? null : goFmt(g); };
     const tcls = (v) => (v === null ? "" : v >= ta ? "bad" : v >= tw ? "warn" : "ok");
     const pcls = (v, w, a) => (v === null ? "" : v >= a ? "bad" : v >= w ? "warn" : "ok");
 
@@ -5499,7 +5502,8 @@ class ServeurHaGlancesCard extends HTMLElement {
 
       let detail = "";
       if (isOpen && online) {
-        const memUsed = go(r.mem_used), memTot = (() => { const u = this._num(r.mem_used), f = this._num(r.mem_free); return u !== null && f !== null ? `${fmt(u + f, 1)} ${byteUnit("Go")}` : null; })();
+        // total : déduit du pourcentage (la mémoire libre de Glances exclut le cache, used + free est trop bas) ; sinon used + free
+        const memUsed = go(r.mem_used), memTot = (() => { const u = gib(r.mem_used), f = gib(r.mem_free); const t = u !== null && mem > 0 ? (u / mem) * 100 : u !== null && f !== null ? u + f : null; return t === null ? null : goFmt(t); })();
         const swap = this._num(r.swap);
         const tiles = [
           upTxt ? localizeTemplate`<div class="tile srv-t" data-entity="${esc(r.uptime)}"><div class="tile-l"><ha-icon icon="mdi:clock-start"></ha-icon>Uptime</div><div class="nas-up">${esc(upTxt)}</div></div>` : "",
