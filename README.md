@@ -28,7 +28,7 @@
 
 # Cartes Serveur HA
 
-> **🌍 Traductions :** [Documentation anglaise](README.en.md) · [Dokumentacja polska](README.pl.md). Les 14 cartes prennent en charge `language: auto` (langue de Home Assistant), `language: fr` (français), `language: en` (anglais), `language: pl` (polonais), `language: de` (allemand), `language: es` (espagnol), `language: it` (italien) et `language: nl` (néerlandais). Toute autre langue de Home Assistant affiche l'anglais. Le choix de la langue est également disponible dans chaque éditeur visuel.
+> **🌍 Traductions :** [Documentation anglaise](README.en.md) · [Dokumentacja polska](README.pl.md). Les 16 cartes prennent en charge `language: auto` (langue de Home Assistant), `language: fr` (français), `language: en` (anglais), `language: pl` (polonais), `language: de` (allemand), `language: es` (espagnol), `language: it` (italien) et `language: nl` (néerlandais). Toute autre langue de Home Assistant affiche l'anglais. Le choix de la langue est également disponible dans chaque éditeur visuel.
 
 
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz/)
@@ -46,7 +46,7 @@
 | `custom:serveur-ha-proxmox-card` | **Proxmox VE** : nœuds, stockages, VM et conteneurs (état, CPU, RAM, uptime), mises à jour, démarrage et arrêt confirmés en deux clics |
 | `custom:serveur-ha-asus-card` | **Routeur ASUS** ([AsusRouter](https://github.com/Vaskivskyi/ha-asusrouter)) : Internet et IP publique, débits, Wi-Fi et réseaux invités, ports Ethernet, appareils connectés, VPN, firmware, températures, redémarrage confirmé en deux clics |
 | `custom:serveur-ha-freebox-card` | **Freebox** (intégration Freebox) : Internet et IP publique, débits, test de débit (Speedtest), températures, disques et RAID, Wi-Fi, appels manqués, appareils connectés, redémarrage confirmé |
-| `custom:serveur-ha-livebox-card` | **Livebox** *(bêta)* ([intégration Livebox](https://github.com/cyr-ius/hass-livebox-component)) : Internet et IP publique, débits, test de débit (Speedtest), ligne fibre ou xDSL, Wi-Fi et Wi-Fi invité, appels manqués, appareils connectés, redémarrage confirmé |
+| `custom:serveur-ha-livebox-card` | **Livebox** ([intégration Livebox](https://github.com/cyr-ius/hass-livebox-component)) : Internet et IP publique, débits, test de débit (Speedtest), ligne fibre ou xDSL, Wi-Fi et Wi-Fi invité, appels manqués, appareils connectés, redémarrage confirmé |
 | `custom:serveur-ha-ping-card` | **Réseau** (intégration Ping) : appareils en ligne ou hors ligne, latence, gigue et perte de paquets, groupés par type ou par pièce, groupes dépliables |
 | `custom:serveur-ha-zigbee-card` | **Zigbee et piles** : piles à changer et piles faibles, appareils Zigbee hors ligne, signal faible ou silencieux, état du pont Zigbee2MQTT |
 | `custom:serveur-ha-wireguard-card` | **VPN WireGuard** ([WGDashboard](https://github.com/donaldzou/WGDashboard)) : serveurs, pairs connectés, dernier handshake, données reçues et envoyées |
@@ -111,7 +111,7 @@
 
 *Aperçus réalisés avec la démo et des valeurs fictives (noms, adresses IP, nœuds et invités inventés).*
 
-**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 14 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
+**[▶ Essayer la démo en ligne](https://marlboro62.github.io/serveur-ha-card/docs/demo.html)** : les 16 cartes avec des données simulées (Raspberry Pi ou VM, mises à jour, certificat SSL, NAS sain ou en panne, coupure de courant, Proxmox normal, chargé ou avec un nœud hors ligne, filtrage DNS normal ou coupé, serveurs Linux à jour ou en retard), en sombre ou clair, sur téléphone ou PC, avec le YAML à copier.
 
 
 ### Sécurité des traductions et performances
@@ -447,7 +447,7 @@ type: custom:serveur-ha-freebox-card
 | `show_connection`, `show_rates`, `show_speedtest`, `show_system`, `show_wifi`, `show_phone`, `show_clients`, `show_actions` | Afficher chaque section | `true` |
 | `theme` | Couleurs de la carte | `v2` |
 
-## Carte Livebox — `custom:serveur-ha-livebox-card` *(bêta)*
+## Carte Livebox — `custom:serveur-ha-livebox-card`
 
 Pour la Livebox d'Orange, avec l'intégration **Livebox** de cyr-ius ([hass-livebox-component](https://github.com/cyr-ius/hass-livebox-component), par le Marketplace ou HACS), ajoutée dans **Paramètres › Appareils et services** avec le mot de passe admin de la Livebox. Les capteurs sont trouvés tout seuls.
 
