@@ -22,7 +22,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.25.0-beta.1";
+const CARD_VERSION = "0.25.0-beta.2";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -1080,6 +1080,14 @@ Object.assign(PL_TEXT, {
 });
 /* Carte Livebox : textes anglais et polonais. */
 Object.assign(EN_TEXT, {
+  "Baux DHCP": "DHCP leases",
+  "Baux DHCP invités": "Guest DHCP leases",
+  "Redirections de ports": "Port forwarding",
+  "Dernier redémarrage": "Last restart",
+  "Numéro masqué": "Hidden number",
+  "Voir les détails": "See details",
+  "Débits par interface": "Rates per interface",
+  "Autres capteurs": "Other sensors",
   "Wi-Fi invité": "Guest Wi-Fi",
   "Couper le Wi-Fi invité": "Turn guest Wi-Fi off",
   "Activer le Wi-Fi invité": "Turn guest Wi-Fi on",
@@ -1099,6 +1107,14 @@ Object.assign(EN_TEXT, {
   "DNS dynamique": "Dynamic DNS",
 });
 Object.assign(PL_TEXT, {
+  "Baux DHCP": "Dzierżawy DHCP",
+  "Baux DHCP invités": "Dzierżawy DHCP gości",
+  "Redirections de ports": "Przekierowania portów",
+  "Dernier redémarrage": "Ostatni restart",
+  "Numéro masqué": "Numer zastrzeżony",
+  "Voir les détails": "Pokaż szczegóły",
+  "Débits par interface": "Przepustowość interfejsów",
+  "Autres capteurs": "Inne czujniki",
   "Wi-Fi invité": "Wi-Fi dla gości",
   "Couper le Wi-Fi invité": "Wyłącz Wi-Fi dla gości",
   "Activer le Wi-Fi invité": "Włącz Wi-Fi dla gości",
@@ -1201,6 +1217,14 @@ const EXTRA_I18N = {
 };
 /* Carte Livebox : textes et libellés de l'éditeur en allemand, espagnol, italien et néerlandais. */
 Object.assign(EXTRA_I18N.de.text, {
+  "Baux DHCP": "DHCP-Leases",
+  "Baux DHCP invités": "DHCP-Leases Gäste",
+  "Redirections de ports": "Portweiterleitungen",
+  "Dernier redémarrage": "Letzter Neustart",
+  "Numéro masqué": "Unterdrückte Nummer",
+  "Voir les détails": "Details anzeigen",
+  "Débits par interface": "Datenraten je Schnittstelle",
+  "Autres capteurs": "Weitere Sensoren",
   "Wi-Fi invité": "Gast-WLAN",
   "Couper le Wi-Fi invité": "Gast-WLAN ausschalten",
   "Activer le Wi-Fi invité": "Gast-WLAN einschalten",
@@ -1219,8 +1243,16 @@ Object.assign(EXTRA_I18N.de.text, {
   "Accès à distance": "Fernzugriff",
   "DNS dynamique": "Dynamisches DNS",
 });
-EXTRA_I18N.de.labels.LBX = {"device": "Livebox (Gerät der Integration Livebox, optional)", "title": "Titel (Standard: Livebox-Modell)", "wan_max": "Maximum der Datenraten-Balken (Geschwindigkeit des Anschlusses)", "download": "Download-Rate (leer = Glasfaser-Zähler)", "upload": "Upload-Rate (leer = Glasfaser-Zähler)", "speedtest_download": "Geschwindigkeitstest: Download (leer = Speedtest automatisch gefunden)", "speedtest_upload": "Geschwindigkeitstest: Upload", "speedtest_ping": "Geschwindigkeitstest: Ping", "show_connection": "Abschnitt Internet (Verbindung, öffentliche IP, Typ, Laufzeit)", "show_rates": "Abschnitt Datenraten in Echtzeit", "show_speedtest": "Abschnitt Geschwindigkeitstest (Speedtest)", "show_line": "Abschnitt Leitung (Glasfaserleistung oder xDSL-Synchronisation)", "show_wifi": "Abschnitt WLAN und Gast-WLAN (ein- oder ausschalten, zwei Klicks)", "show_phone": "Abschnitt Telefon (verpasste Anrufe)", "show_clients": "Abschnitt verbundene Geräte", "show_actions": "Schaltflächen Klingeln und Neustart (zwei Klicks)"};
+EXTRA_I18N.de.labels.LBX = {"show_details": "Aufklappbarer Abschnitt Details (DHCP, Portweiterleitungen, Neustart, dynamisches DNS, Datenraten je Schnittstelle)", "show_ring": "Schaltfläche Telefon klingeln lassen (ohne DECT-Basis wirkungslos)", "entities": "Weitere anzuzeigende Sensoren", "device": "Livebox (Gerät der Integration Livebox, optional)", "title": "Titel (Standard: Livebox-Modell)", "wan_max": "Maximum der Datenraten-Balken (Geschwindigkeit des Anschlusses)", "download": "Download-Rate (leer = Glasfaser-Zähler)", "upload": "Upload-Rate (leer = Glasfaser-Zähler)", "speedtest_download": "Geschwindigkeitstest: Download (leer = Speedtest automatisch gefunden)", "speedtest_upload": "Geschwindigkeitstest: Upload", "speedtest_ping": "Geschwindigkeitstest: Ping", "show_connection": "Abschnitt Internet (Verbindung, öffentliche IP, Typ, Laufzeit)", "show_rates": "Abschnitt Datenraten in Echtzeit", "show_speedtest": "Abschnitt Geschwindigkeitstest (Speedtest)", "show_line": "Abschnitt Leitung (Glasfaserleistung oder xDSL-Synchronisation)", "show_wifi": "Abschnitt WLAN und Gast-WLAN (ein- oder ausschalten, zwei Klicks)", "show_phone": "Abschnitt Telefon (verpasste Anrufe)", "show_clients": "Abschnitt verbundene Geräte", "show_actions": "Schaltflächen Klingeln und Neustart (zwei Klicks)"};
 Object.assign(EXTRA_I18N.es.text, {
+  "Baux DHCP": "Concesiones DHCP",
+  "Baux DHCP invités": "Concesiones DHCP de invitados",
+  "Redirections de ports": "Redirecciones de puertos",
+  "Dernier redémarrage": "Último reinicio",
+  "Numéro masqué": "Número oculto",
+  "Voir les détails": "Ver los detalles",
+  "Débits par interface": "Velocidades por interfaz",
+  "Autres capteurs": "Otros sensores",
   "Wi-Fi invité": "Wi-Fi de invitados",
   "Couper le Wi-Fi invité": "Desactivar el Wi-Fi de invitados",
   "Activer le Wi-Fi invité": "Activar el Wi-Fi de invitados",
@@ -1239,8 +1271,16 @@ Object.assign(EXTRA_I18N.es.text, {
   "Accès à distance": "Acceso remoto",
   "DNS dynamique": "DNS dinámico",
 });
-EXTRA_I18N.es.labels.LBX = {"device": "Livebox (dispositivo de la integración Livebox, opcional)", "title": "Título (por defecto, modelo de la Livebox)", "wan_max": "Máximo de las barras de velocidad (velocidad contratada)", "download": "Velocidad de bajada (vacío = contadores de la fibra)", "upload": "Velocidad de subida (vacío = contadores de la fibra)", "speedtest_download": "Test de velocidad: bajada (vacío = Speedtest detectado automáticamente)", "speedtest_upload": "Test de velocidad: subida", "speedtest_ping": "Test de velocidad: ping", "show_connection": "Sección Internet (conexión, IP pública, tipo, tiempo activo)", "show_rates": "Sección velocidades en tiempo real", "show_speedtest": "Sección test de velocidad (Speedtest)", "show_line": "Sección línea (potencia de la fibra o sincronización xDSL)", "show_wifi": "Sección Wi-Fi y Wi-Fi de invitados (activar o desactivar, dos clics)", "show_phone": "Sección teléfono (llamadas perdidas)", "show_clients": "Sección dispositivos conectados", "show_actions": "Botones Hacer sonar y Reiniciar (dos clics)"};
+EXTRA_I18N.es.labels.LBX = {"show_details": "Sección Detalles desplegable (DHCP, redirecciones, reinicio, DNS dinámico, velocidades por interfaz)", "show_ring": "Botón Hacer sonar el teléfono (sin efecto sin base DECT)", "entities": "Otros sensores que mostrar", "device": "Livebox (dispositivo de la integración Livebox, opcional)", "title": "Título (por defecto, modelo de la Livebox)", "wan_max": "Máximo de las barras de velocidad (velocidad contratada)", "download": "Velocidad de bajada (vacío = contadores de la fibra)", "upload": "Velocidad de subida (vacío = contadores de la fibra)", "speedtest_download": "Test de velocidad: bajada (vacío = Speedtest detectado automáticamente)", "speedtest_upload": "Test de velocidad: subida", "speedtest_ping": "Test de velocidad: ping", "show_connection": "Sección Internet (conexión, IP pública, tipo, tiempo activo)", "show_rates": "Sección velocidades en tiempo real", "show_speedtest": "Sección test de velocidad (Speedtest)", "show_line": "Sección línea (potencia de la fibra o sincronización xDSL)", "show_wifi": "Sección Wi-Fi y Wi-Fi de invitados (activar o desactivar, dos clics)", "show_phone": "Sección teléfono (llamadas perdidas)", "show_clients": "Sección dispositivos conectados", "show_actions": "Botones Hacer sonar y Reiniciar (dos clics)"};
 Object.assign(EXTRA_I18N.it.text, {
+  "Baux DHCP": "Lease DHCP",
+  "Baux DHCP invités": "Lease DHCP ospiti",
+  "Redirections de ports": "Inoltro delle porte",
+  "Dernier redémarrage": "Ultimo riavvio",
+  "Numéro masqué": "Numero privato",
+  "Voir les détails": "Vedi i dettagli",
+  "Débits par interface": "Velocità per interfaccia",
+  "Autres capteurs": "Altri sensori",
   "Wi-Fi invité": "Wi-Fi ospiti",
   "Couper le Wi-Fi invité": "Disattiva il Wi-Fi ospiti",
   "Activer le Wi-Fi invité": "Attiva il Wi-Fi ospiti",
@@ -1259,8 +1299,16 @@ Object.assign(EXTRA_I18N.it.text, {
   "Accès à distance": "Accesso remoto",
   "DNS dynamique": "DNS dinamico",
 });
-EXTRA_I18N.it.labels.LBX = {"device": "Livebox (dispositivo dell'integrazione Livebox, facoltativo)", "title": "Titolo (predefinito: modello della Livebox)", "wan_max": "Massimo delle barre di velocità (velocità dell'abbonamento)", "download": "Velocità di download (vuoto = contatori della fibra)", "upload": "Velocità di upload (vuoto = contatori della fibra)", "speedtest_download": "Test di velocità: download (vuoto = Speedtest trovato automaticamente)", "speedtest_upload": "Test di velocità: upload", "speedtest_ping": "Test di velocità: ping", "show_connection": "Sezione Internet (connessione, IP pubblico, tipo, uptime)", "show_rates": "Sezione velocità in tempo reale", "show_speedtest": "Sezione test di velocità (Speedtest)", "show_line": "Sezione linea (potenza della fibra o sincronizzazione xDSL)", "show_wifi": "Sezione Wi-Fi e Wi-Fi ospiti (attiva o disattiva, due clic)", "show_phone": "Sezione telefono (chiamate perse)", "show_clients": "Sezione dispositivi connessi", "show_actions": "Pulsanti Fai squillare e Riavvia (due clic)"};
+EXTRA_I18N.it.labels.LBX = {"show_details": "Sezione Dettagli espandibile (DHCP, inoltro porte, riavvio, DNS dinamico, velocità per interfaccia)", "show_ring": "Pulsante Fai squillare il telefono (nessun effetto senza base DECT)", "entities": "Altri sensori da mostrare", "device": "Livebox (dispositivo dell'integrazione Livebox, facoltativo)", "title": "Titolo (predefinito: modello della Livebox)", "wan_max": "Massimo delle barre di velocità (velocità dell'abbonamento)", "download": "Velocità di download (vuoto = contatori della fibra)", "upload": "Velocità di upload (vuoto = contatori della fibra)", "speedtest_download": "Test di velocità: download (vuoto = Speedtest trovato automaticamente)", "speedtest_upload": "Test di velocità: upload", "speedtest_ping": "Test di velocità: ping", "show_connection": "Sezione Internet (connessione, IP pubblico, tipo, uptime)", "show_rates": "Sezione velocità in tempo reale", "show_speedtest": "Sezione test di velocità (Speedtest)", "show_line": "Sezione linea (potenza della fibra o sincronizzazione xDSL)", "show_wifi": "Sezione Wi-Fi e Wi-Fi ospiti (attiva o disattiva, due clic)", "show_phone": "Sezione telefono (chiamate perse)", "show_clients": "Sezione dispositivi connessi", "show_actions": "Pulsanti Fai squillare e Riavvia (due clic)"};
 Object.assign(EXTRA_I18N.nl.text, {
+  "Baux DHCP": "DHCP-leases",
+  "Baux DHCP invités": "DHCP-leases gasten",
+  "Redirections de ports": "Port forwarding",
+  "Dernier redémarrage": "Laatste herstart",
+  "Numéro masqué": "Afgeschermd nummer",
+  "Voir les détails": "Details bekijken",
+  "Débits par interface": "Snelheden per interface",
+  "Autres capteurs": "Andere sensoren",
   "Wi-Fi invité": "Gast-wifi",
   "Couper le Wi-Fi invité": "Gast-wifi uitschakelen",
   "Activer le Wi-Fi invité": "Gast-wifi inschakelen",
@@ -1279,7 +1327,7 @@ Object.assign(EXTRA_I18N.nl.text, {
   "Accès à distance": "Externe toegang",
   "DNS dynamique": "Dynamische DNS",
 });
-EXTRA_I18N.nl.labels.LBX = {"device": "Livebox (apparaat van de integratie Livebox, optioneel)", "title": "Titel (standaard het Livebox-model)", "wan_max": "Maximum van de snelheidsbalken (snelheid van het abonnement)", "download": "Downloadsnelheid (leeg = glasvezeltellers)", "upload": "Uploadsnelheid (leeg = glasvezeltellers)", "speedtest_download": "Snelheidstest: download (leeg = Speedtest automatisch gevonden)", "speedtest_upload": "Snelheidstest: upload", "speedtest_ping": "Snelheidstest: ping", "show_connection": "Sectie Internet (verbinding, publiek IP, type, uptime)", "show_rates": "Sectie snelheden in realtime", "show_speedtest": "Sectie snelheidstest (Speedtest)", "show_line": "Sectie lijn (glasvezelvermogen of xDSL-synchronisatie)", "show_wifi": "Sectie wifi en gast-wifi (in- of uitschakelen, twee klikken)", "show_phone": "Sectie telefoon (gemiste oproepen)", "show_clients": "Sectie verbonden apparaten", "show_actions": "Knoppen Laten rinkelen en Herstarten (twee klikken)"};
+EXTRA_I18N.nl.labels.LBX = {"show_details": "Uitklapbare sectie Details (DHCP, port forwarding, herstart, dynamische DNS, snelheden per interface)", "show_ring": "Knop Telefoon laten rinkelen (geen effect zonder DECT-basis)", "entities": "Andere sensoren om te tonen", "device": "Livebox (apparaat van de integratie Livebox, optioneel)", "title": "Titel (standaard het Livebox-model)", "wan_max": "Maximum van de snelheidsbalken (snelheid van het abonnement)", "download": "Downloadsnelheid (leeg = glasvezeltellers)", "upload": "Uploadsnelheid (leeg = glasvezeltellers)", "speedtest_download": "Snelheidstest: download (leeg = Speedtest automatisch gevonden)", "speedtest_upload": "Snelheidstest: upload", "speedtest_ping": "Snelheidstest: ping", "show_connection": "Sectie Internet (verbinding, publiek IP, type, uptime)", "show_rates": "Sectie snelheden in realtime", "show_speedtest": "Sectie snelheidstest (Speedtest)", "show_line": "Sectie lijn (glasvezelvermogen of xDSL-synchronisatie)", "show_wifi": "Sectie wifi en gast-wifi (in- of uitschakelen, twee klikken)", "show_phone": "Sectie telefoon (gemiste oproepen)", "show_clients": "Sectie verbonden apparaten", "show_actions": "Knoppen Laten rinkelen en Herstarten (twee klikken)"};
 const EXTRA_PHRASES = {"lessMin": {"de": ["in weniger als einer Minute", "vor weniger als einer Minute"], "es": ["en menos de un minuto", "hace menos de un minuto"], "it": ["tra meno di un minuto", "meno di un minuto fa"], "nl": ["over minder dan een minuut", "minder dan een minuut geleden"]}, "left": {"de": "noch {x}", "es": "quedan {x}", "it": "ancora {x}", "nl": "nog {x}"}, "seeAll": {"de": "Alle {x} anzeigen", "es": "Ver los {x}", "it": "Vedi tutti i {x}", "nl": "Alle {x} bekijken"}, "see": {"de": "{x} anzeigen", "es": "Ver {x}", "it": "Vedi {x}", "nl": "{x} bekijken"}, "battery": {"de": ", {n} batteriebetrieben", "es": ", {n} con pila", "it": ", {n} a batteria", "nl": ", {n} op batterij"}, "lastSeen": {"de": " · zuletzt gesehen ", "es": " · visto ", "it": " · visto ", "nl": " · laatst gezien "}, "file": {"de": ["Datei", "Dateien"], "es": ["archivo", "archivos"], "it": ["file", "file"], "nl": ["bestand", "bestanden"]}, "ping": {"de": ["per Ping überwachtes Gerät", "per Ping überwachte Geräte"], "es": ["dispositivo vigilado por Ping", "dispositivos vigilados por Ping"], "it": ["dispositivo monitorato da Ping", "dispositivi monitorati da Ping"], "nl": ["apparaat bewaakt door Ping", "apparaten bewaakt door Ping"]}, "gh": {"de": {"issue": ["offenes Issue", "offene Issues"], "pr": ["offener PR", "offene PRs"], "new": ["neu", "neu"], "repo": ["Repository", "Repositorys"], "other": ["offenes Element", "offene Elemente"]}, "es": {"issue": ["issue abierta", "issues abiertas"], "pr": ["PR abierta", "PR abiertas"], "new": ["nueva", "nuevas"], "repo": ["repositorio", "repositorios"], "other": ["elemento abierto", "elementos abiertos"]}, "it": {"issue": ["issue aperta", "issue aperte"], "pr": ["PR aperta", "PR aperte"], "new": ["nuova", "nuove"], "repo": ["repository", "repository"], "other": ["elemento aperto", "elementi aperti"]}, "nl": {"issue": ["open issue", "open issues"], "pr": ["open PR", "open PR's"], "new": ["nieuw", "nieuw"], "repo": ["repository", "repository's"], "other": ["open item", "open items"]}}};
 const EXTRA_RULES = {};
 const extraRules = (lang) => {
@@ -4693,7 +4741,9 @@ const LBX_DEFAULTS = {
   icon: "mdi:router-wireless",
   icon_color: "",
   wan_max: 1000, // Mbit/s, pleine échelle des barres de débit (abonnement)
-  show_connection: true, show_rates: true, show_speedtest: true, show_line: true, show_wifi: true, show_phone: true, show_clients: true, show_actions: true,
+  show_connection: true, show_rates: true, show_speedtest: true, show_line: true, show_wifi: true, show_phone: true, show_clients: true, show_details: true, show_actions: true,
+  show_ring: true, // bouton « Faire sonner le téléphone » (sans effet sur les ports FXS, sans base DECT)
+  entities: [], // autres capteurs à afficher (identifiants, ou { entity, name })
   theme: "v2",
 };
 
@@ -4711,6 +4761,9 @@ const LBX_ROLES = [
   ["fib_tx", "sensor", "fiber_tx", /_fiber_tx$|_fibre_emis$/],
   ["uptime", "sensor", "uptime", /_uptime$|_duree_de_fonctionnement$/],
   ["reboot_reason", "sensor", "last_reboot_reason", /_last_reboot_reason$|_raison_du_dernier_redemarrage$/],
+  ["guest_dhcp", "sensor", "guest_dhcp_leases", /_guest_dhcp_leases$|_baux_dhcp_invites$/],
+  ["dhcp", "sensor", "dhcp_leases", /_dhcp_leases$|_baux_dhcp$/],
+  ["upnp", "sensor", "upnp", /_ports_forwarding$|_redirections_de_ports$/],
   ["guest", "switch", "guest_wifi", /_guest_wifi$|_wi_fi_invite$/],
   ["wifi", "switch", "wifi_switch", /_wifi$|_wi_fi$/],
   ["restart", "button", "restart_btn", /_livebox_restart$|_redemarrer_la_livebox$/],
@@ -4861,14 +4914,35 @@ class ServeurHaLiveboxCard extends HTMLElement {
     };
     rates.rxCounter = !rates.rx && roles.fib_rx ? roles.fib_rx : null;
     rates.txCounter = !rates.tx && roles.fib_tx ? roles.fib_tx : null;
-    // appareils du réseau : un appareil Home Assistant chacun, rattaché à la même entrée que la Livebox
+    // appareils du réseau : un appareil Home Assistant chacun, rattaché à la Livebox (ou à son répéteur) ;
+    // si aucun ne se rattache, tous les appareils suivis par l'intégration
     const boxEntries = devs[devId]?.config_entries || [];
-    const sameBox = (e) => !boxEntries.length || (devs[e.device_id]?.config_entries || []).some((x) => boxEntries.includes(x));
-    const trackers = all.filter(([id, e]) => id.startsWith("device_tracker.") && sameBox(e)).map(([id]) => id);
+    const ofBox = (e) => {
+      const d = devs[e.device_id];
+      return !d || d.id === devId || d.via_device_id === devId || !boxEntries.length || (d.config_entries || []).some((x) => boxEntries.includes(x));
+    };
+    const tracked = all.filter(([id]) => id.startsWith("device_tracker."));
+    let trackers = tracked.filter(([, e]) => ofBox(e)).map(([id]) => id);
+    if (!trackers.length) trackers = tracked.map(([id]) => id);
+    // signal Wi-Fi de chaque appareil (capteurs par client de l'intégration, désactivés par défaut)
+    const sigByDev = {};
+    for (const [id, e] of all) {
+      if (e.device_id && e.device_id !== devId && (e.translation_key === "signal_strength" || /_signal_strength$|_force_du_signal$/.test(id))) sigByDev[e.device_id] = id;
+    }
+    const signal = Object.fromEntries(trackers.map((id) => [id, sigByDev[reg[id]?.device_id]]).filter(([, x]) => x));
+    // débits par interface (WAN, LAN, Wi-Fi) : nom de l'interface tiré du nom de l'entité
+    const boxNames = [devs[devId]?.name_by_user, devs[devId]?.name].filter(Boolean);
+    const ifName = (id) => {
+      let n = String(st[id]?.attributes?.friendly_name || id);
+      for (const b of boxNames) n = n.replace(new RegExp(`^${safeRegExp(b)}\\s*`, "i"), "");
+      return n.replace(/^d[ée]bit\s+(re[çc]u|[ée]mis)\s*/i, "").replace(/\s*rate\s+(rx|tx)$/i, "").trim() || id;
+    };
+    const ifaces = ifRx.map((rx) => ({ name: ifName(rx), rx, tx: ifTx.find((tx) => ifName(tx) === ifName(rx)) || null }));
+    const ddnsName = (id) => { let n = String(st[id]?.attributes?.friendly_name || id); for (const b of boxNames) n = n.replace(new RegExp(`^${safeRegExp(b)}\\s*`, "i"), ""); return n.trim(); };
     // Speedtest : capteurs donnés, sinon intégration Speedtest.net ou Speedtest CLI
     const sp = (k, re) => c[`speedtest_${k}`] || Object.keys(st).find((id) => id.startsWith("sensor.") && (reg[id]?.platform === "speedtestdotnet" || /speedtest/.test(id)) && re.test(id)) || null;
     const speed = { down: sp("download", /_download$/), up: sp("upload", /_upload$/), ping: sp("ping", /_ping$/), isp: c.speedtest_isp || Object.keys(st).find((id) => /^sensor\.speedtest.*_isp$/.test(id)) || null };
-    this._map = { devId, dev: devs[devId], roles, ddns, rates, trackers, speed };
+    this._map = { devId, dev: devs[devId], roles, ddns: ddns.map((id) => ({ id, name: ddnsName(id) })), rates, trackers, signal, ifaces, speed };
     return this._map;
   }
 
@@ -4877,7 +4951,8 @@ class ServeurHaLiveboxCard extends HTMLElement {
     const c = this._config;
     const m = this._resolve();
     const r = m.roles;
-    const ids = [...Object.values(r), ...m.ddns, ...Object.values(m.rates), ...m.trackers, ...Object.values(m.speed)].filter(Boolean);
+    const extraIds = (Array.isArray(c.entities) ? c.entities : []).map((x) => (typeof x === "string" ? x : x?.entity));
+    const ids = [...Object.values(r), ...m.ddns.map((x) => x.id), ...Object.values(m.rates), ...m.trackers, ...Object.values(m.signal), ...m.ifaces.flatMap((x) => [x.rx, x.tx]), ...Object.values(m.speed), ...extraIds].filter(Boolean);
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|${this._armed}|${this._fold}|${Math.floor(Date.now() / 60000)}|` + ids.map((id) => { const s = this._st(id); return s ? `${s.state}|${s.last_updated}` : "-"; }).join("|");
     if (sig === this._sig) return;
     this._sig = sig;
@@ -4923,7 +4998,11 @@ class ServeurHaLiveboxCard extends HTMLElement {
     const missedA = st(r.missed)?.attributes?.missed_calls;
     const missed = !st(r.missed) ? null : Array.isArray(missedA) ? missedA.length : st(r.missed).state === "on" ? 1 : 0;
     const wifiOn = st(r.wifi) ? st(r.wifi).state === "on" : null;
-    const ddnsBad = m.ddns.filter((id) => st(id)?.state === "on");
+    const ddnsBad = m.ddns.filter((x) => st(x.id)?.state === "on").map((x) => x.id);
+    // bouton « Voir les … » des listes dépliables
+    const seeText = (n, key) => (CURRENT_CARD_LANGUAGE === "en" ? `See ${countText(n, key)}` : CURRENT_CARD_LANGUAGE === "pl" ? `Pokaż ${countText(n, key)}`
+      : EXTRA_PHRASES.see[CURRENT_CARD_LANGUAGE] ? EXTRA_PHRASES.see[CURRENT_CARD_LANGUAGE].replace("{x}", countText(n, key)) : `Voir les ${countText(n, key)}`);
+    const foldBtn = (key, label) => { const open = this._fold === key; return localizeTemplate`<button class="asus-more ${open ? "on" : ""}" data-fold="${key}"><ha-icon icon="${esc(open ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${open ? trLabel("Réduire") : label}</button>`; };
 
     const led = (ok, label, id, cls) => (ok === null ? "" : localizeTemplate`<span class="srv-led ${cls || (ok ? "ok" : "bad")}" data-entity="${esc(id || "")}"><i></i>${exactLabel(label)}</span>`);
     const leds = m.devId ? [
@@ -5013,24 +5092,65 @@ class ServeurHaLiveboxCard extends HTMLElement {
       // --- téléphone
       let phone = "";
       if (c.show_phone !== false && st(r.missed)) {
-        phone = sec("mdi:phone", "Téléphone", localizeTemplate`<div class="fbx-row"><span class="omv-svc ${missed ? "" : "on"}" data-entity="${esc(r.missed)}"><i></i>${missed ? countText(missed, "appel") : exactLabel("Aucun appel manqué")}</span>${missed ? btn(r.clear, "mdi:phone-remove", "Effacer les appels") : ""}</div>`);
+        const calls = Array.isArray(missedA) ? missedA.filter((x) => x && typeof x === "object") : [];
+        const at = (x) => Date.parse(String(x?.date || "").replace(" ", "T"));
+        const when = (x) => { const t = at(x); return Number.isFinite(t) ? new Date(t).toLocaleString(cardLocale(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""; };
+        const list = this._fold === "calls" ? calls.slice().sort((a, b) => (at(b) || 0) - (at(a) || 0))
+          .map((x) => localizeTemplate`<div class="asus-dev" data-entity="${esc(r.missed)}"><ha-icon icon="mdi:phone-missed"></ha-icon><span>${esc(x.phone_number || exactLabel("Numéro masqué"))}</span><small>${esc(when(x))}</small></div>`).join("") : "";
+        phone = sec("mdi:phone", "Téléphone", localizeTemplate`<div class="fbx-row"><span class="omv-svc ${missed ? "" : "on"}" data-entity="${esc(r.missed)}"><i></i>${missed ? countText(missed, "appel") : exactLabel("Aucun appel manqué")}</span>${missed ? btn(r.clear, "mdi:phone-remove", "Effacer les appels") : ""}</div>`
+          + (list ? localizeTemplate`<div class="asus-devs asus-all lbx-list">${list}</div>` : "") + (calls.length ? foldBtn("calls", seeText(calls.length, "appel")) : ""));
       }
       // --- appareils connectés
       let clients = "";
-      if (c.show_clients !== false && m.trackers.length) {
+      const wl = Number(wanA["wireless clients"]), wd = Number(wanA["wired clients"]);
+      const counts = kv([["Wi-Fi", Number.isFinite(wl) && wanA["wireless clients"] !== null ? fmt(wl, 0) : null], ["Filaire", Number.isFinite(wd) && wanA["wired clients"] !== null ? fmt(wd, 0) : null]]);
+      if (c.show_clients !== false && (m.trackers.length || counts)) {
         const on = m.trackers.filter((id) => st(id)?.state === "home");
         const open = this._fold === "devs";
         const label = (id) => String(st(id)?.attributes?.friendly_name || id);
         const icon = (id) => ({ wifi: "mdi:wifi", guestwifi: "mdi:wifi-star", ethernet: "mdi:ethernet" }[st(id)?.attributes?.connection] || "mdi:lan-connect");
+        const info = (id) => { const ip = st(id)?.attributes?.ip || ""; const dbm = this._num(m.signal[id]); return [ip, dbm === null ? "" : `${fmt(dbm, 0)} dBm`].filter(Boolean).join(" · "); };
         const list = open ? on.slice().sort((a, b) => label(a).localeCompare(label(b), "fr", { numeric: true }))
-          .map((id) => localizeTemplate`<div class="asus-dev" data-entity="${esc(id)}"><ha-icon icon="${esc(icon(id))}"></ha-icon><span>${esc(label(id))}</span><small>${esc(st(id)?.attributes?.ip || "")}</small></div>`).join("") : "";
-        clients = sec("mdi:devices", localizeTemplate`Appareils connectés <small class="pve-n">${fmt(on.length, 0)} / ${fmt(m.trackers.length, 0)}</small>`,
-          `${open ? localizeTemplate`<div class="asus-devs asus-all">${list || localizeTemplate`<div class="asus-note">Aucun appareil</div>`}</div>` : ""}
-          <button class="asus-more ${open ? "on" : ""}" data-fold="devs"><ha-icon icon="${esc(open ? "mdi:chevron-up" : "mdi:chevron-down")}"></ha-icon>${open ? trLabel("Réduire") : CURRENT_CARD_LANGUAGE === "en" ? `See ${countText(on.length, "appareil")}` : CURRENT_CARD_LANGUAGE === "pl" ? `Pokaż ${countText(on.length, "appareil")}` : EXTRA_PHRASES.see[CURRENT_CARD_LANGUAGE] ? EXTRA_PHRASES.see[CURRENT_CARD_LANGUAGE].replace("{x}", countText(on.length, "appareil")) : `Voir les ${countText(on.length, "appareil")}`}</button>`);
+          .map((id) => localizeTemplate`<div class="asus-dev" data-entity="${esc(id)}"><ha-icon icon="${esc(icon(id))}"></ha-icon><span>${esc(label(id))}</span><small>${esc(info(id))}</small></div>`).join("") : "";
+        const title = m.trackers.length ? localizeTemplate`Appareils connectés <small class="pve-n">${fmt(on.length, 0)} / ${fmt(m.trackers.length, 0)}</small>` : "Appareils connectés";
+        clients = sec("mdi:devices", title,
+          `${counts ? localizeTemplate`<div class="asus-kv lbx-counts" data-entity="${esc(r.wan || "")}">${counts}</div>` : ""}${open ? localizeTemplate`<div class="asus-devs asus-all">${list || localizeTemplate`<div class="asus-note">Aucun appareil</div>`}</div>` : ""}${m.trackers.length ? foldBtn("devs", seeText(on.length, "appareil")) : ""}`);
+      }
+      // --- détails : DHCP, redirections, dernier redémarrage, DNS dynamique, débits par interface
+      let details = "";
+      if (c.show_details !== false) {
+        const n = (id) => { const v = this._num(id); return v === null ? null : fmt(v, 0); };
+        const reason = this._txt(r.reboot_reason);
+        const rows = kv([
+          ["Baux DHCP", n(r.dhcp)],
+          ["Baux DHCP invités", n(r.guest_dhcp)],
+          ["Redirections de ports", n(r.upnp)],
+          ["Dernier redémarrage", reason ? (boot ? `${reason} · ${dayMonth(boot)}` : reason) : null],
+          ...m.ddns.map((x) => [x.name, st(x.id)?.state === "on" ? trLabel("Erreur") : "OK", st(x.id)?.state === "on" ? "bad" : "ok"]),
+        ]);
+        const rate = (id) => { const v = mbit(id); return v === null ? "–" : fmt(v, v < 10 ? 2 : v < 100 ? 1 : 0); };
+        const ifs = m.ifaces.map((x) => localizeTemplate`<div class="srv-kv" data-entity="${esc(x.rx)}"><span>${esc(x.name)}</span><b>↓ ${rate(x.rx)} · ↑ ${rate(x.tx)} <small>Mbit/s</small></b></div>`).join("");
+        if (rows || ifs) {
+          const open = this._fold === "details";
+          details = sec("mdi:information-outline", "Détails", `${open ? `${rows ? localizeTemplate`<div class="asus-kv">${rows}</div>` : ""}${ifs ? localizeTemplate`<div class="srv-h lbx-sub"><ha-icon icon="mdi:swap-vertical"></ha-icon>Débits par interface</div><div class="asus-kv">${ifs}</div>` : ""}` : ""}${foldBtn("details", trLabel("Voir les détails"))}`);
+        }
+      }
+      // --- autres capteurs choisis dans la configuration
+      let others = "";
+      const extra = (Array.isArray(c.entities) ? c.entities : []).map((x) => (typeof x === "string" ? { entity: x } : x)).filter((x) => x?.entity && st(x.entity));
+      if (extra.length) {
+        const val = (id) => {
+          const s0 = st(id);
+          if (typeof this._hass.formatEntityState === "function") return this._hass.formatEntityState(s0);
+          const u = s0.attributes?.unit_of_measurement;
+          return `${s0.state}${u ? ` ${u}` : ""}`;
+        };
+        const rows = extra.map((x) => localizeTemplate`<div class="srv-kv" data-entity="${esc(x.entity)}"><span>${esc(x.name || st(x.entity).attributes?.friendly_name || x.entity)}</span><b>${esc(val(x.entity))}</b></div>`).join("");
+        others = sec("mdi:format-list-bulleted", "Autres capteurs", localizeTemplate`<div class="asus-kv">${rows}</div>`);
       }
       // --- actions
-      const acts = c.show_actions !== false ? [btn(r.ring, "mdi:phone-ring", "Faire sonner le téléphone"), btn(r.restart, "mdi:restart", "Redémarrer la Livebox", "stop")].filter(Boolean) : [];
-      body = conn + rates + speed + line + wifi + phone + clients
+      const acts = c.show_actions !== false ? [c.show_ring !== false ? btn(r.ring, "mdi:phone-ring", "Faire sonner le téléphone") : "", btn(r.restart, "mdi:restart", "Redémarrer la Livebox", "stop")].filter(Boolean) : [];
+      body = conn + rates + speed + line + wifi + phone + clients + details + others
         + sec("mdi:gesture-tap-button", "Actions", acts.length ? localizeTemplate`<div class="pve-na asus-acts">${acts.join("")}</div>` : "");
     }
 
@@ -5050,6 +5170,9 @@ class ServeurHaLiveboxCard extends HTMLElement {
 
 const LBX_STYLE = `<style>
 .lbx-rows { display: grid; gap: 8px; }
+.lbx-list { margin-top: 8px; }
+.lbx-counts { margin-bottom: 8px; }
+.lbx-sub { margin: 10px 0 6px; font-size: .92em; }
 .srv-kv b.warn { color: #f0a33a; }
 </style>`;
 
@@ -8457,7 +8580,10 @@ const LBX_SCHEMA = [
   { name: "show_wifi", selector: { boolean: {} } },
   { name: "show_phone", selector: { boolean: {} } },
   { name: "show_clients", selector: { boolean: {} } },
+  { name: "show_details", selector: { boolean: {} } },
   { name: "show_actions", selector: { boolean: {} } },
+  { name: "show_ring", selector: { boolean: {} } },
+  { name: "entities", selector: { entity: { multiple: true } } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -8479,7 +8605,10 @@ const LBX_LABELS = {
   show_wifi: "Section Wi-Fi et Wi-Fi invité (activer ou couper, deux clics)",
   show_phone: "Section Téléphone (appels manqués)",
   show_clients: "Section Appareils connectés",
+  show_details: "Section Détails dépliable (DHCP, redirections, redémarrage, DNS dynamique, débits par interface)",
   show_actions: "Boutons Faire sonner et Redémarrer (deux clics)",
+  show_ring: "Bouton Faire sonner le téléphone (sans effet sans base DECT)",
+  entities: "Autres capteurs à afficher",
   theme: "Couleurs de la carte",
 };
 const ServeurHaLiveboxCardEditor = makeEditor(LBX_SCHEMA, LBX_LABELS, LBX_DEFAULTS, {
@@ -8491,6 +8620,8 @@ const ServeurHaLiveboxCardEditor = makeEditor(LBX_SCHEMA, LBX_LABELS, LBX_DEFAUL
   show_rates: "Live rates section", show_speedtest: "Speed test section (Speedtest)", show_line: "Line section (fiber power or xDSL sync)",
   show_wifi: "Wi-Fi and guest Wi-Fi section (turn on or off, two clicks)", show_phone: "Phone section (missed calls)", show_clients: "Connected devices section",
   show_actions: "Ring and Restart buttons (two clicks)", theme: "Card colors",
+  show_details: "Collapsible Details section (DHCP, port forwarding, restart, dynamic DNS, rates per interface)",
+  show_ring: "Ring the phone button (no effect without a DECT base)", entities: "Other sensors to show",
 }, {
   device: "Livebox (urządzenie integracji Livebox, opcjonalnie)", title: "Tytuł (domyślnie model Livebox)", icon: "Ikona", icon_color: "Kolor ikony",
   wan_max: "Pełna skala pasków przepustowości", download: "Pobieranie (puste = liczniki światłowodu)",
@@ -8500,6 +8631,8 @@ const ServeurHaLiveboxCardEditor = makeEditor(LBX_SCHEMA, LBX_LABELS, LBX_DEFAUL
   show_rates: "Sekcja przepustowości", show_speedtest: "Sekcja testu prędkości", show_line: "Sekcja linii (moc światłowodu lub synchronizacja xDSL)",
   show_wifi: "Sekcja Wi-Fi i Wi-Fi dla gości", show_phone: "Sekcja telefonu (nieodebrane połączenia)", show_clients: "Sekcja podłączonych urządzeń",
   show_actions: "Przyciski dzwonienia i restartu (dwa kliknięcia)", theme: "Kolory karty",
+  show_details: "Zwijana sekcja szczegółów (DHCP, przekierowania portów, restart, dynamiczny DNS, przepustowość interfejsów)",
+  show_ring: "Przycisk dzwonienia na telefon (bez efektu bez bazy DECT)", entities: "Inne czujniki do wyświetlenia",
 }, "LBX");
 const PING_SCHEMA = [
   { name: "title", selector: { text: {} } },

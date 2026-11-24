@@ -499,10 +499,10 @@
     const LB = "livebox", lc = state.lbx === "lbx-calls", ld = state.lbx === "lbx-down";
     devices.lbx = { id: "lbx", name: "Livebox 7", manufacturer: "Sagemcom", model: "SagemcomFast5690", sw_version: "SG_LB7_2.4.6", config_entries: ["lbx"] };
     const lb = (id, s, attrs, key) => add(id, s, attrs, LB, key, "lbx");
-    lb("binary_sensor.livebox_7_wan_status", ld ? "off" : "on", { device_class: "connectivity", link_type: "gpon", link_state: ld ? "down" : "up", wan_ipaddress: ld ? null : "203.0.113.57" }, "connectivity");
-    lb("binary_sensor.livebox_7_call_missed", lc ? "on" : "off", { missed_calls: lc ? [{ phone_number: "0100000001" }, { phone_number: "0100000002" }] : [] }, "callmissed");
+    lb("binary_sensor.livebox_7_wan_status", ld ? "off" : "on", { device_class: "connectivity", link_type: "gpon", link_state: ld ? "down" : "up", wan_ipaddress: ld ? null : "203.0.113.57", "wired clients": 2, "wireless clients": 2 }, "connectivity");
+    lb("binary_sensor.livebox_7_call_missed", lc ? "on" : "off", { missed_calls: lc ? [{ phone_number: "0100000001", date: iso(-2 * H).replace("T", " "), status: "missed" }, { phone_number: "", date: iso(-26 * H).replace("T", " "), status: "missed" }] : [] }, "callmissed");
     lb("binary_sensor.livebox_7_remote_access", "off", {}, "remote_access");
-    lb("binary_sensor.livebox_7_dynamic_dns_no_ip", ld ? "on" : "off", { device_class: "problem" }, "ddns");
+    lb("binary_sensor.livebox_7_dynamic_dns_no_ip", ld ? "on" : "off", { device_class: "problem", friendly_name: "Livebox 7 Dynamic DNS (No-IP)" }, "ddns");
     const fiber = { "ONU State": ld ? "O1_Initial" : "O5_Operation", "Temperature (°C)": 47 };
     lb("sensor.livebox_7_fiber_power_rx", ld ? -29.4 : -19.6, { unit_of_measurement: "dBm", ...fiber }, "fiber_power_rx");
     lb("sensor.livebox_7_fiber_power_tx", 2.4, { unit_of_measurement: "dBm", ...fiber }, "fiber_power_tx");
@@ -512,6 +512,16 @@
     lb("sensor.livebox_7_fiber_tx", (412.7 + (ld ? 0 : sec0 * 0.0061)).toFixed(4), { unit_of_measurement: "GB", device_class: "data_size" }, "fiber_tx");
     st["sensor.livebox_7_fiber_rx"].last_updated = st["sensor.livebox_7_fiber_tx"].last_updated = new Date(ld ? T0 : Date.now()).toISOString();
     lb("sensor.livebox_7_last_reboot_reason", "GUI_Reboot", { "Boot date": iso(-9.5 * D) }, "last_reboot_reason");
+    lb("sensor.livebox_7_dhcp_leases", 14, {}, "dhcp_leases");
+    lb("sensor.livebox_7_guest_dhcp_leases", 1, {}, "guest_dhcp_leases");
+    lb("sensor.livebox_7_ports_forwarding", 3, {}, "upnp");
+    lb("binary_sensor.livebox_7_dynamic_dns_ovh_dynhost", ld ? "on" : "off", { device_class: "problem", friendly_name: "Livebox 7 Dynamic DNS (OVH DynHost)" }, "ddns");
+    // débits par interface (Mbit/s) : réseau local et Wi-Fi
+    [["LAN 2.5G", 41.2, 3.1], ["ETH1", 0.4, 0.1], ["5GHz-Private_SSID", 12.6, 1.9]].forEach(([n, rx, tx]) => {
+      const k = n.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+      lb(`sensor.livebox_7_${k}_rate_rx`, ld ? 0 : rx, { unit_of_measurement: "Mbit/s", device_class: "data_rate", friendly_name: `Livebox 7 ${n} rate Rx` }, "interface_rate_rx");
+      lb(`sensor.livebox_7_${k}_rate_tx`, ld ? 0 : tx, { unit_of_measurement: "Mbit/s", device_class: "data_rate", friendly_name: `Livebox 7 ${n} rate Tx` }, "interface_rate_tx");
+    });
     lb("switch.livebox_7_wifi", "on", {}, "wifi_switch");
     lb("switch.livebox_7_guest_wifi", "off", {}, "guest_wifi");
     lb("button.livebox_7_livebox_restart", "unknown", {}, "restart_btn");
@@ -520,6 +530,7 @@
     [["Téléviseur salon", "home", "ethernet"], ["Ordinateur portable", "home", "wifi"], ["Tablette", "not_home", "wifi"], ["Décodeur TV", "home", "ethernet"], ["Téléphone invité", "home", "guestwifi"]].forEach(([n, st0, cn], i) => {
       devices[`lbx${i}`] = { id: `lbx${i}`, name: n, config_entries: ["lbx"], via_device_id: "lbx" };
       add(`device_tracker.livebox_client_${i + 1}`, st0, { friendly_name: n, ip: `192.168.1.${20 + i}`, connection: cn }, LB, "device", `lbx${i}`);
+      if (cn !== "ethernet") add(`sensor.livebox_client_${i + 1}_signal_strength`, -48 - 7 * i, { unit_of_measurement: "dBm" }, LB, "signal_strength", `lbx${i}`);
     });
     add("sensor.speedtest_download", fd ? 0 : 942.1, { unit_of_measurement: "Mbit/s" }, "speedtestdotnet", null, "speedtest");
     add("sensor.speedtest_upload", fd ? 0 : 701.4, { unit_of_measurement: "Mbit/s" }, "speedtestdotnet", null, "speedtest");
@@ -644,7 +655,7 @@
       omv: { type: "custom:serveur-ha-omv-card", title: "NAS maison", power_on: "button.wake_on_lan_00_11_22_33_44_66", ups_name: "Green Cell 600VA", theme: t },
       asus: { type: "custom:serveur-ha-asus-card", theme: t },
       fbx: { type: "custom:serveur-ha-freebox-card", wan_max: 8000, theme: t },
-      lbx: { type: "custom:serveur-ha-livebox-card", wan_max: 2000, theme: t },
+      lbx: { type: "custom:serveur-ha-livebox-card", wan_max: 2000, show_ring: false, theme: t },
       ping: { type: "custom:serveur-ha-ping-card", theme: t },
       wg: { type: "custom:serveur-ha-wireguard-card", theme: t },
       gl: { type: "custom:serveur-ha-glances-card", theme: t },
