@@ -22,7 +22,7 @@
  */
 
 (() => {
-const CARD_VERSION = "0.23.1-beta.1";
+const CARD_VERSION = "0.23.1-beta.2";
 
 /* ------------------------------------------------------------- i18n FR/EN/PL
  * Source strings and sensor matching remain unchanged.  Only presentation
@@ -5514,7 +5514,11 @@ const MEDIA_APPS = {
   plex: ["Plex", "mdi:plex", "#e5a00d"],
   jellyfin: ["Jellyfin", "mdi:jellyfish", "#aa5cc3"],
   emby: ["Emby", "mdi:emby", "#52b54b"],
+  // intégration communautaire troykelly/homeassistant-emby
+  embymedia: ["Emby", "mdi:emby", "#52b54b"],
 };
+// embymedia : capteurs reconnus par leur clé de traduction (le reste : version, tâches, statistiques… est ignoré)
+const EMBYMEDIA_LIBS = ["movie_count", "series_count", "episode_count", "song_count", "album_count", "artist_count"];
 // « Plex (Plex for Android (TV) - TV Salon) » → « TV Salon »
 const mediaPlayerName = (n) => String(n || "").replace(/^(Plex|Jellyfin|Emby)\s*\((.*)\)$/i, "$2").replace(/^.* - /, "").trim();
 const MEDIA_TYPES = { movie: "Film", tvshow: "Série", episode: "Épisode", music: "Musique", track: "Musique", video: "Vidéo", photo: "Photo", channel: "Chaîne" };
@@ -5868,6 +5872,12 @@ class ServeurHaMediaCard extends HTMLElement {
       if (domain === "media_player") { s.players.push(id); continue; }
       setDev(s, e.device_id); // l'appareil qui porte les capteurs est le serveur
       if (domain === "update") s.update ||= id;
+      else if (domain === "sensor" && e.platform === "embymedia") {
+        const tk = e.translation_key || "";
+        if (EMBYMEDIA_LIBS.includes(tk)) s.libs.push(id);
+        else if (tk === "playing_sessions") s.count = id;
+        else if (tk === "active_sessions") s.count ||= id;
+      }
       else if (domain === "sensor" && /_library_|bibliotheque/.test(id)) s.libs.push(id);
       else if (domain === "sensor") s.count ||= id;
     }
@@ -6007,10 +6017,15 @@ class ServeurHaMediaCard extends HTMLElement {
       const canBrowse = c.browse !== false && s.players.some((id) => (Number(this._st(id)?.attributes?.supported_features) || 0) & MP.BROWSE);
       const libs = c.show_libraries !== false ? s.libs.map((id) => {
         const o = this._st(id); const n = Number(o?.state);
-        const name = String(o?.attributes?.friendly_name || id).replace(/^.*?(library|bibliothèque)\s*-?\s*/i, "") || id;
+        const fn = String(o?.attributes?.friendly_name || id);
+        const devName = s.dev?.name_by_user || s.dev?.name || "";
+        // embymedia : « Emby Server Movies » → « Movies » (totaux du serveur, pas des bibliothèques à parcourir)
+        const name = s.platform === "embymedia"
+          ? (devName && fn.startsWith(devName) ? fn.slice(devName.length).trim() : fn) || id
+          : fn.replace(/^.*?(library|bibliothèque)\s*-?\s*/i, "") || id;
         if (!Number.isFinite(n)) return "";
         const open = this._br?.srv === s.key && this._br?.lib === name;
-        return canBrowse
+        return canBrowse && s.platform !== "embymedia"
           ? localizeTemplate`<button class="md-lib br ${open ? "on" : ""}" data-br="lib" data-srv="${esc(s.key)}" data-lib="${esc(name)}" aria-expanded="${open}" title="Voir le contenu"><b>${fmt(n, 0)}</b>${esc(name)}</button>`
           : localizeTemplate`<span class="md-lib" data-entity="${esc(id)}"><b>${fmt(n, 0)}</b>${esc(name)}</span>`;
       }).filter(Boolean) : [];

@@ -664,12 +664,12 @@ La carte reprend tous les serveurs suivis par l'intégration **Glances** de Home
 type: custom:serveur-ha-media-card
 ```
 
-La carte reprend tous les serveurs des intégrations **Plex**, **Jellyfin** et **Emby** de Home Assistant, sans rien configurer :
+La carte reprend tous les serveurs des intégrations **Plex**, **Jellyfin** et **Emby** de Home Assistant (Emby native, ou l'intégration communautaire [Emby for Home Assistant](https://github.com/troykelly/homeassistant-emby), domaine `embymedia`), sans rien configurer :
 
 - **En-tête** : serveurs trouvés et voyant **N en lecture** ou **Aucune lecture**.
 - **Un bloc par serveur** : nom, version, voyant **Mise à jour** quand une nouvelle version est disponible, et nombre de lectures en cours.
 - **Chaque lecture en cours** : jaquette, titre (série et épisode `S02E04`, artiste et album, ou film), utilisateur, lecteur, type de média, barre d'avancement avec le temps écoulé et la durée. En pause, l'icône passe en orange.
-- **Bibliothèques** : nombre de films, séries, morceaux… (Plex : capteurs `Library` désactivés par défaut, à activer dans l'intégration).
+- **Bibliothèques** : nombre de films, séries, morceaux… (Plex : capteurs `Library` désactivés par défaut, à activer dans l'intégration ; `embymedia` : totaux du serveur, films, séries, épisodes, morceaux, albums et artistes).
 - **Lecteurs** : liste dépliable des lecteurs connus, en vert quand ils sont joignables.
 
 - **Commandes de lecture** sous chaque lecture : ⏮ précédent, −10 s, lecture/pause, +30 s, ⏭ suivant, arrêt. Seules les commandes que le lecteur accepte s'affichent.
