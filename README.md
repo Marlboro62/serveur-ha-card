@@ -461,9 +461,11 @@ type: custom:serveur-ha-livebox-card
 - **Test de débit** : si l'intégration **Speedtest.net** ou **Speedtest CLI** est installée, débits mesurés, ping, opérateur et heure de la mesure.
 - **Ligne** : en fibre, puissance optique reçue (verte de −8 à −27 dBm) et émise, état ONU, température ; en xDSL, débits de synchronisation.
 - **Wi-Fi** et **Wi-Fi invité** : état, avec un bouton pour activer ou couper chacun (deux clics).
-- **Téléphone** : appels manqués, avec un bouton « Effacer les appels ».
-- **Appareils connectés** : nombre d'appareils présents, liste dépliable (Wi-Fi, Wi-Fi invité ou Ethernet).
-- **Actions** : faire sonner le téléphone, redémarrer la Livebox (deux clics).
+- **Téléphone** : appels manqués, liste dépliable des numéros et de l'heure, bouton « Effacer les appels ».
+- **Appareils connectés** : clients Wi-Fi et filaires, nombre d'appareils présents, liste dépliable (Wi-Fi, Wi-Fi invité ou Ethernet, signal Wi-Fi si les capteurs par client sont activés).
+- **Détails** (dépliable) : baux DHCP, redirections de ports, dernier redémarrage, état de chaque DNS dynamique, débits de chaque interface (LAN, Wi-Fi…).
+- **Autres capteurs** : ceux listés dans l'option `entities`.
+- **Actions** : faire sonner le téléphone (masquable avec `show_ring: false`, sans effet sans base DECT), redémarrer la Livebox (deux clics).
 
 L'uptime vient du capteur « Durée de fonctionnement » de l'intégration (désactivé par défaut) ou, à défaut, de la date du dernier démarrage.
 
@@ -474,7 +476,9 @@ L'uptime vient du capteur « Durée de fonctionnement » de l'intégration (dés
 | `wan_max` | Pleine échelle des barres de débit, en Mbit/s (débit de l'abonnement) | `1000` |
 | `download`, `upload` | Capteurs de débit descendant et montant à afficher à la place des compteurs de la fibre | compteurs de la fibre |
 | `speedtest_download`, `speedtest_upload`, `speedtest_ping` | Capteurs du test de débit | ceux de Speedtest trouvés seuls |
-| `show_connection`, `show_rates`, `show_speedtest`, `show_line`, `show_wifi`, `show_phone`, `show_clients`, `show_actions` | Afficher chaque section | `true` |
+| `entities` | Autres capteurs à afficher : identifiants, ou `{ entity, name }` | aucun |
+| `show_connection`, `show_rates`, `show_speedtest`, `show_line`, `show_wifi`, `show_phone`, `show_clients`, `show_details`, `show_actions` | Afficher chaque section | `true` |
+| `show_ring` | Bouton « Faire sonner le téléphone » | `true` |
 | `theme` | Couleurs de la carte | `v2` |
 
 ## Carte Réseau — `custom:serveur-ha-ping-card`
